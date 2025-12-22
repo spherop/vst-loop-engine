@@ -1,0 +1,28 @@
+# Build directories
+build/
+cmake-build-*/
+
+# IDE
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependencies
+node_modules/
+
+# Compiled binaries
+*.o
+*.a
+*.so
+*.dylib
+
+# Plugin builds (keep in build/)
+*.vst3
+*.component
+*.app

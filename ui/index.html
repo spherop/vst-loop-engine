@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fuzz Delay</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="plugin-container">
+        <header class="plugin-header">
+            <h1>FUZZ DELAY</h1>
+        </header>
+
+        <main class="controls-container">
+            <div class="knob-group">
+                <div class="knob-wrapper">
+                    <div class="knob" id="delayTime-knob">
+                        <div class="knob-indicator"></div>
+                    </div>
+                    <label>TIME</label>
+                    <span class="value-display" id="delayTime-value">300 ms</span>
+                </div>
+
+                <div class="knob-wrapper">
+                    <div class="knob" id="feedback-knob">
+                        <div class="knob-indicator"></div>
+                    </div>
+                    <label>FDBK</label>
+                    <span class="value-display" id="feedback-value">40%</span>
+                </div>
+
+                <div class="knob-wrapper">
+                    <div class="knob" id="tone-knob">
+                        <div class="knob-indicator"></div>
+                    </div>
+                    <label>TONE</label>
+                    <span class="value-display" id="tone-value">4.0 kHz</span>
+                </div>
+
+                <div class="knob-wrapper">
+                    <div class="knob" id="mix-knob">
+                        <div class="knob-indicator"></div>
+                    </div>
+                    <label>MIX</label>
+                    <span class="value-display" id="mix-value">50%</span>
+                </div>
+            </div>
+        </main>
+
+        <footer class="plugin-footer">
+            <span class="tempo-sync">TEMPO SYNC: OFF</span>
+        </footer>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
