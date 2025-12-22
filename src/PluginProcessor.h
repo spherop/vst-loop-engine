@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
+#include "DelayLine.h"
+#include "TestToneGenerator.h"
 
 class FuzzDelayProcessor : public juce::AudioProcessor
 {
@@ -37,9 +39,26 @@ public:
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
 
+    // Test tone control
+    void triggerTestSound(int soundType);
+    void stopTestSound();
+
 private:
     juce::AudioProcessorValueTreeState apvts;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+
+    // DSP
+    DelayLine delayLineL;
+    DelayLine delayLineR;
+
+    // Test sounds
+    TestToneGenerator testToneGenerator;
+
+    // Parameter pointers for efficient access
+    std::atomic<float>* delayTimeParam = nullptr;
+    std::atomic<float>* feedbackParam = nullptr;
+    std::atomic<float>* mixParam = nullptr;
+    std::atomic<float>* toneParam = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FuzzDelayProcessor)
 };

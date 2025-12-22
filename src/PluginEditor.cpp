@@ -16,6 +16,17 @@ FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
                   .withOptionsFrom(feedbackRelay)
                   .withOptionsFrom(mixRelay)
                   .withOptionsFrom(toneRelay)
+                  .withNativeFunction("triggerTestSound", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.triggerTestSound(static_cast<int>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("stopTestSound", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.stopTestSound();
+                      complete({});
+                  })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },
                       juce::URL("http://localhost/").getOrigin())),

@@ -106,7 +106,59 @@ class KnobController {
     }
 }
 
-// Initialize knobs when DOM is ready
+// Test Sound Controller
+class TestSoundController {
+    constructor() {
+        this.activeButton = null;
+        this.setupButtons();
+    }
+
+    setupButtons() {
+        // Sound trigger buttons
+        document.querySelectorAll('.sound-btn[data-sound]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const soundType = parseInt(btn.dataset.sound);
+                this.triggerSound(soundType, btn);
+            });
+        });
+
+        // Stop button
+        const stopBtn = document.getElementById('btn-stop');
+        if (stopBtn) {
+            stopBtn.addEventListener('click', () => this.stopSound());
+        }
+    }
+
+    triggerSound(soundType, button) {
+        // Update active state
+        if (this.activeButton) {
+            this.activeButton.classList.remove('active');
+        }
+
+        button.classList.add('active');
+        this.activeButton = button;
+
+        // Call native function
+        if (typeof window.__JUCE__ !== 'undefined') {
+            window.__JUCE__.backend.triggerTestSound(soundType);
+        }
+    }
+
+    stopSound() {
+        // Clear active state
+        if (this.activeButton) {
+            this.activeButton.classList.remove('active');
+            this.activeButton = null;
+        }
+
+        // Call native function
+        if (typeof window.__JUCE__ !== 'undefined') {
+            window.__JUCE__.backend.stopTestSound();
+        }
+    }
+}
+
+// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     // Delay Time: 1ms - 2000ms
     new KnobController('delayTime-knob', 'delayTime', {
@@ -139,6 +191,9 @@ document.addEventListener('DOMContentLoaded', () => {
     new KnobController('mix-knob', 'mix', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
+
+    // Test sounds
+    new TestSoundController();
 
     console.log('Fuzz Delay UI initialized');
 });
