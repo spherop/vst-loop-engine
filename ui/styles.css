@@ -2,6 +2,11 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    -webkit-user-drag: none;
 }
 
 :root {
@@ -17,13 +22,18 @@
     --knob-border: #444444;
 }
 
+html, body {
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: var(--bg-dark);
     color: var(--text-primary);
     height: 100vh;
     overflow: hidden;
-    user-select: none;
+    cursor: default;
 }
 
 .plugin-container {

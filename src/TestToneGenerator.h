@@ -2,15 +2,17 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
+#include <atomic>
 
 class TestToneGenerator
 {
 public:
     enum class SoundType
     {
-        Click,      // Short percussive transient
-        DrumLoop,   // Simple kick/snare pattern
-        SynthChord  // Filtered chord stab
+        Click,       // Short percussive transient
+        DrumLoop,    // Simple kick/snare pattern
+        SynthChord,  // Filtered chord stab
+        GuitarChord  // Electric guitar power chord
     };
 
     TestToneGenerator() = default;
@@ -24,44 +26,52 @@ public:
         generateClick();
         generateDrumLoop();
         generateSynthChord();
+        generateGuitarChord();
+
+        isPrepared = true;
     }
 
     void trigger(SoundType type)
     {
-        currentSound = type;
-        playbackPosition = 0;
-        isPlaying = true;
+        if (!isPrepared)
+            return;
+
+        currentSound.store(static_cast<int>(type));
+        playbackPosition.store(0);
+        isPlaying.store(true);
     }
 
     void stop()
     {
-        isPlaying = false;
-        playbackPosition = 0;
+        isPlaying.store(false);
+        playbackPosition.store(0);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer)
     {
-        if (!isPlaying)
+        if (!isPlaying.load())
             return;
 
-        const auto* sourceBuffer = getBufferForSound(currentSound);
-        if (sourceBuffer == nullptr)
+        const auto* sourceBuffer = getBufferForSound(static_cast<SoundType>(currentSound.load()));
+        if (sourceBuffer == nullptr || sourceBuffer->getNumSamples() == 0)
             return;
 
         const int numSamples = buffer.getNumSamples();
         const int numChannels = buffer.getNumChannels();
         const int sourceLength = sourceBuffer->getNumSamples();
+        int pos = playbackPosition.load();
 
         for (int sample = 0; sample < numSamples; ++sample)
         {
-            if (playbackPosition >= sourceLength)
+            if (pos >= sourceLength)
             {
                 // Loop drum pattern, stop others
-                if (currentSound == SoundType::DrumLoop)
-                    playbackPosition = 0;
+                if (currentSound.load() == static_cast<int>(SoundType::DrumLoop))
+                    pos = 0;
                 else
                 {
-                    isPlaying = false;
+                    isPlaying.store(false);
+                    playbackPosition.store(0);
                     return;
                 }
             }
@@ -70,34 +80,39 @@ public:
             {
                 const int sourceChannel = std::min(channel, sourceBuffer->getNumChannels() - 1);
                 buffer.addSample(channel, sample,
-                    sourceBuffer->getSample(sourceChannel, playbackPosition));
+                    sourceBuffer->getSample(sourceChannel, pos));
             }
 
-            ++playbackPosition;
+            ++pos;
         }
+
+        playbackPosition.store(pos);
     }
 
-    bool getIsPlaying() const { return isPlaying; }
+    bool getIsPlaying() const { return isPlaying.load(); }
 
 private:
     double currentSampleRate = 44100.0;
     int maxBlockSize = 512;
+    bool isPrepared = false;
 
     juce::AudioBuffer<float> clickBuffer;
     juce::AudioBuffer<float> drumLoopBuffer;
     juce::AudioBuffer<float> synthChordBuffer;
+    juce::AudioBuffer<float> guitarChordBuffer;
 
-    SoundType currentSound = SoundType::Click;
-    int playbackPosition = 0;
-    bool isPlaying = false;
+    std::atomic<int> currentSound { 0 };
+    std::atomic<int> playbackPosition { 0 };
+    std::atomic<bool> isPlaying { false };
 
     const juce::AudioBuffer<float>* getBufferForSound(SoundType type) const
     {
         switch (type)
         {
-            case SoundType::Click:      return &clickBuffer;
-            case SoundType::DrumLoop:   return &drumLoopBuffer;
-            case SoundType::SynthChord: return &synthChordBuffer;
+            case SoundType::Click:       return &clickBuffer;
+            case SoundType::DrumLoop:    return &drumLoopBuffer;
+            case SoundType::SynthChord:  return &synthChordBuffer;
+            case SoundType::GuitarChord: return &guitarChordBuffer;
             default: return nullptr;
         }
     }
@@ -267,6 +282,86 @@ private:
         // Apply simple smoothing
         for (int i = 1; i < numSamples; ++i)
             data[i] = data[i] * 0.7f + data[i - 1] * 0.3f;
+    }
+
+    void generateGuitarChord()
+    {
+        // Electric guitar power chord (E5) with distortion - 1.5 seconds
+        const float duration = 1.5f;
+        const int numSamples = static_cast<int>(currentSampleRate * duration);
+
+        guitarChordBuffer.setSize(1, numSamples);
+        guitarChordBuffer.clear();
+
+        auto* data = guitarChordBuffer.getWritePointer(0);
+
+        // Power chord frequencies: E2 (82.41 Hz) and B2 (123.47 Hz)
+        const float freq1 = 82.41f;  // E2 - root
+        const float freq2 = 123.47f; // B2 - fifth
+
+        float phase1 = 0.0f;
+        float phase2 = 0.0f;
+
+        // Karplus-Strong inspired pluck with feedback
+        const int pluckLength = static_cast<int>(currentSampleRate / freq1);
+        std::vector<float> pluckBuffer(pluckLength, 0.0f);
+
+        // Initialize with noise burst for pluck
+        juce::Random random(777);
+        for (int i = 0; i < pluckLength; ++i)
+            pluckBuffer[i] = random.nextFloat() * 2.0f - 1.0f;
+
+        int pluckIndex = 0;
+        float lastPluckSample = 0.0f;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float t = static_cast<float>(i) / numSamples;
+
+            // Guitar-like envelope: quick attack, slow decay
+            float envelope;
+            if (t < 0.005f)
+                envelope = t / 0.005f;
+            else
+                envelope = std::exp(-(t - 0.005f) * 2.0f);
+
+            // Karplus-Strong for realistic string sound
+            const float currentPluck = pluckBuffer[pluckIndex];
+            const float filtered = 0.5f * (currentPluck + lastPluckSample);
+            pluckBuffer[pluckIndex] = filtered * 0.996f; // Decay factor
+            lastPluckSample = currentPluck;
+            pluckIndex = (pluckIndex + 1) % pluckLength;
+
+            // Add harmonics for power chord character
+            float sample = filtered * 0.6f;
+
+            // Add fundamental and fifth with saw-like harmonics
+            const float pi = juce::MathConstants<float>::pi;
+            for (int h = 1; h <= 4; ++h)
+            {
+                const float harmonicAmp = 0.3f / h;
+                sample += std::sin(phase1 * h) * harmonicAmp;
+                sample += std::sin(phase2 * h) * harmonicAmp * 0.7f;
+            }
+
+            phase1 += 2.0f * pi * freq1 / static_cast<float>(currentSampleRate);
+            phase2 += 2.0f * pi * freq2 / static_cast<float>(currentSampleRate);
+
+            // Apply soft distortion for electric guitar character
+            sample = sample * envelope;
+            sample = std::tanh(sample * 2.5f) * 0.7f;
+
+            data[i] = sample;
+        }
+
+        // Apply cabinet simulation (simple lowpass)
+        float cabState = 0.0f;
+        const float cabCoeff = 0.15f;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            cabState += cabCoeff * (data[i] - cabState);
+            data[i] = data[i] * 0.6f + cabState * 0.4f;
+        }
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TestToneGenerator)

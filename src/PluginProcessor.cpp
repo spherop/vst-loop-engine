@@ -203,6 +203,9 @@ void FuzzDelayProcessor::triggerTestSound(int soundType)
         case 2:
             testToneGenerator.trigger(TestToneGenerator::SoundType::SynthChord);
             break;
+        case 3:
+            testToneGenerator.trigger(TestToneGenerator::SoundType::GuitarChord);
+            break;
         default:
             break;
     }
