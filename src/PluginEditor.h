@@ -22,6 +22,12 @@ private:
     juce::WebSliderRelay mixRelay { "mix" };
     juce::WebSliderRelay toneRelay { "tone" };
 
+    // BBD Character relays
+    juce::WebSliderRelay ageRelay { "age" };
+    juce::WebSliderRelay modRateRelay { "modRate" };
+    juce::WebSliderRelay modDepthRelay { "modDepth" };
+    juce::WebSliderRelay warmthRelay { "warmth" };
+
     juce::WebBrowserComponent webView;
 
     // Parameter attachments
@@ -29,6 +35,12 @@ private:
     juce::WebSliderParameterAttachment feedbackAttachment;
     juce::WebSliderParameterAttachment mixAttachment;
     juce::WebSliderParameterAttachment toneAttachment;
+
+    // BBD Character attachments
+    juce::WebSliderParameterAttachment ageAttachment;
+    juce::WebSliderParameterAttachment modRateAttachment;
+    juce::WebSliderParameterAttachment modDepthAttachment;
+    juce::WebSliderParameterAttachment warmthAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
 

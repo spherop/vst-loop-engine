@@ -363,6 +363,34 @@ document.addEventListener('DOMContentLoaded', () => {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
+    // BBD Character Controls
+
+    // Age: 0% - 100%
+    new KnobController('age-knob', 'age', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Mod Rate: 0.1Hz - 5Hz (skewed)
+    new KnobController('modRate-knob', 'modRate', {
+        formatValue: (v) => {
+            const hz = 0.1 + Math.pow(v, 2) * 4.9;
+            return `${hz.toFixed(1)} Hz`;
+        }
+    });
+
+    // Mod Depth: 0ms - 20ms
+    new KnobController('modDepth-knob', 'modDepth', {
+        formatValue: (v) => {
+            const ms = v * 20;
+            return `${ms.toFixed(1)} ms`;
+        }
+    });
+
+    // Warmth: 0% - 100%
+    new KnobController('warmth-knob', 'warmth', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
     // Test sounds
     new TestSoundController();
 

@@ -16,6 +16,10 @@ FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
                   .withOptionsFrom(feedbackRelay)
                   .withOptionsFrom(mixRelay)
                   .withOptionsFrom(toneRelay)
+                  .withOptionsFrom(ageRelay)
+                  .withOptionsFrom(modRateRelay)
+                  .withOptionsFrom(modDepthRelay)
+                  .withOptionsFrom(warmthRelay)
                   .withNativeFunction("triggerTestSound", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
@@ -41,14 +45,26 @@ FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
                     processorRef.getAPVTS().undoManager),
       toneAttachment(*processorRef.getAPVTS().getParameter("tone"),
                      toneRelay,
-                     processorRef.getAPVTS().undoManager)
+                     processorRef.getAPVTS().undoManager),
+      ageAttachment(*processorRef.getAPVTS().getParameter("age"),
+                    ageRelay,
+                    processorRef.getAPVTS().undoManager),
+      modRateAttachment(*processorRef.getAPVTS().getParameter("modRate"),
+                        modRateRelay,
+                        processorRef.getAPVTS().undoManager),
+      modDepthAttachment(*processorRef.getAPVTS().getParameter("modDepth"),
+                         modDepthRelay,
+                         processorRef.getAPVTS().undoManager),
+      warmthAttachment(*processorRef.getAPVTS().getParameter("warmth"),
+                       warmthRelay,
+                       processorRef.getAPVTS().undoManager)
 {
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
-    setSize(600, 400);
+    setSize(700, 500);
     setResizable(true, true);
-    setResizeLimits(400, 300, 1200, 800);
+    setResizeLimits(500, 400, 1400, 1000);
 }
 
 FuzzDelayEditor::~FuzzDelayEditor()

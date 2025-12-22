@@ -60,5 +60,11 @@ private:
     std::atomic<float>* mixParam = nullptr;
     std::atomic<float>* toneParam = nullptr;
 
+    // BBD character parameters
+    std::atomic<float>* ageParam = nullptr;
+    std::atomic<float>* modRateParam = nullptr;
+    std::atomic<float>* modDepthParam = nullptr;
+    std::atomic<float>* warmthParam = nullptr;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FuzzDelayProcessor)
 };

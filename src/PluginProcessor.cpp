@@ -12,6 +12,12 @@ FuzzDelayProcessor::FuzzDelayProcessor()
     feedbackParam = apvts.getRawParameterValue("feedback");
     mixParam = apvts.getRawParameterValue("mix");
     toneParam = apvts.getRawParameterValue("tone");
+
+    // BBD character parameters
+    ageParam = apvts.getRawParameterValue("age");
+    modRateParam = apvts.getRawParameterValue("modRate");
+    modDepthParam = apvts.getRawParameterValue("modDepth");
+    warmthParam = apvts.getRawParameterValue("warmth");
 }
 
 FuzzDelayProcessor::~FuzzDelayProcessor()
@@ -50,6 +56,35 @@ juce::AudioProcessorValueTreeState::ParameterLayout FuzzDelayProcessor::createPa
         juce::NormalisableRange<float>(200.0f, 12000.0f, 1.0f, 0.3f),
         4000.0f,
         juce::AudioParameterFloatAttributes().withLabel("Hz")));
+
+    // BBD Character parameters
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"age", 1},
+        "Age",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        25.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"modRate", 1},
+        "Mod Rate",
+        juce::NormalisableRange<float>(0.1f, 5.0f, 0.01f, 0.5f),
+        0.5f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"modDepth", 1},
+        "Mod Depth",
+        juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f),
+        3.0f,
+        juce::AudioParameterFloatAttributes().withLabel("ms")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"warmth", 1},
+        "Warmth",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        30.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
 
     return { params.begin(), params.end() };
 }
@@ -155,14 +190,28 @@ void FuzzDelayProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     const float mix = mixParam->load() / 100.0f; // Convert to 0-1
     const float tone = toneParam->load();
 
+    // Get BBD character parameters
+    const float age = ageParam->load();
+    const float modRate = modRateParam->load();
+    const float modDepth = modDepthParam->load();
+    const float warmth = warmthParam->load();
+
     // Update delay line parameters
     delayLineL.setDelayTime(delayTime);
     delayLineL.setFeedback(feedback);
     delayLineL.setTone(tone);
+    delayLineL.setAge(age);
+    delayLineL.setModRate(modRate);
+    delayLineL.setModDepth(modDepth);
+    delayLineL.setWarmth(warmth);
 
     delayLineR.setDelayTime(delayTime);
     delayLineR.setFeedback(feedback);
     delayLineR.setTone(tone);
+    delayLineR.setAge(age);
+    delayLineR.setModRate(modRate);
+    delayLineR.setModDepth(modDepth);
+    delayLineR.setWarmth(warmth);
 
     // Process audio
     if (totalNumInputChannels >= 1)
