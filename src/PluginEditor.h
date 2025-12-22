@@ -3,7 +3,8 @@
 #include "PluginProcessor.h"
 #include <juce_gui_extra/juce_gui_extra.h>
 
-class FuzzDelayEditor : public juce::AudioProcessorEditor
+class FuzzDelayEditor : public juce::AudioProcessorEditor,
+                        private juce::Timer
 {
 public:
     explicit FuzzDelayEditor(FuzzDelayProcessor&);
@@ -13,6 +14,7 @@ public:
     void resized() override;
 
 private:
+    void timerCallback() override;
     FuzzDelayProcessor& processorRef;
 
     // Parameter relays for C++ <-> JavaScript communication

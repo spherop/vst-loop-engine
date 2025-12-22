@@ -321,6 +321,142 @@ class TestSoundController {
     }
 }
 
+// Loop Toggle Controller
+class LoopToggleController {
+    constructor() {
+        this.element = document.getElementById('loop-toggle');
+        this.isEnabled = false;
+        this.setLoopFn = getNativeFunction("setLoopEnabled");
+
+        if (this.element) {
+            this.element.addEventListener('click', () => this.toggle());
+        }
+
+        // Get initial state
+        this.fetchInitialState();
+    }
+
+    async fetchInitialState() {
+        try {
+            const getStateFn = getNativeFunction("getTempoState");
+            const state = await getStateFn();
+            if (state && typeof state.loopEnabled !== 'undefined') {
+                this.isEnabled = state.loopEnabled;
+                this.updateUI();
+            }
+        } catch (e) {
+            console.log('Could not fetch initial loop state');
+        }
+    }
+
+    async toggle() {
+        this.isEnabled = !this.isEnabled;
+        this.updateUI();
+
+        try {
+            await this.setLoopFn(this.isEnabled);
+        } catch (e) {
+            console.error('Error setting loop:', e);
+        }
+    }
+
+    updateUI() {
+        if (this.element) {
+            this.element.classList.toggle('active', this.isEnabled);
+        }
+    }
+}
+
+// BPM Display and Tempo Sync Controller
+class BpmDisplayController {
+    constructor() {
+        this.bpmEl = document.getElementById('bpm-display');
+        this.syncBtn = document.getElementById('tempo-sync-toggle');
+        this.noteSelect = document.getElementById('note-value-select');
+        this.isSyncEnabled = false;
+
+        this.setSyncFn = getNativeFunction("setTempoSync");
+        this.setNoteFn = getNativeFunction("setTempoNote");
+
+        this.setupEvents();
+        this.fetchInitialState();
+    }
+
+    setupEvents() {
+        if (this.syncBtn) {
+            this.syncBtn.addEventListener('click', () => this.toggleSync());
+        }
+
+        if (this.noteSelect) {
+            this.noteSelect.addEventListener('change', (e) => this.setNoteValue(parseInt(e.target.value)));
+        }
+    }
+
+    async fetchInitialState() {
+        try {
+            const getStateFn = getNativeFunction("getTempoState");
+            const state = await getStateFn();
+            if (state) {
+                if (typeof state.syncEnabled !== 'undefined') {
+                    this.isSyncEnabled = state.syncEnabled;
+                    this.updateSyncUI();
+                }
+                if (typeof state.noteValue !== 'undefined' && this.noteSelect) {
+                    this.noteSelect.value = state.noteValue.toString();
+                }
+                if (typeof state.bpm !== 'undefined') {
+                    this.updateBpm(state.bpm);
+                }
+            }
+        } catch (e) {
+            console.log('Could not fetch initial tempo state');
+        }
+    }
+
+    updateBpm(bpm) {
+        if (this.bpmEl) {
+            this.bpmEl.textContent = bpm.toFixed(1);
+        }
+    }
+
+    async toggleSync() {
+        this.isSyncEnabled = !this.isSyncEnabled;
+        this.updateSyncUI();
+
+        try {
+            await this.setSyncFn(this.isSyncEnabled);
+        } catch (e) {
+            console.error('Error setting tempo sync:', e);
+        }
+    }
+
+    updateSyncUI() {
+        if (this.syncBtn) {
+            this.syncBtn.classList.toggle('active', this.isSyncEnabled);
+            const label = this.syncBtn.querySelector('.toggle-label');
+            if (label) {
+                label.textContent = `Sync: ${this.isSyncEnabled ? 'On' : 'Off'}`;
+            }
+        }
+    }
+
+    async setNoteValue(noteIndex) {
+        try {
+            await this.setNoteFn(noteIndex);
+        } catch (e) {
+            console.error('Error setting note value:', e);
+        }
+    }
+}
+
+// Global BPM update function called from C++ timer
+window.updateBpmDisplay = function(bpm) {
+    const bpmEl = document.getElementById('bpm-display');
+    if (bpmEl) {
+        bpmEl.textContent = bpm.toFixed(1);
+    }
+};
+
 // Prevent text selection and drag globally
 document.addEventListener('selectstart', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => e.preventDefault());
@@ -393,6 +529,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Test sounds
     new TestSoundController();
+
+    // Loop toggle
+    new LoopToggleController();
+
+    // BPM display and tempo sync
+    new BpmDisplayController();
 
     console.log('Fuzz Delay UI initialized');
 });

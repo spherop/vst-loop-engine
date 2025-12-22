@@ -1,10 +1,7 @@
 /* Fuzz Delay - Valhalla DSP Inspired UI
-   Swiss School Minimalist Design */
+   Custom styles for elements Tailwind can't handle */
 
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
@@ -12,233 +9,104 @@
     -webkit-user-drag: none;
 }
 
-:root {
-    /* Backgrounds */
-    --bg-primary: #0a0a0a;
-    --bg-secondary: #121212;
-    --bg-surface: #1a1a1a;
-    --bg-elevated: #222222;
-
-    /* Cool Blue Accent (Valhalla style) */
-    --accent-primary: #64b5f6;
-    --accent-bright: #90caf9;
-    --accent-dim: #1e3a5f;
-    --accent-glow: rgba(100, 181, 246, 0.3);
-    --accent-subtle: rgba(100, 181, 246, 0.1);
-
-    /* Text */
-    --text-primary: #e8e8e8;
-    --text-secondary: #666666;
-    --text-label: #888888;
-    --text-value: #ffffff;
-
-    /* Semantic */
-    --color-stop: #ef5350;
-    --color-stop-dim: #5c2726;
-
-    /* Spacing */
-    --spacing-xs: 4px;
-    --spacing-sm: 8px;
-    --spacing-md: 16px;
-    --spacing-lg: 24px;
-    --spacing-xl: 32px;
-
-    /* Typography */
-    --font-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-    --font-system: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-}
-
 html, body {
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
 }
 
-body {
-    font-family: var(--font-system);
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
-    height: 100vh;
-    overflow: hidden;
-    cursor: default;
-}
-
-/* Plugin Container */
-.plugin {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    background: linear-gradient(180deg, var(--bg-primary) 0%, #050505 100%);
-}
-
-/* Header */
-.plugin-header {
-    padding: var(--spacing-lg) var(--spacing-xl);
-    text-align: center;
-    border-bottom: 1px solid var(--bg-elevated);
-}
-
-.plugin-header h1 {
-    font-size: 24px;
-    font-weight: 300;
-    letter-spacing: 12px;
-    color: var(--accent-primary);
-    text-transform: uppercase;
-    margin: 0;
-}
-
-/* Main Content */
-.plugin-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: var(--spacing-lg);
-    gap: var(--spacing-lg);
-    overflow-y: auto;
-}
-
-/* Parameter Sections */
-.param-section {
-    background: var(--bg-secondary);
-    border-radius: 4px;
-    padding: var(--spacing-md) var(--spacing-lg);
-}
-
-.section-title {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 3px;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    margin-bottom: var(--spacing-md);
-    padding-bottom: var(--spacing-sm);
-    border-bottom: 1px solid var(--bg-elevated);
-}
-
-.param-row {
-    display: flex;
-    justify-content: center;
-    gap: var(--spacing-xl);
-    flex-wrap: wrap;
-}
-
-/* Knob Styling */
-.param {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--spacing-sm);
-    min-width: 70px;
-}
-
+/* Knob Base Styles */
 .knob {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: var(--bg-surface);
-    border: 1px solid var(--bg-elevated);
     position: relative;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #252525, #1a1a1a);
+    border: 1px solid #2a2a2a;
+    box-shadow:
+        inset 2px 2px 4px rgba(0, 0, 0, 0.5),
+        0 2px 8px rgba(0, 0, 0, 0.3);
     cursor: pointer;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.knob-large {
+    width: 72px;
+    height: 72px;
+}
+
+.knob-medium {
+    width: 60px;
+    height: 60px;
+}
+
 .knob:hover {
-    border-color: var(--accent-dim);
-    box-shadow: 0 0 12px var(--accent-subtle);
+    border-color: #1e3a5f;
+    box-shadow:
+        inset 2px 2px 4px rgba(0, 0, 0, 0.5),
+        0 0 12px rgba(100, 181, 246, 0.15);
 }
 
 .knob:active,
 .knob.active {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 16px var(--accent-glow);
+    border-color: #64b5f6;
+    box-shadow:
+        inset 2px 2px 4px rgba(0, 0, 0, 0.5),
+        0 0 20px rgba(100, 181, 246, 0.3);
 }
 
+/* Knob Indicator */
 .knob-indicator {
     position: absolute;
-    width: 2px;
-    height: 16px;
-    background: var(--accent-primary);
-    border-radius: 1px;
+    width: 3px;
+    height: 20px;
+    background: #ffffff;
+    border-radius: 1.5px;
     top: 8px;
     left: 50%;
     transform-origin: bottom center;
     transform: translateX(-50%);
-    box-shadow: 0 0 6px var(--accent-glow);
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.4);
 }
 
-.param-label {
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 2px;
-    color: var(--text-label);
-    text-transform: uppercase;
+.knob-medium .knob-indicator {
+    height: 16px;
+    width: 2px;
+    top: 6px;
 }
 
-.param-value {
-    font-size: 11px;
-    font-family: var(--font-mono);
-    color: var(--text-value);
-    min-width: 60px;
-    text-align: center;
-}
-
-/* Test Sounds Section */
-.test-section {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--spacing-sm);
-    padding: var(--spacing-md);
-}
-
-.test-label {
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 3px;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-}
-
-.test-buttons {
-    display: flex;
-    gap: var(--spacing-sm);
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
+/* Sound Buttons */
 .sound-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 2px;
-    width: 56px;
-    height: 44px;
-    background: var(--bg-surface);
-    border: 1px solid var(--bg-elevated);
-    border-radius: 4px;
+    width: 52px;
+    height: 40px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
     cursor: pointer;
     transition: all 0.12s ease;
-    color: var(--text-secondary);
+    color: #666666;
 }
 
 .sound-btn:hover {
-    background: var(--bg-elevated);
-    border-color: var(--accent-dim);
-    color: var(--accent-primary);
+    background: #222222;
+    border-color: #1e3a5f;
+    color: #64b5f6;
 }
 
 .sound-btn:active,
 .sound-btn.active {
-    background: var(--accent-dim);
-    border-color: var(--accent-primary);
-    color: var(--accent-bright);
+    background: #1e3a5f;
+    border-color: #64b5f6;
+    color: #90caf9;
     transform: scale(0.96);
 }
 
 .sound-btn .btn-icon {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
-    font-family: var(--font-mono);
+    font-family: 'SF Mono', 'Monaco', monospace;
 }
 
 .sound-btn .btn-label {
@@ -248,63 +116,104 @@ body {
     text-transform: uppercase;
 }
 
-/* Stop Button Special Style */
+/* Stop Button */
 .stop-btn:hover {
-    border-color: var(--color-stop-dim);
-    color: var(--color-stop);
+    border-color: #5c2726;
+    color: #ef5350;
 }
 
 .stop-btn:active {
-    background: var(--color-stop-dim);
-    border-color: var(--color-stop);
+    background: #5c2726;
+    border-color: #ef5350;
     color: white;
 }
 
-/* Footer */
-.plugin-footer {
-    padding: var(--spacing-md) var(--spacing-xl);
-    text-align: center;
-    border-top: 1px solid var(--bg-elevated);
-}
-
-.sync-toggle {
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 2px;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    padding: var(--spacing-sm) var(--spacing-md);
+/* Toggle Button */
+.toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
     background: transparent;
-    border: 1px solid var(--bg-elevated);
-    border-radius: 3px;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
     cursor: pointer;
     transition: all 0.15s ease;
+    color: #666666;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
 }
 
-.sync-toggle:hover {
-    border-color: var(--accent-dim);
-    color: var(--accent-primary);
+.toggle-btn:hover {
+    border-color: #1e3a5f;
+    color: #64b5f6;
 }
 
-.sync-toggle.active {
-    background: var(--accent-dim);
-    border-color: var(--accent-primary);
-    color: var(--accent-bright);
+.toggle-btn.active {
+    background: rgba(100, 181, 246, 0.15);
+    border-color: #64b5f6;
+    color: #90caf9;
 }
 
-/* Responsive adjustments */
+.toggle-btn .toggle-icon {
+    font-size: 14px;
+}
+
+/* Note Value Select */
+.note-select {
+    padding: 6px 10px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    color: #888888;
+    font-family: 'SF Mono', 'Monaco', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+}
+
+.note-select:hover {
+    border-color: #1e3a5f;
+    color: #64b5f6;
+}
+
+.note-select:focus {
+    outline: none;
+    border-color: #64b5f6;
+}
+
+.note-select option {
+    background: #1a1a1a;
+    color: #e8e8e8;
+}
+
+/* Responsive */
 @media (max-width: 600px) {
-    .param-row {
-        gap: var(--spacing-md);
+    .knob-large {
+        width: 60px;
+        height: 60px;
     }
 
-    .knob {
-        width: 56px;
-        height: 56px;
+    .knob-medium {
+        width: 52px;
+        height: 52px;
     }
 
     .knob-indicator {
-        height: 14px;
+        height: 16px;
         top: 6px;
+    }
+
+    .knob-medium .knob-indicator {
+        height: 14px;
+        top: 5px;
     }
 }

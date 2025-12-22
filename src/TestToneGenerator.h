@@ -48,6 +48,16 @@ public:
         playbackPosition.store(0);
     }
 
+    void setLoopEnabled(bool enabled)
+    {
+        loopEnabled.store(enabled);
+    }
+
+    bool getLoopEnabled() const
+    {
+        return loopEnabled.load();
+    }
+
     void processBlock(juce::AudioBuffer<float>& buffer)
     {
         if (!isPlaying.load())
@@ -67,8 +77,8 @@ public:
         {
             if (pos >= sourceLength)
             {
-                // Loop drum pattern, stop others
-                if (currentSound.load() == static_cast<int>(SoundType::DrumLoop))
+                // Loop if enabled OR if it's the drum loop (backward compatibility)
+                if (loopEnabled.load() || currentSound.load() == static_cast<int>(SoundType::DrumLoop))
                     pos = 0;
                 else
                 {
@@ -106,6 +116,7 @@ private:
     std::atomic<int> currentSound { 0 };
     std::atomic<int> playbackPosition { 0 };
     std::atomic<bool> isPlaying { false };
+    std::atomic<bool> loopEnabled { false };
 
     const juce::AudioBuffer<float>* getBufferForSound(SoundType type) const
     {

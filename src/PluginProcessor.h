@@ -42,6 +42,16 @@ public:
     // Test tone control
     void triggerTestSound(int soundType);
     void stopTestSound();
+    void setLoopEnabled(bool enabled);
+    bool getLoopEnabled() const;
+
+    // Tempo sync control
+    void setTempoSync(bool enabled);
+    bool getTempoSyncEnabled() const;
+    void setTempoNote(int noteIndex);
+    int getTempoNoteValue() const;
+    float getHostBpm() const;
+    float calculateSyncedDelayTime() const;
 
 private:
     juce::AudioProcessorValueTreeState apvts;
@@ -65,6 +75,11 @@ private:
     std::atomic<float>* modRateParam = nullptr;
     std::atomic<float>* modDepthParam = nullptr;
     std::atomic<float>* warmthParam = nullptr;
+
+    // Tempo sync state
+    std::atomic<bool> tempoSyncEnabled { false };
+    std::atomic<int> tempoNoteValue { 1 };  // 0=1/4, 1=1/8, 2=1/8T, 3=1/16, 4=1/16T, 5=1/32
+    std::atomic<float> lastHostBpm { 120.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FuzzDelayProcessor)
 };

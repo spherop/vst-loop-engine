@@ -4,121 +4,170 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fuzz Delay</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'val-bg': '#0a0a0a',
+                        'val-card': '#1a1a1a',
+                        'val-card-inner': '#121212',
+                        'val-border': '#2a2a2a',
+                        'val-accent': '#64b5f6',
+                        'val-accent-dim': '#1e3a5f',
+                        'val-text': '#888888',
+                        'val-text-dim': '#555555',
+                    },
+                    fontFamily: {
+                        'mono': ['SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
     <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <div class="plugin">
-        <header class="plugin-header">
-            <h1>Fuzz Delay</h1>
+<body class="bg-val-bg text-white font-sans h-screen overflow-hidden select-none">
+    <div class="flex flex-col h-full">
+        <!-- Header -->
+        <header class="py-5 text-center border-b border-val-border">
+            <h1 class="text-2xl font-light tracking-[0.5em] text-val-accent uppercase">Fuzz Delay</h1>
         </header>
 
-        <main class="plugin-main">
+        <!-- Main Content -->
+        <main class="flex-1 flex flex-col gap-4 p-5 overflow-y-auto">
             <!-- Delay Section -->
-            <section class="param-section">
-                <h2 class="section-title">Delay</h2>
-                <div class="param-row">
-                    <div class="param">
-                        <div class="knob" id="delayTime-knob">
+            <section class="bg-val-card rounded-xl p-5 border border-val-border">
+                <h2 class="text-[10px] font-semibold tracking-[3px] text-val-text-dim uppercase mb-4 pb-2 border-b border-val-border">Delay</h2>
+                <div class="flex justify-center gap-10 flex-wrap">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Time</span>
+                        <div class="knob knob-large" id="delayTime-knob">
                             <div class="knob-indicator"></div>
                         </div>
-                        <span class="param-label">Time</span>
-                        <span class="param-value" id="delayTime-value">300 ms</span>
+                        <span class="font-mono text-sm text-white" id="delayTime-value">300 ms</span>
                     </div>
 
-                    <div class="param">
-                        <div class="knob" id="feedback-knob">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Feedback</span>
+                        <div class="knob knob-large" id="feedback-knob">
                             <div class="knob-indicator"></div>
                         </div>
-                        <span class="param-label">Feedback</span>
-                        <span class="param-value" id="feedback-value">40%</span>
+                        <span class="font-mono text-sm text-white" id="feedback-value">40%</span>
                     </div>
 
-                    <div class="param">
-                        <div class="knob" id="tone-knob">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Tone</span>
+                        <div class="knob knob-large" id="tone-knob">
                             <div class="knob-indicator"></div>
                         </div>
-                        <span class="param-label">Tone</span>
-                        <span class="param-value" id="tone-value">4.0 kHz</span>
+                        <span class="font-mono text-sm text-white" id="tone-value">4.0 kHz</span>
                     </div>
 
-                    <div class="param">
-                        <div class="knob" id="mix-knob">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Mix</span>
+                        <div class="knob knob-large" id="mix-knob">
                             <div class="knob-indicator"></div>
                         </div>
-                        <span class="param-label">Mix</span>
-                        <span class="param-value" id="mix-value">50%</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Character Section (BBD) -->
-            <section class="param-section">
-                <h2 class="section-title">Character</h2>
-                <div class="param-row">
-                    <div class="param">
-                        <div class="knob" id="age-knob">
-                            <div class="knob-indicator"></div>
-                        </div>
-                        <span class="param-label">Age</span>
-                        <span class="param-value" id="age-value">25%</span>
-                    </div>
-
-                    <div class="param">
-                        <div class="knob" id="modRate-knob">
-                            <div class="knob-indicator"></div>
-                        </div>
-                        <span class="param-label">Rate</span>
-                        <span class="param-value" id="modRate-value">0.5 Hz</span>
-                    </div>
-
-                    <div class="param">
-                        <div class="knob" id="modDepth-knob">
-                            <div class="knob-indicator"></div>
-                        </div>
-                        <span class="param-label">Depth</span>
-                        <span class="param-value" id="modDepth-value">3 ms</span>
-                    </div>
-
-                    <div class="param">
-                        <div class="knob" id="warmth-knob">
-                            <div class="knob-indicator"></div>
-                        </div>
-                        <span class="param-label">Warmth</span>
-                        <span class="param-value" id="warmth-value">30%</span>
+                        <span class="font-mono text-sm text-white" id="mix-value">50%</span>
                     </div>
                 </div>
             </section>
 
-            <!-- Test Sounds -->
-            <section class="test-section">
-                <span class="test-label">Test Sounds</span>
-                <div class="test-buttons">
-                    <button class="sound-btn" id="btn-click" data-sound="0">
-                        <span class="btn-icon">*</span>
-                        <span class="btn-label">Click</span>
-                    </button>
-                    <button class="sound-btn" id="btn-drums" data-sound="1">
-                        <span class="btn-icon">||</span>
-                        <span class="btn-label">Drums</span>
-                    </button>
-                    <button class="sound-btn" id="btn-synth" data-sound="2">
-                        <span class="btn-icon">~</span>
-                        <span class="btn-label">Synth</span>
-                    </button>
-                    <button class="sound-btn" id="btn-guitar" data-sound="3">
-                        <span class="btn-icon">#</span>
-                        <span class="btn-label">Guitar</span>
-                    </button>
-                    <button class="sound-btn stop-btn" id="btn-stop">
-                        <span class="btn-icon">X</span>
-                        <span class="btn-label">Stop</span>
+            <!-- Character Section -->
+            <section class="bg-val-card rounded-xl p-5 border border-val-border">
+                <h2 class="text-[10px] font-semibold tracking-[3px] text-val-text-dim uppercase mb-4 pb-2 border-b border-val-border">Character</h2>
+                <div class="flex justify-center gap-10 flex-wrap">
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Age</span>
+                        <div class="knob knob-medium" id="age-knob">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="font-mono text-sm text-white" id="age-value">25%</span>
+                    </div>
+
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Rate</span>
+                        <div class="knob knob-medium" id="modRate-knob">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="font-mono text-sm text-white" id="modRate-value">0.5 Hz</span>
+                    </div>
+
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Depth</span>
+                        <div class="knob knob-medium" id="modDepth-knob">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="font-mono text-sm text-white" id="modDepth-value">3 ms</span>
+                    </div>
+
+                    <div class="flex flex-col items-center gap-2">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Warmth</span>
+                        <div class="knob knob-medium" id="warmth-knob">
+                            <div class="knob-indicator"></div>
+                        </div>
+                        <span class="font-mono text-sm text-white" id="warmth-value">30%</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Test Sounds Section -->
+            <section class="bg-val-card rounded-xl p-4 border border-val-border">
+                <div class="flex items-center justify-between flex-wrap gap-4">
+                    <div class="flex items-center gap-3">
+                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text-dim uppercase">Test</span>
+                        <div class="flex gap-2">
+                            <button class="sound-btn" data-sound="0">
+                                <span class="btn-icon">*</span>
+                                <span class="btn-label">Click</span>
+                            </button>
+                            <button class="sound-btn" data-sound="1">
+                                <span class="btn-icon">||</span>
+                                <span class="btn-label">Drums</span>
+                            </button>
+                            <button class="sound-btn" data-sound="2">
+                                <span class="btn-icon">~</span>
+                                <span class="btn-label">Synth</span>
+                            </button>
+                            <button class="sound-btn" data-sound="3">
+                                <span class="btn-icon">#</span>
+                                <span class="btn-label">Guitar</span>
+                            </button>
+                            <button class="sound-btn stop-btn" id="btn-stop">
+                                <span class="btn-icon">X</span>
+                                <span class="btn-label">Stop</span>
+                            </button>
+                        </div>
+                    </div>
+                    <button class="toggle-btn" id="loop-toggle">
+                        <span class="toggle-icon">&#x21BB;</span>
+                        <span class="toggle-label">Loop</span>
                     </button>
                 </div>
             </section>
         </main>
 
-        <footer class="plugin-footer">
-            <button class="sync-toggle">Tempo Sync: Off</button>
+        <!-- Footer - Tempo Sync -->
+        <footer class="py-3 px-5 border-t border-val-border">
+            <div class="flex items-center justify-center gap-6 flex-wrap">
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] font-semibold tracking-[2px] text-val-text-dim uppercase">BPM</span>
+                    <span class="font-mono text-lg text-white min-w-[60px]" id="bpm-display">120.0</span>
+                </div>
+                <button class="toggle-btn" id="tempo-sync-toggle">
+                    <span class="toggle-label">Sync: Off</span>
+                </button>
+                <select class="note-select" id="note-value-select">
+                    <option value="0">1/4</option>
+                    <option value="1" selected>1/8</option>
+                    <option value="2">1/8T</option>
+                    <option value="3">1/16</option>
+                    <option value="4">1/16T</option>
+                    <option value="5">1/32</option>
+                </select>
+            </div>
         </footer>
     </div>
 

@@ -31,6 +31,33 @@ FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
                       processorRef.stopTestSound();
                       complete({});
                   })
+                  .withNativeFunction("setLoopEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setLoopEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setTempoSync", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setTempoSync(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setTempoNote", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setTempoNote(static_cast<int>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("getTempoState", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("bpm", processorRef.getHostBpm());
+                      result->setProperty("syncEnabled", processorRef.getTempoSyncEnabled());
+                      result->setProperty("noteValue", processorRef.getTempoNoteValue());
+                      result->setProperty("loopEnabled", processorRef.getLoopEnabled());
+                      complete(juce::var(result.get()));
+                  })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },
                       juce::URL("http://localhost/").getOrigin())),
@@ -65,10 +92,22 @@ FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
     setSize(700, 500);
     setResizable(true, true);
     setResizeLimits(500, 400, 1400, 1000);
+
+    // Start timer for BPM polling (100ms interval)
+    startTimerHz(10);
 }
 
 FuzzDelayEditor::~FuzzDelayEditor()
 {
+    stopTimer();
+}
+
+void FuzzDelayEditor::timerCallback()
+{
+    // Push BPM updates to JavaScript
+    const float bpm = processorRef.getHostBpm();
+    juce::String script = "if (window.updateBpmDisplay) window.updateBpmDisplay(" + juce::String(bpm, 1) + ");";
+    webView.evaluateJavascript(script, nullptr);
 }
 
 void FuzzDelayEditor::paint(juce::Graphics& g)

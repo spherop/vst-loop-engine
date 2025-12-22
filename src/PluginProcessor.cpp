@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <algorithm>
 
 FuzzDelayProcessor::FuzzDelayProcessor()
     : AudioProcessor(BusesProperties()
@@ -177,6 +178,16 @@ void FuzzDelayProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     const auto totalNumOutputChannels = getTotalNumOutputChannels();
     const auto numSamples = buffer.getNumSamples();
 
+    // Track host tempo
+    if (auto* playHead = getPlayHead())
+    {
+        if (auto posInfo = playHead->getPosition())
+        {
+            if (posInfo->getBpm())
+                lastHostBpm.store(static_cast<float>(*posInfo->getBpm()));
+        }
+    }
+
     // Clear any output channels that don't have input data
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, numSamples);
@@ -184,8 +195,10 @@ void FuzzDelayProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     // Add test tone to input if playing
     testToneGenerator.processBlock(buffer);
 
-    // Get current parameter values
-    const float delayTime = delayTimeParam->load();
+    // Get delay time - either from parameter or tempo sync
+    const float delayTime = tempoSyncEnabled.load()
+        ? calculateSyncedDelayTime()
+        : delayTimeParam->load();
     const float feedback = feedbackParam->load();
     const float mix = mixParam->load() / 100.0f; // Convert to 0-1
     const float tone = toneParam->load();
@@ -263,6 +276,67 @@ void FuzzDelayProcessor::triggerTestSound(int soundType)
 void FuzzDelayProcessor::stopTestSound()
 {
     testToneGenerator.stop();
+}
+
+void FuzzDelayProcessor::setLoopEnabled(bool enabled)
+{
+    testToneGenerator.setLoopEnabled(enabled);
+}
+
+bool FuzzDelayProcessor::getLoopEnabled() const
+{
+    return testToneGenerator.getLoopEnabled();
+}
+
+void FuzzDelayProcessor::setTempoSync(bool enabled)
+{
+    tempoSyncEnabled.store(enabled);
+}
+
+bool FuzzDelayProcessor::getTempoSyncEnabled() const
+{
+    return tempoSyncEnabled.load();
+}
+
+void FuzzDelayProcessor::setTempoNote(int noteIndex)
+{
+    tempoNoteValue.store(std::clamp(noteIndex, 0, 5));
+}
+
+int FuzzDelayProcessor::getTempoNoteValue() const
+{
+    return tempoNoteValue.load();
+}
+
+float FuzzDelayProcessor::getHostBpm() const
+{
+    return lastHostBpm.load();
+}
+
+float FuzzDelayProcessor::calculateSyncedDelayTime() const
+{
+    // Note value multipliers relative to quarter note
+    // 0=1/4, 1=1/8, 2=1/8T, 3=1/16, 4=1/16T, 5=1/32
+    static constexpr float noteMultipliers[] = {
+        1.0f,      // 1/4
+        0.5f,      // 1/8
+        0.333333f, // 1/8T (triplet)
+        0.25f,     // 1/16
+        0.166667f, // 1/16T (triplet)
+        0.125f     // 1/32
+    };
+
+    const float bpm = lastHostBpm.load();
+    if (bpm <= 0.0f)
+        return 300.0f; // Default fallback
+
+    const int noteIdx = std::clamp(tempoNoteValue.load(), 0, 5);
+    const float multiplier = noteMultipliers[noteIdx];
+
+    // Quarter note duration in ms = 60000 / BPM
+    const float quarterNoteMs = 60000.0f / bpm;
+
+    return std::clamp(quarterNoteMs * multiplier, 1.0f, 2000.0f);
 }
 
 bool FuzzDelayProcessor::hasEditor() const
