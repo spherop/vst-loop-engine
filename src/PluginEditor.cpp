@@ -85,6 +85,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("playhead", loopEngine.getPlayheadPosition());
                       result->setProperty("loopLength", loopEngine.getLoopLengthSeconds());
                       result->setProperty("hasContent", loopEngine.hasContent());
+                      result->setProperty("isReversed", loopEngine.getIsReversed());
 
                       // Get waveform data (100 points for visualization)
                       auto waveformData = loopEngine.getWaveformData(100);

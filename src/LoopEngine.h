@@ -38,6 +38,8 @@ public:
             if (highestLayer == 0 && !layers[0].hasContent())
             {
                 currentLayer = 0;
+                // Reset loop parameters to defaults when starting new recording
+                resetLoopParams();
                 layers[0].startRecording();
             }
             else if (highestLayer < NUM_LAYERS - 1)
@@ -51,6 +53,18 @@ public:
         {
             // Stop recording
             stopRecording();
+        }
+    }
+
+    void resetLoopParams()
+    {
+        // Reset all layers to default loop parameters
+        for (int i = 0; i < NUM_LAYERS; ++i)
+        {
+            layers[i].setLoopStart(0.0f);
+            layers[i].setLoopEnd(1.0f);
+            layers[i].setPlaybackRate(1.0f);
+            layers[i].setReverse(false);
         }
     }
 
@@ -277,6 +291,19 @@ public:
     bool hasContent() const
     {
         return layers[0].hasContent();
+    }
+
+    bool getIsReversed() const
+    {
+        // Return reverse state from first layer with content
+        for (int i = 0; i <= highestLayer; ++i)
+        {
+            if (layers[i].hasContent())
+            {
+                return layers[i].getIsReversed();
+            }
+        }
+        return false;
     }
 
     // Get combined waveform data for UI

@@ -214,6 +214,7 @@ public:
     int getLoopLengthSamples() const { return loopLength; }
 
     bool hasContent() const { return loopLength > 0; }
+    bool getIsReversed() const { return isReversed.load(); }
 
     // Get waveform data for UI visualization (downsampled)
     std::vector<float> getWaveformData(int numPoints) const
@@ -333,7 +334,7 @@ private:
         const bool reversed = isReversed.load();
         const int effectiveStart = loopStart;
         const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
-        const int effectiveLength = effectiveEnd - effectiveStart;
+        const float effectiveLength = static_cast<float>(effectiveEnd - effectiveStart);
 
         if (effectiveLength <= 0)
             return;
@@ -341,22 +342,21 @@ private:
         if (reversed)
         {
             playHead -= rate;
-            if (playHead < effectiveStart)
+            // Wrap around using modulo for proper looping at any speed
+            while (playHead < effectiveStart)
             {
-                playHead = effectiveEnd - 1 + (playHead - effectiveStart);
+                playHead += effectiveLength;
             }
         }
         else
         {
             playHead += rate;
-            if (playHead >= effectiveEnd)
+            // Wrap around using modulo for proper looping at any speed
+            while (playHead >= effectiveEnd)
             {
-                playHead = effectiveStart + (playHead - effectiveEnd);
+                playHead -= effectiveLength;
             }
         }
-
-        // Clamp to valid range
-        playHead = std::clamp(playHead, static_cast<float>(effectiveStart), static_cast<float>(effectiveEnd - 1));
     }
 
     float readWithInterpolation(const std::vector<float>& buffer, float position) const

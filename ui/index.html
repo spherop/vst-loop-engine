@@ -118,28 +118,52 @@
                 <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
                     <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
                     <div class="p-4">
-                        <div class="waveform-container">
+                        <div class="waveform-container" id="waveform-container">
                             <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
+                            <!-- Loop region shading -->
+                            <div id="loop-region-shade" class="loop-region-shade"></div>
                             <div id="playhead" class="playhead"></div>
                             <div id="loop-region" class="loop-region">
                                 <div id="loop-start-handle" class="loop-handle start"></div>
                                 <div id="loop-end-handle" class="loop-handle end"></div>
                             </div>
-                        </div>
-                        <!-- Layer Indicators -->
-                        <div class="flex justify-center items-center gap-2 mt-3">
-                            <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
-                            <div class="layer-indicators flex gap-1">
-                                <button class="layer-btn active" data-layer="1">1</button>
-                                <button class="layer-btn" data-layer="2">2</button>
-                                <button class="layer-btn" data-layer="3">3</button>
-                                <button class="layer-btn" data-layer="4">4</button>
-                                <button class="layer-btn" data-layer="5">5</button>
-                                <button class="layer-btn" data-layer="6">6</button>
-                                <button class="layer-btn" data-layer="7">7</button>
-                                <button class="layer-btn" data-layer="8">8</button>
+                            <!-- Recording indicator overlay -->
+                            <div id="recording-overlay" class="recording-overlay hidden">
+                                <div class="recording-indicator">
+                                    <span class="rec-dot"></span>
+                                    <span class="rec-text">RECORDING</span>
+                                    <span id="rec-time" class="rec-time">0.0s</span>
+                                </div>
+                                <div id="input-level" class="input-level-meter">
+                                    <div id="input-level-bar" class="input-level-bar"></div>
+                                </div>
                             </div>
-                            <span id="loop-time-display" class="font-mono text-xs text-fd-text ml-2">0.0s / 60.0s</span>
+                        </div>
+                        <!-- Controls row -->
+                        <div class="flex justify-between items-center mt-3">
+                            <!-- Zoom controls -->
+                            <div class="flex items-center gap-2">
+                                <button id="zoom-out-btn" class="zoom-btn" title="Zoom out">-</button>
+                                <span id="zoom-level" class="font-mono text-[10px] text-fd-text-dim">1.0x</span>
+                                <button id="zoom-in-btn" class="zoom-btn" title="Zoom in">+</button>
+                                <button id="zoom-fit-btn" class="zoom-btn-text" title="Fit to view">FIT</button>
+                            </div>
+                            <!-- Layer Indicators -->
+                            <div class="flex items-center gap-2">
+                                <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
+                                <div class="layer-indicators flex gap-1">
+                                    <button class="layer-btn active" data-layer="1">1</button>
+                                    <button class="layer-btn" data-layer="2">2</button>
+                                    <button class="layer-btn" data-layer="3">3</button>
+                                    <button class="layer-btn" data-layer="4">4</button>
+                                    <button class="layer-btn" data-layer="5">5</button>
+                                    <button class="layer-btn" data-layer="6">6</button>
+                                    <button class="layer-btn" data-layer="7">7</button>
+                                    <button class="layer-btn" data-layer="8">8</button>
+                                </div>
+                            </div>
+                            <!-- Time display -->
+                            <span id="loop-time-display" class="font-mono text-xs text-fd-text">0.0s / 60.0s</span>
                         </div>
                     </div>
                 </section>

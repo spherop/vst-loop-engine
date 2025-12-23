@@ -171,6 +171,7 @@ class KnobController {
         this.value = 0.5;
 
         this.formatValue = options.formatValue || ((v) => `${Math.round(v * 100)}%`);
+        this.onValueChange = options.onValueChange || null;
 
         this.isDragging = false;
         this.lastY = 0;
@@ -223,6 +224,7 @@ class KnobController {
         this.isDragging = true;
         this.lastY = e.clientY;
         this.element.classList.add('active');
+        this.element.classList.add('adjusting');
         if (this.sliderState) {
             this.sliderState.sliderDragStarted();
         }
@@ -245,6 +247,7 @@ class KnobController {
         if (this.isDragging) {
             this.isDragging = false;
             this.element.classList.remove('active');
+            this.element.classList.remove('adjusting');
             if (this.sliderState) {
                 this.sliderState.sliderDragEnded();
             }
@@ -261,6 +264,10 @@ class KnobController {
         }
         if (this.valueDisplay) {
             this.valueDisplay.textContent = this.formatValue(normalizedValue);
+        }
+        // Call value change callback if provided
+        if (this.onValueChange) {
+            this.onValueChange(normalizedValue);
         }
     }
 
@@ -520,6 +527,22 @@ class LooperController {
         this.highestLayer = 0;
         this.loopLength = 0;
         this.playheadPosition = 0;
+        this.recordingStartTime = 0;
+        this.isReversed = false;
+
+        // Zoom state
+        this.zoomLevel = 1.0;
+        this.zoomOffset = 0; // For panning when zoomed
+        this.minZoom = 1.0;
+        this.maxZoom = 8.0;
+
+        // Loop region values (0-1 normalized)
+        this.loopStart = 0;
+        this.loopEnd = 1;
+
+        // Looper accent color (light blue)
+        this.accentColor = '#4fc3f7';
+        this.accentColorDim = '#29b6f6';
 
         // Native functions
         this.recordFn = getNativeFunction("loopRecord");
@@ -534,6 +557,8 @@ class LooperController {
         this.setupTransport();
         this.setupLayers();
         this.setupWaveform();
+        this.setupZoomControls();
+        this.setupRecordingOverlay();
         this.startStatePolling();
     }
 
@@ -581,12 +606,130 @@ class LooperController {
         this.playhead = document.getElementById('playhead');
         this.loopStartHandle = document.getElementById('loop-start-handle');
         this.loopEndHandle = document.getElementById('loop-end-handle');
+        this.loopRegionShade = document.getElementById('loop-region-shade');
 
         if (this.waveformCanvas) {
             this.ctx = this.waveformCanvas.getContext('2d');
             this.resizeCanvas();
             window.addEventListener('resize', () => this.resizeCanvas());
             this.drawEmptyWaveform();
+        }
+
+        // Initialize loop region shade
+        this.updateLoopRegionShade();
+    }
+
+    setupZoomControls() {
+        this.zoomInBtn = document.getElementById('zoom-in-btn');
+        this.zoomOutBtn = document.getElementById('zoom-out-btn');
+        this.zoomFitBtn = document.getElementById('zoom-fit-btn');
+        this.zoomLevelDisplay = document.getElementById('zoom-level');
+
+        if (this.zoomInBtn) {
+            this.zoomInBtn.addEventListener('click', () => this.zoomIn());
+        }
+        if (this.zoomOutBtn) {
+            this.zoomOutBtn.addEventListener('click', () => this.zoomOut());
+        }
+        if (this.zoomFitBtn) {
+            this.zoomFitBtn.addEventListener('click', () => this.zoomFit());
+        }
+
+        this.updateZoomUI();
+    }
+
+    setupRecordingOverlay() {
+        this.recordingOverlay = document.getElementById('recording-overlay');
+        this.recTimeDisplay = document.getElementById('rec-time');
+        this.inputLevelBar = document.getElementById('input-level-bar');
+    }
+
+    // Zoom methods
+    zoomIn() {
+        this.zoomLevel = Math.min(this.maxZoom, this.zoomLevel * 1.5);
+        this.updateZoomUI();
+    }
+
+    zoomOut() {
+        this.zoomLevel = Math.max(this.minZoom, this.zoomLevel / 1.5);
+        if (this.zoomLevel <= 1.0) {
+            this.zoomOffset = 0;
+        }
+        this.updateZoomUI();
+    }
+
+    zoomFit() {
+        this.zoomLevel = 1.0;
+        this.zoomOffset = 0;
+        this.updateZoomUI();
+    }
+
+    updateZoomUI() {
+        if (this.zoomLevelDisplay) {
+            this.zoomLevelDisplay.textContent = `${this.zoomLevel.toFixed(1)}x`;
+        }
+        if (this.zoomOutBtn) {
+            this.zoomOutBtn.disabled = this.zoomLevel <= this.minZoom;
+        }
+        if (this.zoomInBtn) {
+            this.zoomInBtn.disabled = this.zoomLevel >= this.maxZoom;
+        }
+    }
+
+    // Loop region visualization
+    updateLoopRegionShade() {
+        if (this.loopRegionShade) {
+            this.loopRegionShade.style.setProperty('--loop-start', `${this.loopStart * 100}%`);
+            this.loopRegionShade.style.setProperty('--loop-end', `${this.loopEnd * 100}%`);
+        }
+
+        // Update handle positions
+        if (this.loopStartHandle && this.waveformCanvas) {
+            const x = this.loopStart * this.waveformCanvas.width;
+            this.loopStartHandle.style.left = `${x}px`;
+        }
+        if (this.loopEndHandle && this.waveformCanvas) {
+            const x = this.loopEnd * this.waveformCanvas.width;
+            this.loopEndHandle.style.right = `${this.waveformCanvas.width - x}px`;
+        }
+    }
+
+    setLoopStart(value) {
+        this.loopStart = value;
+        this.updateLoopRegionShade();
+    }
+
+    setLoopEnd(value) {
+        this.loopEnd = value;
+        this.updateLoopRegionShade();
+    }
+
+    // Recording overlay methods
+    showRecordingOverlay() {
+        if (this.recordingOverlay) {
+            this.recordingOverlay.classList.remove('hidden');
+            this.recordingStartTime = Date.now();
+        }
+    }
+
+    hideRecordingOverlay() {
+        if (this.recordingOverlay) {
+            this.recordingOverlay.classList.add('hidden');
+        }
+    }
+
+    updateRecordingTime() {
+        if (this.recTimeDisplay && this.state === 'recording') {
+            const elapsed = (Date.now() - this.recordingStartTime) / 1000;
+            this.recTimeDisplay.textContent = `${elapsed.toFixed(1)}s`;
+        }
+    }
+
+    updateInputLevel(level) {
+        if (this.inputLevelBar) {
+            // level should be 0-1
+            const percent = Math.min(100, level * 100);
+            this.inputLevelBar.style.width = `${percent}%`;
         }
     }
 
@@ -632,21 +775,76 @@ class LooperController {
         this.ctx.fillStyle = '#0a0a0a';
         this.ctx.fillRect(0, 0, width, height);
 
-        // Draw waveform
-        this.ctx.fillStyle = '#ff6b35';
-        const barWidth = width / waveformData.length;
+        // Calculate zoom transform
+        const zoomedWidth = width * this.zoomLevel;
+        const offsetX = this.zoomOffset * (zoomedWidth - width);
+
+        // Draw waveform with zoom
+        this.ctx.fillStyle = this.accentColor;
+        const barWidth = zoomedWidth / waveformData.length;
 
         for (let i = 0; i < waveformData.length; i++) {
             const amplitude = waveformData[i] * (height * 0.4);
-            const x = i * barWidth;
-            this.ctx.fillRect(x, centerY - amplitude, barWidth - 1, amplitude * 2);
+            const x = (i * barWidth) - offsetX;
+            // Only draw visible bars
+            if (x + barWidth > 0 && x < width) {
+                this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
+            }
         }
+
+        // Draw loop region boundaries as vertical lines
+        const startX = (this.loopStart * zoomedWidth) - offsetX;
+        const endX = (this.loopEnd * zoomedWidth) - offsetX;
+
+        this.ctx.strokeStyle = this.accentColor;
+        this.ctx.lineWidth = 2;
+        this.ctx.setLineDash([4, 4]);
+
+        if (startX >= 0 && startX <= width) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(startX, 0);
+            this.ctx.lineTo(startX, height);
+            this.ctx.stroke();
+        }
+
+        if (endX >= 0 && endX <= width) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(endX, 0);
+            this.ctx.lineTo(endX, height);
+            this.ctx.stroke();
+        }
+
+        this.ctx.setLineDash([]);
     }
 
     updatePlayhead(position) {
         if (this.playhead && this.waveformCanvas) {
-            const x = position * this.waveformCanvas.width;
+            // Position is 0-1 within the loop region (between start and end)
+            // Convert to actual canvas position
+            const loopRegionWidth = this.loopEnd - this.loopStart;
+            const absolutePosition = this.loopStart + (position * loopRegionWidth);
+
+            // Apply zoom
+            const zoomedWidth = this.waveformCanvas.width * this.zoomLevel;
+            const offsetX = this.zoomOffset * (zoomedWidth - this.waveformCanvas.width);
+            const x = (absolutePosition * zoomedWidth) - offsetX;
+
             this.playhead.style.left = `${x}px`;
+
+            // Hide playhead if outside visible area
+            if (x < 0 || x > this.waveformCanvas.width) {
+                this.playhead.style.opacity = '0';
+            } else {
+                this.playhead.style.opacity = '1';
+            }
+        }
+    }
+
+    setReversed(reversed) {
+        this.isReversed = reversed;
+        // Update playhead color/style to indicate direction
+        if (this.playhead) {
+            this.playhead.classList.toggle('reversed', reversed);
         }
     }
 
@@ -720,6 +918,7 @@ class LooperController {
     }
 
     updateTransportUI(state) {
+        const previousState = this.state;
         this.state = state;
 
         // Reset all buttons
@@ -738,6 +937,13 @@ class LooperController {
             case 'overdubbing':
                 if (this.overdubBtn) this.overdubBtn.classList.add('active');
                 break;
+        }
+
+        // Handle recording overlay
+        if (state === 'recording' && previousState !== 'recording') {
+            this.showRecordingOverlay();
+        } else if (state !== 'recording' && previousState === 'recording') {
+            this.hideRecordingOverlay();
         }
     }
 
@@ -784,10 +990,30 @@ class LooperController {
                         }
                     }
 
+                    // Update recording time if recording
+                    if (this.state === 'recording') {
+                        this.updateRecordingTime();
+                        // Simulate input level based on waveform activity
+                        if (state.waveform && state.waveform.length > 0) {
+                            const recentLevel = state.waveform[state.waveform.length - 1] || 0;
+                            this.updateInputLevel(recentLevel);
+                        }
+                    }
+
                     // Update layer UI
                     if (typeof state.layer !== 'undefined' && typeof state.highestLayer !== 'undefined') {
                         if (state.layer !== this.currentLayer || state.highestLayer !== this.highestLayer) {
                             this.updateLayerUI(state.layer, state.highestLayer);
+                        }
+                    }
+
+                    // Update reverse state
+                    if (typeof state.isReversed !== 'undefined' && state.isReversed !== this.isReversed) {
+                        this.setReversed(state.isReversed);
+                        // Also update the reverse button
+                        const reverseBtn = document.getElementById('reverse-btn');
+                        if (reverseBtn) {
+                            reverseBtn.classList.toggle('active', state.isReversed);
                         }
                     }
 
@@ -802,6 +1028,9 @@ class LooperController {
         }, 50);
     }
 }
+
+// Store looper controller globally so knobs can access it
+let looperController = null;
 
 // BPM Display and Tempo Sync Controller
 class BpmDisplayController {
@@ -906,18 +1135,28 @@ document.addEventListener('DOMContentLoaded', () => {
     new TabController();
 
     // Looper Controller
-    new LooperController();
+    looperController = new LooperController();
 
     // Looper Knobs
 
     // Loop Start: 0% - 100%
     new KnobController('loopStart-knob', 'loopStart', {
-        formatValue: (v) => `${Math.round(v * 100)}%`
+        formatValue: (v) => `${Math.round(v * 100)}%`,
+        onValueChange: (v) => {
+            if (looperController) {
+                looperController.setLoopStart(v);
+            }
+        }
     });
 
     // Loop End: 0% - 100%
     new KnobController('loopEnd-knob', 'loopEnd', {
-        formatValue: (v) => `${Math.round(v * 100)}%`
+        formatValue: (v) => `${Math.round(v * 100)}%`,
+        onValueChange: (v) => {
+            if (looperController) {
+                looperController.setLoopEnd(v);
+            }
+        }
     });
 
     // Loop Speed: 0.25x - 4.0x (center = 1.0x)
@@ -1005,11 +1244,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Reverse toggle
     const reverseBtn = document.getElementById('reverse-btn');
     if (reverseBtn) {
-        let isReversed = false;
         const setReverseFn = getNativeFunction("setLoopReverse");
 
         reverseBtn.addEventListener('click', async () => {
-            isReversed = !isReversed;
+            const isReversed = !looperController.isReversed;
+            looperController.setReversed(isReversed);
             reverseBtn.classList.toggle('active', isReversed);
             try {
                 await setReverseFn(isReversed);

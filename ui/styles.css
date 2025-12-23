@@ -1,6 +1,19 @@
-/* FUZZ DELAY - Bold Industrial Design */
+/* LOOP ENGINE - Bold Industrial Design */
 
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* Color scheme variables */
+:root {
+    /* Looper colors (light blue) */
+    --looper-accent: #4fc3f7;
+    --looper-accent-dim: #29b6f6;
+    --looper-accent-glow: rgba(79, 195, 247, 0.4);
+
+    /* Delay colors (gold/orange) */
+    --delay-accent: #ff6b35;
+    --delay-accent-dim: #cc5429;
+    --delay-accent-glow: rgba(255, 107, 53, 0.4);
+}
 
 * {
     -webkit-user-select: none;
@@ -143,6 +156,54 @@ html, body {
 }
 
 /* ============================================
+   LOOPER-SPECIFIC KNOB STYLES (Light Blue)
+   ============================================ */
+
+#looper-tab .knob:hover {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.6),
+        0 0 0 2px #1a1a1a,
+        0 0 0 3px var(--looper-accent);
+}
+
+#looper-tab .knob:active,
+#looper-tab .knob.active {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 16px var(--looper-accent-glow),
+        0 0 0 2px #1a1a1a,
+        0 0 0 3px var(--looper-accent),
+        0 0 20px var(--looper-accent-glow);
+}
+
+#looper-tab .knob-indicator {
+    background: linear-gradient(180deg, var(--looper-accent) 0%, #81d4fa 50%, var(--looper-accent) 100%);
+    box-shadow:
+        0 0 6px var(--looper-accent),
+        0 0 12px var(--looper-accent-glow);
+}
+
+#looper-tab .knob.adjusting {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 20px var(--looper-accent-glow),
+        0 0 0 2px #1a1a1a,
+        0 0 0 4px var(--looper-accent),
+        0 0 30px var(--looper-accent-glow);
+}
+
+#looper-tab .knob.adjusting .knob-indicator {
+    box-shadow:
+        0 0 10px var(--looper-accent),
+        0 0 20px var(--looper-accent-glow),
+        0 0 30px var(--looper-accent-glow);
+}
+
+/* ============================================
    TAB SYSTEM
    ============================================ */
 
@@ -172,10 +233,17 @@ html, body {
 
 .tab.active {
     background: linear-gradient(180deg, #1a1a1a 0%, #161616 100%);
-    border-color: #ff6b35;
+    border-color: var(--delay-accent);
     border-bottom-color: #161616;
-    color: #ff6b35;
-    text-shadow: 0 0 10px rgba(255, 107, 53, 0.4);
+    color: var(--delay-accent);
+    text-shadow: 0 0 10px var(--delay-accent-glow);
+}
+
+/* Looper tab uses blue accent */
+.tab[data-tab="looper"].active {
+    border-color: var(--looper-accent);
+    color: var(--looper-accent);
+    text-shadow: 0 0 10px var(--looper-accent-glow);
 }
 
 .tab-content {
@@ -358,11 +426,16 @@ html, body {
     top: 0;
     bottom: 0;
     width: 2px;
-    background: #ff6b35;
-    box-shadow: 0 0 8px rgba(255, 107, 53, 0.6);
+    background: var(--looper-accent);
+    box-shadow: 0 0 8px var(--looper-accent-glow);
     left: 0;
     pointer-events: none;
-    transition: left 0.05s linear;
+    transition: left 0.05s linear, opacity 0.1s ease;
+}
+
+.playhead.reversed {
+    background: linear-gradient(180deg, var(--looper-accent) 0%, #e91e63 100%);
+    box-shadow: 0 0 8px rgba(233, 30, 99, 0.6);
 }
 
 .loop-region {
@@ -379,24 +452,24 @@ html, body {
     top: 0;
     bottom: 0;
     width: 4px;
-    background: rgba(255, 107, 53, 0.3);
+    background: rgba(79, 195, 247, 0.3);
     cursor: ew-resize;
     pointer-events: all;
     transition: background 0.15s ease;
 }
 
 .loop-handle:hover {
-    background: rgba(255, 107, 53, 0.6);
+    background: rgba(79, 195, 247, 0.6);
 }
 
 .loop-handle.start {
     left: 0;
-    border-right: 2px solid #ff6b35;
+    border-right: 2px solid var(--looper-accent);
 }
 
 .loop-handle.end {
     right: 0;
-    border-left: 2px solid #ff6b35;
+    border-left: 2px solid var(--looper-accent);
 }
 
 /* ============================================
@@ -423,10 +496,10 @@ html, body {
 }
 
 .layer-btn.active {
-    background: linear-gradient(180deg, #2a1a10 0%, #1a1008 100%);
-    border-color: #ff6b35;
-    color: #ff6b35;
-    box-shadow: 0 0 8px rgba(255, 107, 53, 0.2);
+    background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
+    border-color: var(--looper-accent);
+    color: var(--looper-accent);
+    box-shadow: 0 0 8px var(--looper-accent-glow);
 }
 
 .layer-btn.has-content {
@@ -436,9 +509,9 @@ html, body {
 }
 
 .layer-btn.has-content.active {
-    background: linear-gradient(180deg, #2a1a10 0%, #1a1008 100%);
-    border-color: #ff6b35;
-    color: #ff8c5a;
+    background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
+    border-color: var(--looper-accent);
+    color: #81d4fa;
 }
 
 /* ============================================
@@ -701,6 +774,214 @@ html, body {
 .note-select option {
     background: #1a1a1a;
     color: #ccc;
+}
+
+/* ============================================
+   RECORDING OVERLAY
+   ============================================ */
+
+.recording-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 10, 10, 0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    z-index: 10;
+}
+
+.recording-overlay.hidden {
+    display: none;
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.rec-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ef5350;
+    box-shadow: 0 0 12px #ef5350, 0 0 24px rgba(239, 83, 80, 0.5);
+    animation: rec-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(0.9);
+    }
+}
+
+.rec-text {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #ef5350;
+    text-shadow: 0 0 10px rgba(239, 83, 80, 0.5);
+}
+
+.rec-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    min-width: 60px;
+    text-align: right;
+}
+
+/* Input Level Meter */
+.input-level-meter {
+    width: 200px;
+    height: 6px;
+    background: #1a1a1a;
+    border-radius: 3px;
+    overflow: hidden;
+    border: 1px solid #2a2a2a;
+}
+
+.input-level-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #4caf50 0%, #8bc34a 50%, #ffeb3b 75%, #ff9800 90%, #f44336 100%);
+    border-radius: 2px;
+    transition: width 0.05s linear;
+}
+
+/* ============================================
+   LOOP REGION SHADE
+   ============================================ */
+
+.loop-region-shade {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.loop-region-shade::before,
+.loop-region-shade::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+}
+
+.loop-region-shade::before {
+    left: 0;
+    width: var(--loop-start, 0%);
+}
+
+.loop-region-shade::after {
+    right: 0;
+    width: calc(100% - var(--loop-end, 100%));
+}
+
+/* Active loop region highlight */
+.loop-region-shade.active::before,
+.loop-region-shade.active::after {
+    background: rgba(0, 0, 0, 0.7);
+}
+
+/* ============================================
+   ZOOM CONTROLS
+   ============================================ */
+
+.zoom-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid #333;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    color: #666;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    transition: all 0.12s ease;
+}
+
+.zoom-btn:hover {
+    border-color: var(--looper-accent);
+    color: var(--looper-accent);
+    background: linear-gradient(180deg, #1f1f1f 0%, #141414 100%);
+}
+
+.zoom-btn:active {
+    background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
+    border-color: var(--looper-accent);
+    color: #81d4fa;
+}
+
+.zoom-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.zoom-btn-text {
+    padding: 4px 8px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid #333;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    color: #666;
+    cursor: pointer;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    transition: all 0.12s ease;
+}
+
+.zoom-btn-text:hover {
+    border-color: var(--looper-accent);
+    color: var(--looper-accent);
+}
+
+.zoom-btn-text:active {
+    background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
+    color: #81d4fa;
+}
+
+/* ============================================
+   KNOB ANIMATION FEEDBACK
+   ============================================ */
+
+.knob.adjusting {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 20px rgba(255, 107, 53, 0.4),
+        0 0 0 2px #1a1a1a,
+        0 0 0 4px #ff6b35,
+        0 0 30px rgba(255, 107, 53, 0.3);
+}
+
+.knob.adjusting .knob-indicator {
+    box-shadow:
+        0 0 10px rgba(255, 107, 53, 0.8),
+        0 0 20px rgba(255, 107, 53, 0.5),
+        0 0 30px rgba(255, 107, 53, 0.3);
 }
 
 /* ============================================
