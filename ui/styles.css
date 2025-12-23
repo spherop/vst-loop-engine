@@ -451,25 +451,43 @@ html, body {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 4px;
-    background: rgba(79, 195, 247, 0.3);
+    width: 8px;
+    background: rgba(79, 195, 247, 0.2);
     cursor: ew-resize;
     pointer-events: all;
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, transform 0.1s ease;
+    z-index: 5;
+    transform: translateX(-50%);
 }
 
 .loop-handle:hover {
-    background: rgba(79, 195, 247, 0.6);
+    background: rgba(79, 195, 247, 0.5);
+    width: 10px;
+}
+
+.loop-handle:active {
+    background: rgba(79, 195, 247, 0.7);
+}
+
+.loop-handle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 20px;
+    background: var(--looper-accent);
+    border-radius: 1px;
+    box-shadow: 0 0 4px var(--looper-accent-glow);
 }
 
 .loop-handle.start {
-    left: 0;
-    border-right: 2px solid var(--looper-accent);
+    left: 0%;
 }
 
 .loop-handle.end {
-    right: 0;
-    border-left: 2px solid var(--looper-accent);
+    left: 100%;
 }
 
 /* ============================================
@@ -710,6 +728,19 @@ html, body {
     border-color: #ff6b35;
     color: #ff8c5a;
     box-shadow: 0 0 12px rgba(255, 107, 53, 0.2);
+}
+
+/* Looper tab toggle button (light blue) */
+#looper-tab .toggle-btn:hover {
+    border-color: var(--looper-accent);
+    color: var(--looper-accent);
+}
+
+#looper-tab .toggle-btn.active {
+    background: rgba(79, 195, 247, 0.1);
+    border-color: var(--looper-accent);
+    color: #81d4fa;
+    box-shadow: 0 0 12px var(--looper-accent-glow);
 }
 
 .toggle-btn .toggle-icon {

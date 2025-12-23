@@ -1,5 +1,11 @@
-// Fuzz Delay Plugin UI Controller
+// Loop Engine Plugin UI Controller
 // Implements JUCE WebView bindings without npm dependencies
+
+// ============================================================
+// VERSION - Increment this with each build to verify changes
+// ============================================================
+const UI_VERSION = "0.1.4";
+console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
 class PromiseHandler {
@@ -35,11 +41,14 @@ function getNativeFunction(name) {
         const [promiseId, result] = promiseHandler.createPromise();
 
         if (window.__JUCE__ && window.__JUCE__.backend) {
+            console.log(`[NATIVE] Calling ${name} with args:`, Array.prototype.slice.call(arguments));
             window.__JUCE__.backend.emitEvent("__juce__invoke", {
                 name: name,
                 params: Array.prototype.slice.call(arguments),
                 resultId: promiseId
             });
+        } else {
+            console.error(`[NATIVE] JUCE backend not available for ${name}!`);
         }
 
         return result;
@@ -173,6 +182,12 @@ class KnobController {
         this.formatValue = options.formatValue || ((v) => `${Math.round(v * 100)}%`);
         this.onValueChange = options.onValueChange || null;
 
+        // Default value to use when resetting (optional)
+        this.defaultValue = options.defaultValue !== undefined ? options.defaultValue : null;
+
+        // Flag to ignore JUCE updates temporarily (used during reset)
+        this.ignoreJuceUpdates = false;
+
         this.isDragging = false;
         this.lastY = 0;
 
@@ -210,13 +225,39 @@ class KnobController {
             this.sliderState = getSliderState(this.paramName);
 
             this.sliderState.valueChangedEvent.addListener(() => {
+                // Skip updates if we're in a reset phase
+                if (this.ignoreJuceUpdates) {
+                    console.log(`[KNOB] ${this.paramName}: ignoring JUCE update during reset`);
+                    return;
+                }
                 this.setValue(this.sliderState.getNormalisedValue());
             });
 
-            // Request initial value after a short delay to ensure JUCE is ready
+            // For loop params, use defaults instead of saved values
+            // This ensures fresh session starts with default loop settings
             setTimeout(() => {
-                this.setValue(this.sliderState.getNormalisedValue());
+                if (this.defaultValue !== null && !this.ignoreJuceUpdates) {
+                    console.log(`[KNOB] ${this.paramName}: using default value ${this.defaultValue}`);
+                    this.setValue(this.defaultValue);
+                    this.sendToJuce();
+                } else {
+                    this.setValue(this.sliderState.getNormalisedValue());
+                }
             }, 100);
+        }
+    }
+
+    // Reset to default value and push to JUCE
+    resetToDefault() {
+        if (this.defaultValue !== null) {
+            console.log(`[KNOB] ${this.paramName}: resetting to default ${this.defaultValue}`);
+            this.ignoreJuceUpdates = true;
+            this.setValue(this.defaultValue);
+            this.sendToJuce();
+            // Re-enable JUCE updates after a delay
+            setTimeout(() => {
+                this.ignoreJuceUpdates = false;
+            }, 300);
         }
     }
 
@@ -529,6 +570,7 @@ class LooperController {
         this.playheadPosition = 0;
         this.recordingStartTime = 0;
         this.isReversed = false;
+        this.reverseButtonPending = false; // Flag to prevent polling from overwriting during button click
 
         // Zoom state
         this.zoomLevel = 1.0;
@@ -553,6 +595,7 @@ class LooperController {
         this.clearFn = getNativeFunction("loopClear");
         this.getStateFn = getNativeFunction("getLoopState");
         this.jumpToLayerFn = getNativeFunction("loopJumpToLayer");
+        this.resetParamsFn = getNativeFunction("resetLoopParams");
 
         this.setupTransport();
         this.setupLayers();
@@ -560,6 +603,51 @@ class LooperController {
         this.setupZoomControls();
         this.setupRecordingOverlay();
         this.startStatePolling();
+
+        // Sync UI with current C++ state on open
+        // Delay to ensure JUCE bindings are ready
+        setTimeout(() => {
+            this.syncUIWithBackend();
+        }, 500);
+    }
+
+    async syncUIWithBackend() {
+        console.log('%c[SYNC] syncUIWithBackend called - forcing reset of loop params', 'color: #ff6b35; font-weight: bold;');
+        try {
+            // ALWAYS reset loop params to defaults on UI open
+            console.log('[SYNC] Calling resetParamsFn...');
+            const result = await this.resetParamsFn();
+            console.log('[SYNC] resetParamsFn completed, result:', result);
+
+            // Reset local UI state
+            this.loopStart = 0;
+            this.loopEnd = 1;
+            this.updateLoopRegionShade();
+
+            // Use the knob's resetToDefault method which handles JUCE sync properly
+            if (loopStartKnob) {
+                loopStartKnob.resetToDefault();
+                console.log('[SYNC] Reset loopStart knob to default');
+            }
+            if (loopEndKnob) {
+                loopEndKnob.resetToDefault();
+                console.log('[SYNC] Reset loopEnd knob to default');
+            }
+            if (loopSpeedKnob) {
+                loopSpeedKnob.resetToDefault();
+                console.log('[SYNC] Reset loopSpeed knob to default');
+            }
+
+            // Reset reverse button state via native function
+            console.log('[SYNC] Resetting reverse state...');
+            const setReverseFn = getNativeFunction("setLoopReverse");
+            await setReverseFn(false);
+            this.setReversed(false);
+
+            console.log('%c[SYNC] UI state reset complete', 'color: #4caf50; font-weight: bold;');
+        } catch (e) {
+            console.error('[SYNC] Error syncing UI with backend:', e);
+        }
     }
 
     setupTransport() {
@@ -603,6 +691,7 @@ class LooperController {
 
     setupWaveform() {
         this.waveformCanvas = document.getElementById('waveform-canvas');
+        this.waveformContainer = document.getElementById('waveform-container');
         this.playhead = document.getElementById('playhead');
         this.loopStartHandle = document.getElementById('loop-start-handle');
         this.loopEndHandle = document.getElementById('loop-end-handle');
@@ -617,6 +706,89 @@ class LooperController {
 
         // Initialize loop region shade
         this.updateLoopRegionShade();
+
+        // Setup handle dragging
+        this.setupHandleDragging();
+    }
+
+    setupHandleDragging() {
+        this.draggingHandle = null;
+        this.setLoopStartFn = getNativeFunction("setLoopStart");
+        this.setLoopEndFn = getNativeFunction("setLoopEnd");
+
+        // Start handle drag
+        if (this.loopStartHandle) {
+            this.loopStartHandle.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                this.draggingHandle = 'start';
+                document.body.style.cursor = 'ew-resize';
+            });
+        }
+
+        if (this.loopEndHandle) {
+            this.loopEndHandle.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                this.draggingHandle = 'end';
+                document.body.style.cursor = 'ew-resize';
+            });
+        }
+
+        // Handle drag movement
+        document.addEventListener('mousemove', (e) => {
+            if (!this.draggingHandle || !this.waveformContainer) return;
+
+            const rect = this.waveformContainer.getBoundingClientRect();
+            let normalizedPos = (e.clientX - rect.left) / rect.width;
+            normalizedPos = Math.max(0, Math.min(1, normalizedPos));
+
+            if (this.draggingHandle === 'start') {
+                // Start can't go past end - 1%
+                const maxStart = this.loopEnd - 0.01;
+                normalizedPos = Math.min(normalizedPos, maxStart);
+                this.setLoopStart(normalizedPos);
+                this.sendLoopStartToJuce(normalizedPos);
+            } else if (this.draggingHandle === 'end') {
+                // End can't go before start + 1%
+                const minEnd = this.loopStart + 0.01;
+                normalizedPos = Math.max(normalizedPos, minEnd);
+                this.setLoopEnd(normalizedPos);
+                this.sendLoopEndToJuce(normalizedPos);
+            }
+        });
+
+        // End drag
+        document.addEventListener('mouseup', () => {
+            if (this.draggingHandle) {
+                this.draggingHandle = null;
+                document.body.style.cursor = '';
+            }
+        });
+
+        // Also support clicking on waveform to set playhead (future feature)
+    }
+
+    async sendLoopStartToJuce(value) {
+        try {
+            // Get the slider state and update it
+            const sliderState = getSliderState('loopStart');
+            if (sliderState) {
+                sliderState.setNormalisedValue(value);
+            }
+        } catch (e) {
+            console.error('Error setting loop start:', e);
+        }
+    }
+
+    async sendLoopEndToJuce(value) {
+        try {
+            // Get the slider state and update it
+            const sliderState = getSliderState('loopEnd');
+            if (sliderState) {
+                sliderState.setNormalisedValue(value);
+            }
+        } catch (e) {
+            console.error('Error setting loop end:', e);
+        }
     }
 
     setupZoomControls() {
@@ -683,14 +855,12 @@ class LooperController {
             this.loopRegionShade.style.setProperty('--loop-end', `${this.loopEnd * 100}%`);
         }
 
-        // Update handle positions
-        if (this.loopStartHandle && this.waveformCanvas) {
-            const x = this.loopStart * this.waveformCanvas.width;
-            this.loopStartHandle.style.left = `${x}px`;
+        // Update handle positions using percentage for responsiveness
+        if (this.loopStartHandle) {
+            this.loopStartHandle.style.left = `${this.loopStart * 100}%`;
         }
-        if (this.loopEndHandle && this.waveformCanvas) {
-            const x = this.loopEnd * this.waveformCanvas.width;
-            this.loopEndHandle.style.right = `${this.waveformCanvas.width - x}px`;
+        if (this.loopEndHandle) {
+            this.loopEndHandle.style.left = `${this.loopEnd * 100}%`;
         }
     }
 
@@ -841,11 +1011,68 @@ class LooperController {
     }
 
     setReversed(reversed) {
+        console.log(`[REV] setReversed(${reversed}) called`);
         this.isReversed = reversed;
         // Update playhead color/style to indicate direction
         if (this.playhead) {
             this.playhead.classList.toggle('reversed', reversed);
         }
+        // Update button state with BOTH class and inline styles for debugging
+        const reverseBtn = document.getElementById('reverse-btn');
+        if (reverseBtn) {
+            reverseBtn.classList.toggle('active', reversed);
+            // Also apply inline styles to force visual change
+            if (reversed) {
+                reverseBtn.style.background = 'rgba(79, 195, 247, 0.3)';
+                reverseBtn.style.borderColor = '#4fc3f7';
+                reverseBtn.style.color = '#81d4fa';
+                reverseBtn.style.boxShadow = '0 0 12px rgba(79, 195, 247, 0.4)';
+            } else {
+                reverseBtn.style.background = '';
+                reverseBtn.style.borderColor = '';
+                reverseBtn.style.color = '';
+                reverseBtn.style.boxShadow = '';
+            }
+            console.log(`[REV] Button active class: ${reverseBtn.classList.contains('active')}, inline styles applied: ${reversed}`);
+        } else {
+            console.error('[REV] Reverse button element not found');
+        }
+    }
+
+    setupReverseButton() {
+        const reverseBtn = document.getElementById('reverse-btn');
+        if (!reverseBtn) {
+            console.error('Reverse button not found');
+            return;
+        }
+
+        console.log('[REV] Setting up reverse button handler');
+        const setReverseFn = getNativeFunction("setLoopReverse");
+
+        reverseBtn.addEventListener('click', async () => {
+            const newReversed = !this.isReversed;
+            console.log(`[REV] Button clicked, toggling from ${this.isReversed} to ${newReversed}`);
+
+            // Set pending flag to prevent polling from overwriting
+            this.reverseButtonPending = true;
+            this.setReversed(newReversed);
+
+            try {
+                console.log(`[REV] Calling native setLoopReverse(${newReversed})`);
+                await setReverseFn(newReversed);
+                console.log('[REV] Native function call completed');
+            } catch (e) {
+                console.error('[REV] Error setting reverse:', e);
+                // Revert UI state on error
+                this.setReversed(!newReversed);
+            } finally {
+                // Clear pending flag after a short delay to ensure C++ state has propagated
+                setTimeout(() => {
+                    this.reverseButtonPending = false;
+                    console.log('[REV] Pending flag cleared');
+                }, 200);
+            }
+        });
     }
 
     updateTimeDisplay(currentTime, totalTime) {
@@ -1007,15 +1234,14 @@ class LooperController {
                         }
                     }
 
-                    // Update reverse state
-                    if (typeof state.isReversed !== 'undefined' && state.isReversed !== this.isReversed) {
-                        this.setReversed(state.isReversed);
-                        // Also update the reverse button
-                        const reverseBtn = document.getElementById('reverse-btn');
-                        if (reverseBtn) {
-                            reverseBtn.classList.toggle('active', state.isReversed);
-                        }
-                    }
+                    // DISABLED: Don't let polling overwrite reverse state
+                    // The button click is the source of truth for reverse
+                    // if (typeof state.isReversed !== 'undefined' && !this.reverseButtonPending) {
+                    //     if (state.isReversed !== this.isReversed) {
+                    //         console.log(`[REV] State poll: C++ says ${state.isReversed}, UI says ${this.isReversed} - syncing`);
+                    //         this.setReversed(state.isReversed);
+                    //     }
+                    // }
 
                     // Update waveform if provided
                     if (state.waveform) {
@@ -1031,6 +1257,11 @@ class LooperController {
 
 // Store looper controller globally so knobs can access it
 let looperController = null;
+
+// Store loop knob controllers for direct reset
+let loopStartKnob = null;
+let loopEndKnob = null;
+let loopSpeedKnob = null;
 
 // BPM Display and Tempo Sync Controller
 class BpmDisplayController {
@@ -1128,8 +1359,17 @@ document.addEventListener('dragstart', (e) => e.preventDefault());
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initializing Loop Engine UI...');
+    console.log(`Initializing Loop Engine UI v${UI_VERSION}...`);
     console.log('JUCE available:', typeof window.__JUCE__ !== 'undefined');
+    console.log('JUCE object:', window.__JUCE__);
+    console.log('JUCE backend:', window.__JUCE__?.backend);
+    console.log('JUCE getNativeFunction:', typeof window.__JUCE__?.backend?.getNativeFunction);
+
+    // Set version in footer
+    const versionEl = document.getElementById('version-ticker');
+    if (versionEl) {
+        versionEl.textContent = `v${UI_VERSION}`;
+    }
 
     // Tab Controller
     new TabController();
@@ -1137,11 +1377,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // Looper Controller
     looperController = new LooperController();
 
-    // Looper Knobs
+    // Looper Knobs - with default values for reset
 
-    // Loop Start: 0% - 100%
-    new KnobController('loopStart-knob', 'loopStart', {
+    // Loop Start: 0% - 100%, default 0%
+    loopStartKnob = new KnobController('loopStart-knob', 'loopStart', {
         formatValue: (v) => `${Math.round(v * 100)}%`,
+        defaultValue: 0,  // Default to 0%
         onValueChange: (v) => {
             if (looperController) {
                 looperController.setLoopStart(v);
@@ -1149,9 +1390,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Loop End: 0% - 100%
-    new KnobController('loopEnd-knob', 'loopEnd', {
+    // Loop End: 0% - 100%, default 100%
+    loopEndKnob = new KnobController('loopEnd-knob', 'loopEnd', {
         formatValue: (v) => `${Math.round(v * 100)}%`,
+        defaultValue: 1,  // Default to 100%
         onValueChange: (v) => {
             if (looperController) {
                 looperController.setLoopEnd(v);
@@ -1159,14 +1401,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Loop Speed: 0.25x - 4.0x (center = 1.0x)
-    new KnobController('loopSpeed-knob', 'loopSpeed', {
+    // Loop Speed: 0.25x - 4.0x (center = 1.0x), default 1.0x
+    // At normalized 0.5: 0.25 * 16^0.5 = 0.25 * 4 = 1.0x
+    loopSpeedKnob = new KnobController('loopSpeed-knob', 'loopSpeed', {
         formatValue: (v) => {
             // Map 0-1 to 0.25-4.0 with center at 1.0
             // Using exponential mapping: 0.25 * 16^v = 0.25 to 4.0
             const speed = 0.25 * Math.pow(16, v);
             return `${speed.toFixed(2)}x`;
-        }
+        },
+        defaultValue: 0.5  // Default to 1.0x speed
     });
 
     // Delay Tab Knobs
@@ -1241,22 +1485,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // BPM display and tempo sync
     new BpmDisplayController();
 
-    // Reverse toggle
-    const reverseBtn = document.getElementById('reverse-btn');
-    if (reverseBtn) {
-        const setReverseFn = getNativeFunction("setLoopReverse");
-
-        reverseBtn.addEventListener('click', async () => {
-            const isReversed = !looperController.isReversed;
-            looperController.setReversed(isReversed);
-            reverseBtn.classList.toggle('active', isReversed);
-            try {
-                await setReverseFn(isReversed);
-            } catch (e) {
-                console.error('Error setting reverse:', e);
-            }
-        });
-    }
+    // Reverse toggle - setup handled in LooperController
+    looperController.setupReverseButton();
 
     console.log('Loop Engine UI initialized');
 });

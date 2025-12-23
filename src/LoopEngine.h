@@ -58,6 +58,9 @@ public:
 
     void resetLoopParams()
     {
+        // Reset master reverse state
+        isReversed = false;
+
         // Reset all layers to default loop parameters
         for (int i = 0; i < NUM_LAYERS; ++i)
         {
@@ -194,7 +197,11 @@ public:
 
     void setReverse(bool reversed)
     {
-        for (int i = 0; i <= highestLayer; ++i)
+        // Store the master reverse state
+        isReversed = reversed;
+
+        // Apply to all layers (including ones that might be recorded later)
+        for (int i = 0; i < NUM_LAYERS; ++i)
         {
             layers[i].setReverse(reversed);
         }
@@ -295,15 +302,8 @@ public:
 
     bool getIsReversed() const
     {
-        // Return reverse state from first layer with content
-        for (int i = 0; i <= highestLayer; ++i)
-        {
-            if (layers[i].hasContent())
-            {
-                return layers[i].getIsReversed();
-            }
-        }
-        return false;
+        // Return the master reverse state
+        return isReversed;
     }
 
     // Get combined waveform data for UI
@@ -346,6 +346,7 @@ private:
     int highestLayer = 0;
     int masterLoopLength = 0;
     double currentSampleRate = 44100.0;
+    bool isReversed = false;  // Master reverse state
 
     LoopBuffer::State getCurrentState() const
     {

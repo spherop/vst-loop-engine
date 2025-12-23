@@ -103,7 +103,18 @@ public:
     {
         if (loopLength > 0)
         {
-            playHead = static_cast<float>(loopStart);
+            // Start from appropriate end based on direction
+            if (isReversed.load())
+            {
+                // For reverse playback, start from the end
+                const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
+                playHead = static_cast<float>(effectiveEnd - 1);
+            }
+            else
+            {
+                // For forward playback, start from the beginning
+                playHead = static_cast<float>(loopStart);
+            }
             state.store(State::Playing);
         }
     }
@@ -342,7 +353,7 @@ private:
         if (reversed)
         {
             playHead -= rate;
-            // Wrap around using modulo for proper looping at any speed
+            // Wrap around for proper looping at any speed
             while (playHead < effectiveStart)
             {
                 playHead += effectiveLength;
@@ -351,7 +362,7 @@ private:
         else
         {
             playHead += rate;
-            // Wrap around using modulo for proper looping at any speed
+            // Wrap around for proper looping at any speed
             while (playHead >= effectiveEnd)
             {
                 playHead -= effectiveLength;

@@ -70,8 +70,57 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   })
                   .withNativeFunction("setLoopReverse", [this](const juce::Array<juce::var>& args, auto complete)
                   {
+                      DBG("========================================");
+                      DBG("setLoopReverse NATIVE FUNCTION CALLED!");
+                      DBG("Number of args: " + juce::String(args.size()));
                       if (args.size() > 0)
-                          processorRef.getLoopEngine().setReverse(static_cast<bool>(args[0]));
+                      {
+                          bool reversed = static_cast<bool>(args[0]);
+                          DBG("Parsed reversed value: " + juce::String(reversed ? "TRUE" : "FALSE"));
+
+                          // Set directly on loop engine
+                          processorRef.getLoopEngine().setReverse(reversed);
+                          DBG("Called loopEngine.setReverse(" + juce::String(reversed ? "true" : "false") + ")");
+
+                          // Verify engine state
+                          DBG("Engine isReversed now: " + juce::String(processorRef.getLoopEngine().getIsReversed() ? "TRUE" : "FALSE"));
+
+                          // Also update the APVTS parameter
+                          if (auto* param = processorRef.getAPVTS().getParameter("loopReverse"))
+                          {
+                              float paramValue = reversed ? 1.0f : 0.0f;
+                              DBG("Setting APVTS loopReverse param to: " + juce::String(paramValue));
+                              param->setValueNotifyingHost(paramValue);
+                          }
+                          else
+                          {
+                              DBG("ERROR: Could not find loopReverse parameter!");
+                          }
+                      }
+                      else
+                      {
+                          DBG("ERROR: No arguments provided to setLoopReverse!");
+                      }
+                      DBG("========================================");
+                      complete({});
+                  })
+                  .withNativeFunction("resetLoopParams", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      DBG("resetLoopParams called");
+                      // Reset loop parameters to defaults (called when UI opens)
+                      processorRef.getLoopEngine().resetLoopParams();
+
+                      // Also reset the APVTS parameters to trigger UI updates
+                      if (auto* param = processorRef.getAPVTS().getParameter("loopStart"))
+                          param->setValueNotifyingHost(0.0f);
+                      if (auto* param = processorRef.getAPVTS().getParameter("loopEnd"))
+                          param->setValueNotifyingHost(1.0f);
+                      if (auto* param = processorRef.getAPVTS().getParameter("loopSpeed"))
+                          param->setValueNotifyingHost(param->convertTo0to1(1.0f));
+                      if (auto* param = processorRef.getAPVTS().getParameter("loopReverse"))
+                          param->setValueNotifyingHost(0.0f);
+
+                      DBG("resetLoopParams complete");
                       complete({});
                   })
                   .withNativeFunction("getLoopState", [this](const juce::Array<juce::var>&, auto complete)
