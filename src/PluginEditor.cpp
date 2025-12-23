@@ -29,6 +29,72 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(modRateRelay)
                   .withOptionsFrom(modDepthRelay)
                   .withOptionsFrom(warmthRelay)
+                  .withOptionsFrom(loopStartRelay)
+                  .withOptionsFrom(loopEndRelay)
+                  .withOptionsFrom(loopSpeedRelay)
+                  .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().record();
+                      complete({});
+                  })
+                  .withNativeFunction("loopPlay", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().play();
+                      complete({});
+                  })
+                  .withNativeFunction("loopStop", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().stop();
+                      complete({});
+                  })
+                  .withNativeFunction("loopOverdub", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().overdub();
+                      complete({});
+                  })
+                  .withNativeFunction("loopUndo", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().undo();
+                      complete({});
+                  })
+                  .withNativeFunction("loopClear", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().clear();
+                      complete({});
+                  })
+                  .withNativeFunction("loopJumpToLayer", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getLoopEngine().jumpToLayer(static_cast<int>(args[0]) - 1);  // 1-indexed from UI
+                      complete({});
+                  })
+                  .withNativeFunction("setLoopReverse", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getLoopEngine().setReverse(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("getLoopState", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      const auto& loopEngine = processorRef.getLoopEngine();
+
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("state", static_cast<int>(loopEngine.getState()));
+                      result->setProperty("layer", loopEngine.getCurrentLayer());
+                      result->setProperty("highestLayer", loopEngine.getHighestLayer());
+                      result->setProperty("playhead", loopEngine.getPlayheadPosition());
+                      result->setProperty("loopLength", loopEngine.getLoopLengthSeconds());
+                      result->setProperty("hasContent", loopEngine.hasContent());
+
+                      // Get waveform data (100 points for visualization)
+                      auto waveformData = loopEngine.getWaveformData(100);
+                      juce::Array<juce::var> waveformArray;
+                      for (float val : waveformData)
+                          waveformArray.add(val);
+                      result->setProperty("waveform", waveformArray);
+
+                      complete(juce::var(result.get()));
+                  })
                   .withNativeFunction("triggerTestSound", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
@@ -97,6 +163,47 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
 
                       complete(juce::var(result.get()));
                   })
+                  .withNativeFunction("chooseSampleFolder", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      // Create file chooser (must persist during async operation)
+                      fileChooser = std::make_unique<juce::FileChooser>(
+                          "Select Sample Folder",
+                          juce::File(processorRef.getSampleFolderPath()),
+                          "",
+                          true);
+
+                      fileChooser->launchAsync(
+                          juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
+                          [this, complete](const juce::FileChooser& fc)
+                          {
+                              auto results = fc.getResults();
+                              if (results.size() > 0)
+                              {
+                                  juce::File folder = results[0];
+                                  processorRef.setSampleFolder(folder.getFullPathName());
+
+                                  // Return updated state
+                                  juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                                  result->setProperty("usingSamples", processorRef.usingSamplesFromDisk());
+                                  result->setProperty("sampleFolder", processorRef.getSampleFolderPath());
+
+                                  juce::Array<juce::var> names;
+                                  const auto allNames = processorRef.getAllTestSoundNames();
+                                  for (const auto& name : allNames)
+                                      names.add(name);
+                                  result->setProperty("sounds", names);
+
+                                  complete(juce::var(result.get()));
+                              }
+                              else
+                              {
+                                  // User cancelled - return current state
+                                  juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                                  result->setProperty("cancelled", true);
+                                  complete(juce::var(result.get()));
+                              }
+                          });
+                  })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },
                       juce::URL("http://localhost/").getOrigin())),
@@ -123,14 +230,23 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                          processorRef.getAPVTS().undoManager),
       warmthAttachment(*processorRef.getAPVTS().getParameter("warmth"),
                        warmthRelay,
-                       processorRef.getAPVTS().undoManager)
+                       processorRef.getAPVTS().undoManager),
+      loopStartAttachment(*processorRef.getAPVTS().getParameter("loopStart"),
+                          loopStartRelay,
+                          processorRef.getAPVTS().undoManager),
+      loopEndAttachment(*processorRef.getAPVTS().getParameter("loopEnd"),
+                        loopEndRelay,
+                        processorRef.getAPVTS().undoManager),
+      loopSpeedAttachment(*processorRef.getAPVTS().getParameter("loopSpeed"),
+                          loopSpeedRelay,
+                          processorRef.getAPVTS().undoManager)
 {
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
-    setSize(520, 420);
+    setSize(520, 560);
     setResizable(true, true);
-    setResizeLimits(400, 350, 800, 600);
+    setResizeLimits(400, 450, 800, 800);
 
     // Start timer for BPM polling (100ms interval)
     startTimerHz(10);

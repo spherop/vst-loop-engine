@@ -70,107 +70,225 @@
             </p>
         </header>
 
+        <!-- Tab Bar -->
+        <nav class="tab-bar flex justify-center gap-2 px-4 pt-2">
+            <button class="tab active" data-tab="looper">LOOPER</button>
+            <button class="tab" data-tab="delay">DELAY</button>
+        </nav>
+
         <!-- Main Content -->
         <main class="flex-1 flex flex-col gap-4 px-4 pb-3 overflow-y-auto">
 
-            <!-- DELAY Section -->
-            <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                <!-- Section accent -->
-                <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/30 to-transparent"></div>
-
-                <div class="p-4">
-                    <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
-                        // DELAY
-                    </h2>
-                    <div class="flex justify-center gap-10">
-                        <!-- TIME -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-large" id="delayTime-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-sm font-medium text-white" id="delayTime-value">300 ms</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TIME</span>
-                        </div>
-
-                        <!-- FEEDBACK -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-large" id="feedback-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-sm font-medium text-white" id="feedback-value">40%</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">FEEDBACK</span>
-                        </div>
-
-                        <!-- TONE -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-large" id="tone-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-sm font-medium text-white" id="tone-value">4.0 kHz</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TONE</span>
-                        </div>
-
-                        <!-- MIX -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-large" id="mix-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-sm font-medium text-white" id="mix-value">50%</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">MIX</span>
+            <!-- LOOPER Tab Content -->
+            <div id="looper-tab" class="tab-content active flex flex-col gap-4">
+                <!-- Transport Controls -->
+                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
+                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/30 to-transparent"></div>
+                    <div class="p-4">
+                        <div class="flex justify-center items-center gap-4">
+                            <button id="rec-btn" class="transport-btn rec">
+                                <span class="transport-icon">&#9679;</span>
+                                <span class="transport-label">REC</span>
+                            </button>
+                            <button id="loop-play-btn" class="transport-btn play">
+                                <span class="transport-icon">&#9658;</span>
+                                <span class="transport-label">PLAY</span>
+                            </button>
+                            <button id="loop-stop-btn" class="transport-btn stop">
+                                <span class="transport-icon">&#9632;</span>
+                                <span class="transport-label">STOP</span>
+                            </button>
+                            <button id="overdub-btn" class="transport-btn overdub">
+                                <span class="transport-icon">&#8853;</span>
+                                <span class="transport-label">DUB</span>
+                            </button>
+                            <button id="undo-btn" class="transport-btn undo">
+                                <span class="transport-icon">&#8617;</span>
+                                <span class="transport-label">UNDO</span>
+                            </button>
+                            <button id="clear-btn" class="transport-btn clear">
+                                <span class="transport-icon">&#10005;</span>
+                                <span class="transport-label">CLEAR</span>
+                            </button>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- CHARACTER Section -->
-            <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
-
-                <div class="p-4">
-                    <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
-                        // CHARACTERS
-                    </h2>
-                    <div class="flex justify-center gap-10">
-                        <!-- AGE -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-medium" id="age-knob">
-                                <div class="knob-indicator"></div>
+                <!-- Waveform Display -->
+                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
+                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
+                    <div class="p-4">
+                        <div class="waveform-container">
+                            <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
+                            <div id="playhead" class="playhead"></div>
+                            <div id="loop-region" class="loop-region">
+                                <div id="loop-start-handle" class="loop-handle start"></div>
+                                <div id="loop-end-handle" class="loop-handle end"></div>
                             </div>
-                            <span class="font-mono text-xs font-medium text-white" id="age-value">25%</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">AGE</span>
                         </div>
-
-                        <!-- RATE -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-medium" id="modRate-knob">
-                                <div class="knob-indicator"></div>
+                        <!-- Layer Indicators -->
+                        <div class="flex justify-center items-center gap-2 mt-3">
+                            <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
+                            <div class="layer-indicators flex gap-1">
+                                <button class="layer-btn active" data-layer="1">1</button>
+                                <button class="layer-btn" data-layer="2">2</button>
+                                <button class="layer-btn" data-layer="3">3</button>
+                                <button class="layer-btn" data-layer="4">4</button>
+                                <button class="layer-btn" data-layer="5">5</button>
+                                <button class="layer-btn" data-layer="6">6</button>
+                                <button class="layer-btn" data-layer="7">7</button>
+                                <button class="layer-btn" data-layer="8">8</button>
                             </div>
-                            <span class="font-mono text-xs font-medium text-white" id="modRate-value">0.5 Hz</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">RATE</span>
-                        </div>
-
-                        <!-- DEPTH -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-medium" id="modDepth-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-xs font-medium text-white" id="modDepth-value">3 ms</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">DEPTH</span>
-                        </div>
-
-                        <!-- WARMTH -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-medium" id="warmth-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-xs font-medium text-white" id="warmth-value">30%</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">WARMTH</span>
+                            <span id="loop-time-display" class="font-mono text-xs text-fd-text ml-2">0.0s / 60.0s</span>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- TEST Section -->
+                <!-- Loop Controls -->
+                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
+                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
+                    <div class="p-4">
+                        <div class="flex justify-center items-end gap-8">
+                            <!-- START -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-medium" id="loopStart-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-xs font-medium text-white" id="loopStart-value">0%</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">START</span>
+                            </div>
+
+                            <!-- END -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-medium" id="loopEnd-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-xs font-medium text-white" id="loopEnd-value">100%</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">END</span>
+                            </div>
+
+                            <!-- SPEED -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-medium" id="loopSpeed-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-xs font-medium text-white" id="loopSpeed-value">1.0x</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">SPEED</span>
+                            </div>
+
+                            <!-- REVERSE -->
+                            <div class="flex flex-col items-center gap-2">
+                                <button class="toggle-btn" id="reverse-btn">
+                                    <span class="toggle-icon">&#8634;</span>
+                                    <span class="toggle-label font-display">REV</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- DELAY Tab Content -->
+            <div id="delay-tab" class="tab-content hidden flex flex-col gap-4">
+                <!-- DELAY Section -->
+                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
+                    <!-- Section accent -->
+                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/30 to-transparent"></div>
+
+                    <div class="p-4">
+                        <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
+                            // DELAY
+                        </h2>
+                        <div class="flex justify-center gap-10">
+                            <!-- TIME -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-large" id="delayTime-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-sm font-medium text-white" id="delayTime-value">300 ms</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TIME</span>
+                            </div>
+
+                            <!-- FEEDBACK -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-large" id="feedback-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-sm font-medium text-white" id="feedback-value">40%</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">FEEDBACK</span>
+                            </div>
+
+                            <!-- TONE -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-large" id="tone-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-sm font-medium text-white" id="tone-value">4.0 kHz</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TONE</span>
+                            </div>
+
+                            <!-- MIX -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-large" id="mix-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-sm font-medium text-white" id="mix-value">50%</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">MIX</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- CHARACTER Section -->
+                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
+                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
+
+                    <div class="p-4">
+                        <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
+                            // CHARACTER
+                        </h2>
+                        <div class="flex justify-center gap-10">
+                            <!-- AGE -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-medium" id="age-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-xs font-medium text-white" id="age-value">25%</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">AGE</span>
+                            </div>
+
+                            <!-- RATE -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-medium" id="modRate-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-xs font-medium text-white" id="modRate-value">0.5 Hz</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">RATE</span>
+                            </div>
+
+                            <!-- DEPTH -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-medium" id="modDepth-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-xs font-medium text-white" id="modDepth-value">3 ms</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">DEPTH</span>
+                            </div>
+
+                            <!-- WARMTH -->
+                            <div class="flex flex-col items-center gap-2">
+                                <div class="knob knob-medium" id="warmth-knob">
+                                    <div class="knob-indicator"></div>
+                                </div>
+                                <span class="font-mono text-xs font-medium text-white" id="warmth-value">30%</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">WARMTH</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- TEST Section (Global - visible on both tabs) -->
             <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
                 <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
 
@@ -182,7 +300,10 @@
                             <select class="sound-select" id="sound-select">
                                 <option value="0">Loading...</option>
                             </select>
-                            <button class="reload-btn" id="reload-btn" title="Reload samples from ~/Documents/LoopEngineSamples/">
+                            <button class="folder-btn" id="folder-btn" title="Choose sample folder">
+                                <span class="folder-icon">&#128193;</span>
+                            </button>
+                            <button class="reload-btn" id="reload-btn" title="Reload samples">
                                 <span class="reload-icon">&#x21BB;</span>
                             </button>
                             <button class="play-btn" id="play-btn">
@@ -196,6 +317,10 @@
                             <span class="toggle-icon">&#x21BB;</span>
                             <span class="toggle-label font-display">LOOP</span>
                         </button>
+                    </div>
+                    <!-- Folder path display -->
+                    <div class="mt-2 text-[9px] text-fd-text-dim font-mono truncate" id="folder-path" title="">
+                        ~/Documents/LoopEngineSamples
                     </div>
                 </div>
             </section>

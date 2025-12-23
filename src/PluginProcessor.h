@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "DelayLine.h"
+#include "LoopEngine.h"
 #include "TestToneGenerator.h"
 #include "TestSoundLoader.h"
 
@@ -53,6 +54,8 @@ public:
     juce::String getSampleFolderPath() const;
     void reloadSamples();
     bool usingSamplesFromDisk() const;
+    void setSampleFolder(const juce::String& path);
+    TestSoundLoader& getTestSoundLoader() { return testSoundLoader; }
 
     // Tempo sync control
     void setTempoSync(bool enabled);
@@ -62,6 +65,10 @@ public:
     float getHostBpm() const;
     float calculateSyncedDelayTime() const;
 
+    // Loop engine access
+    LoopEngine& getLoopEngine() { return loopEngine; }
+    const LoopEngine& getLoopEngine() const { return loopEngine; }
+
 private:
     juce::AudioProcessorValueTreeState apvts;
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
@@ -69,6 +76,7 @@ private:
     // DSP
     DelayLine delayLineL;
     DelayLine delayLineR;
+    LoopEngine loopEngine;
 
     // Test sounds - sample loader (primary) and synth generator (fallback)
     TestSoundLoader testSoundLoader;

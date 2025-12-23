@@ -30,8 +30,12 @@ public:
         currentSampleRate = sampleRate;
         isPrepared = true;
 
-        // Try to load samples from default location
-        loadSamplesFromFolder(getDefaultSampleFolder());
+        // Try to load from saved preference first, then default
+        juce::File savedFolder = loadFolderPreference();
+        if (savedFolder.exists() && savedFolder.isDirectory())
+            loadSamplesFromFolder(savedFolder);
+        else
+            loadSamplesFromFolder(getDefaultSampleFolder());
     }
 
     static juce::File getDefaultSampleFolder()
@@ -39,6 +43,48 @@ public:
         // Default: ~/Documents/LoopEngineSamples/
         return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
             .getChildFile("LoopEngineSamples");
+    }
+
+    static juce::File getPreferencesFile()
+    {
+        return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+            .getChildFile("LoopEngine")
+            .getChildFile("settings.xml");
+    }
+
+    void saveFolderPreference(const juce::File& folder)
+    {
+        auto prefsFile = getPreferencesFile();
+        prefsFile.getParentDirectory().createDirectory();
+
+        juce::XmlElement xml("LoopEngineSettings");
+        xml.setAttribute("sampleFolder", folder.getFullPathName());
+        xml.writeTo(prefsFile);
+    }
+
+    juce::File loadFolderPreference()
+    {
+        auto prefsFile = getPreferencesFile();
+        if (!prefsFile.existsAsFile())
+            return juce::File();
+
+        auto xml = juce::XmlDocument::parse(prefsFile);
+        if (xml && xml->hasTagName("LoopEngineSettings"))
+        {
+            juce::String path = xml->getStringAttribute("sampleFolder");
+            if (path.isNotEmpty())
+                return juce::File(path);
+        }
+        return juce::File();
+    }
+
+    void setSampleFolder(const juce::File& folder)
+    {
+        if (folder.exists() && folder.isDirectory())
+        {
+            loadSamplesFromFolder(folder);
+            saveFolderPreference(folder);
+        }
     }
 
     void loadSamplesFromFolder(const juce::File& folder)

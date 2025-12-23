@@ -87,6 +87,31 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         30.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
+    // Loop parameters
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"loopStart", 1},
+        "Loop Start",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f),
+        0.0f));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"loopEnd", 1},
+        "Loop End",
+        juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f),
+        1.0f));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"loopSpeed", 1},
+        "Loop Speed",
+        juce::NormalisableRange<float>(0.25f, 4.0f, 0.01f, 0.5f),
+        1.0f,
+        juce::AudioParameterFloatAttributes().withLabel("x")));
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"loopReverse", 1},
+        "Loop Reverse",
+        false));
+
     return { params.begin(), params.end() };
 }
 
@@ -147,6 +172,9 @@ void LoopEngineProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     delayLineL.prepare(sampleRate, 2000); // Max 2 second delay
     delayLineR.prepare(sampleRate, 2000);
 
+    // Prepare loop engine
+    loopEngine.prepare(sampleRate, samplesPerBlock);
+
     // Prepare sample loader (primary) and synth generator (fallback)
     testSoundLoader.prepare(sampleRate, samplesPerBlock);
     testToneGenerator.prepare(sampleRate, samplesPerBlock);
@@ -199,6 +227,19 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         testSoundLoader.processBlock(buffer);
     else
         testToneGenerator.processBlock(buffer);
+
+    // Update loop engine parameters
+    if (auto* loopStartParam = apvts.getRawParameterValue("loopStart"))
+        loopEngine.setLoopStart(loopStartParam->load());
+    if (auto* loopEndParam = apvts.getRawParameterValue("loopEnd"))
+        loopEngine.setLoopEnd(loopEndParam->load());
+    if (auto* loopSpeedParam = apvts.getRawParameterValue("loopSpeed"))
+        loopEngine.setSpeed(loopSpeedParam->load());
+    if (auto* loopReverseParam = apvts.getRawParameterValue("loopReverse"))
+        loopEngine.setReverse(loopReverseParam->load() > 0.5f);
+
+    // Process through loop engine
+    loopEngine.processBlock(buffer);
 
     // Get delay time - either from parameter or tempo sync
     const float delayTime = tempoSyncEnabled.load()
@@ -348,6 +389,13 @@ void LoopEngineProcessor::reloadSamples()
 bool LoopEngineProcessor::usingSamplesFromDisk() const
 {
     return testSoundLoader.getNumSamples() > 0;
+}
+
+void LoopEngineProcessor::setSampleFolder(const juce::String& path)
+{
+    juce::File folder(path);
+    if (folder.exists() && folder.isDirectory())
+        testSoundLoader.setSampleFolder(folder);
 }
 
 void LoopEngineProcessor::setTempoSync(bool enabled)

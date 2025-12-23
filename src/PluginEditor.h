@@ -30,6 +30,11 @@ private:
     juce::WebSliderRelay modDepthRelay { "modDepth" };
     juce::WebSliderRelay warmthRelay { "warmth" };
 
+    // Loop parameter relays
+    juce::WebSliderRelay loopStartRelay { "loopStart" };
+    juce::WebSliderRelay loopEndRelay { "loopEnd" };
+    juce::WebSliderRelay loopSpeedRelay { "loopSpeed" };
+
     juce::WebBrowserComponent webView;
 
     // Parameter attachments
@@ -44,7 +49,15 @@ private:
     juce::WebSliderParameterAttachment modDepthAttachment;
     juce::WebSliderParameterAttachment warmthAttachment;
 
+    // Loop parameter attachments
+    juce::WebSliderParameterAttachment loopStartAttachment;
+    juce::WebSliderParameterAttachment loopEndAttachment;
+    juce::WebSliderParameterAttachment loopSpeedAttachment;
+
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
+
+    // File chooser (must persist during async operation)
+    std::unique_ptr<juce::FileChooser> fileChooser;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoopEngineEditor)
 };

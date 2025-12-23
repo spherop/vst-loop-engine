@@ -279,6 +279,7 @@ class TestSoundController {
         this.stopTestSoundFn = getNativeFunction("stopTestSound");
         this.getTestSoundsFn = getNativeFunction("getTestSounds");
         this.reloadSamplesFn = getNativeFunction("reloadSamples");
+        this.chooseFolderFn = getNativeFunction("chooseSampleFolder");
         this.setupControls();
         this.loadSoundList();
     }
@@ -288,6 +289,8 @@ class TestSoundController {
         this.playBtn = document.getElementById('play-btn');
         this.stopBtn = document.getElementById('stop-btn');
         this.reloadBtn = document.getElementById('reload-btn');
+        this.folderBtn = document.getElementById('folder-btn');
+        this.folderPath = document.getElementById('folder-path');
         this.sampleIndicator = document.getElementById('sample-indicator');
 
         if (this.playBtn) {
@@ -300,6 +303,10 @@ class TestSoundController {
 
         if (this.reloadBtn) {
             this.reloadBtn.addEventListener('click', () => this.reloadSamples());
+        }
+
+        if (this.folderBtn) {
+            this.folderBtn.addEventListener('click', () => this.chooseFolder());
         }
     }
 
@@ -341,6 +348,36 @@ class TestSoundController {
                 this.sampleIndicator.classList.remove('active');
                 this.sampleIndicator.title = 'No samples found - using synthesized sounds';
             }
+        }
+
+        // Update folder path display
+        if (this.folderPath && sampleFolder) {
+            // Shorten the path for display
+            const shortPath = sampleFolder.replace(/^\/Users\/[^\/]+/, '~');
+            this.folderPath.textContent = shortPath;
+            this.folderPath.title = sampleFolder;
+        }
+    }
+
+    async chooseFolder() {
+        if (this.folderBtn) {
+            this.folderBtn.classList.add('loading');
+        }
+
+        try {
+            const result = await this.chooseFolderFn();
+            if (result && !result.cancelled) {
+                if (result.sounds) {
+                    this.populateDropdown(result.sounds);
+                }
+                this.updateIndicator(result.usingSamples, result.sampleFolder);
+            }
+        } catch (e) {
+            console.error('Error choosing folder:', e);
+        }
+
+        if (this.folderBtn) {
+            this.folderBtn.classList.remove('loading');
         }
     }
 
@@ -431,6 +468,338 @@ class LoopToggleController {
         if (this.element) {
             this.element.classList.toggle('active', this.isEnabled);
         }
+    }
+}
+
+// Tab Controller
+class TabController {
+    constructor() {
+        this.tabs = document.querySelectorAll('.tab');
+        this.contents = document.querySelectorAll('.tab-content');
+        this.currentTab = 'looper';
+        this.setupEvents();
+    }
+
+    setupEvents() {
+        this.tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const tabName = tab.dataset.tab;
+                this.switchTab(tabName);
+            });
+        });
+    }
+
+    switchTab(tabName) {
+        this.currentTab = tabName;
+
+        // Update tab buttons
+        this.tabs.forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.tab === tabName);
+        });
+
+        // Update tab content
+        this.contents.forEach(content => {
+            const contentId = content.id.replace('-tab', '');
+            if (contentId === tabName) {
+                content.classList.remove('hidden');
+                content.classList.add('active');
+            } else {
+                content.classList.add('hidden');
+                content.classList.remove('active');
+            }
+        });
+    }
+}
+
+// Looper Controller
+class LooperController {
+    constructor() {
+        // Transport state
+        this.state = 'idle'; // idle, recording, playing, overdubbing
+        this.currentLayer = 1;
+        this.highestLayer = 0;
+        this.loopLength = 0;
+        this.playheadPosition = 0;
+
+        // Native functions
+        this.recordFn = getNativeFunction("loopRecord");
+        this.playFn = getNativeFunction("loopPlay");
+        this.stopFn = getNativeFunction("loopStop");
+        this.overdubFn = getNativeFunction("loopOverdub");
+        this.undoFn = getNativeFunction("loopUndo");
+        this.clearFn = getNativeFunction("loopClear");
+        this.getStateFn = getNativeFunction("getLoopState");
+        this.jumpToLayerFn = getNativeFunction("loopJumpToLayer");
+
+        this.setupTransport();
+        this.setupLayers();
+        this.setupWaveform();
+        this.startStatePolling();
+    }
+
+    setupTransport() {
+        this.recBtn = document.getElementById('rec-btn');
+        this.playBtn = document.getElementById('loop-play-btn');
+        this.stopBtn = document.getElementById('loop-stop-btn');
+        this.overdubBtn = document.getElementById('overdub-btn');
+        this.undoBtn = document.getElementById('undo-btn');
+        this.clearBtn = document.getElementById('clear-btn');
+        this.timeDisplay = document.getElementById('loop-time-display');
+
+        if (this.recBtn) {
+            this.recBtn.addEventListener('click', () => this.record());
+        }
+        if (this.playBtn) {
+            this.playBtn.addEventListener('click', () => this.play());
+        }
+        if (this.stopBtn) {
+            this.stopBtn.addEventListener('click', () => this.stop());
+        }
+        if (this.overdubBtn) {
+            this.overdubBtn.addEventListener('click', () => this.overdub());
+        }
+        if (this.undoBtn) {
+            this.undoBtn.addEventListener('click', () => this.undo());
+        }
+        if (this.clearBtn) {
+            this.clearBtn.addEventListener('click', () => this.clear());
+        }
+    }
+
+    setupLayers() {
+        this.layerBtns = document.querySelectorAll('.layer-btn');
+        this.layerBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const layer = parseInt(btn.dataset.layer);
+                this.jumpToLayer(layer);
+            });
+        });
+    }
+
+    setupWaveform() {
+        this.waveformCanvas = document.getElementById('waveform-canvas');
+        this.playhead = document.getElementById('playhead');
+        this.loopStartHandle = document.getElementById('loop-start-handle');
+        this.loopEndHandle = document.getElementById('loop-end-handle');
+
+        if (this.waveformCanvas) {
+            this.ctx = this.waveformCanvas.getContext('2d');
+            this.resizeCanvas();
+            window.addEventListener('resize', () => this.resizeCanvas());
+            this.drawEmptyWaveform();
+        }
+    }
+
+    resizeCanvas() {
+        if (this.waveformCanvas) {
+            const rect = this.waveformCanvas.parentElement.getBoundingClientRect();
+            this.waveformCanvas.width = rect.width;
+            this.waveformCanvas.height = rect.height;
+        }
+    }
+
+    drawEmptyWaveform() {
+        if (!this.ctx) return;
+        const { width, height } = this.waveformCanvas;
+
+        this.ctx.fillStyle = '#0a0a0a';
+        this.ctx.fillRect(0, 0, width, height);
+
+        // Draw center line
+        this.ctx.strokeStyle = '#1a1a1a';
+        this.ctx.lineWidth = 1;
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, height / 2);
+        this.ctx.lineTo(width, height / 2);
+        this.ctx.stroke();
+
+        // Draw "No loop recorded" text
+        this.ctx.fillStyle = '#333';
+        this.ctx.font = '11px "JetBrains Mono", monospace';
+        this.ctx.textAlign = 'center';
+        this.ctx.fillText('No loop recorded', width / 2, height / 2 + 4);
+    }
+
+    drawWaveform(waveformData) {
+        if (!this.ctx || !waveformData || waveformData.length === 0) {
+            this.drawEmptyWaveform();
+            return;
+        }
+
+        const { width, height } = this.waveformCanvas;
+        const centerY = height / 2;
+
+        this.ctx.fillStyle = '#0a0a0a';
+        this.ctx.fillRect(0, 0, width, height);
+
+        // Draw waveform
+        this.ctx.fillStyle = '#ff6b35';
+        const barWidth = width / waveformData.length;
+
+        for (let i = 0; i < waveformData.length; i++) {
+            const amplitude = waveformData[i] * (height * 0.4);
+            const x = i * barWidth;
+            this.ctx.fillRect(x, centerY - amplitude, barWidth - 1, amplitude * 2);
+        }
+    }
+
+    updatePlayhead(position) {
+        if (this.playhead && this.waveformCanvas) {
+            const x = position * this.waveformCanvas.width;
+            this.playhead.style.left = `${x}px`;
+        }
+    }
+
+    updateTimeDisplay(currentTime, totalTime) {
+        if (this.timeDisplay) {
+            this.timeDisplay.textContent = `${currentTime.toFixed(1)}s / ${totalTime.toFixed(1)}s`;
+        }
+    }
+
+    async record() {
+        try {
+            await this.recordFn();
+            this.updateTransportUI('recording');
+        } catch (e) {
+            console.error('Error starting record:', e);
+        }
+    }
+
+    async play() {
+        try {
+            await this.playFn();
+            this.updateTransportUI('playing');
+        } catch (e) {
+            console.error('Error starting playback:', e);
+        }
+    }
+
+    async stop() {
+        try {
+            await this.stopFn();
+            this.updateTransportUI('idle');
+        } catch (e) {
+            console.error('Error stopping:', e);
+        }
+    }
+
+    async overdub() {
+        try {
+            await this.overdubFn();
+            this.updateTransportUI('overdubbing');
+        } catch (e) {
+            console.error('Error starting overdub:', e);
+        }
+    }
+
+    async undo() {
+        try {
+            await this.undoFn();
+        } catch (e) {
+            console.error('Error undoing:', e);
+        }
+    }
+
+    async clear() {
+        try {
+            await this.clearFn();
+            this.drawEmptyWaveform();
+            this.updateTransportUI('idle');
+            this.updateLayerUI(1, 0);
+        } catch (e) {
+            console.error('Error clearing:', e);
+        }
+    }
+
+    async jumpToLayer(layer) {
+        try {
+            await this.jumpToLayerFn(layer);
+        } catch (e) {
+            console.error('Error jumping to layer:', e);
+        }
+    }
+
+    updateTransportUI(state) {
+        this.state = state;
+
+        // Reset all buttons
+        [this.recBtn, this.playBtn, this.overdubBtn].forEach(btn => {
+            if (btn) btn.classList.remove('active');
+        });
+
+        // Activate appropriate button
+        switch (state) {
+            case 'recording':
+                if (this.recBtn) this.recBtn.classList.add('active');
+                break;
+            case 'playing':
+                if (this.playBtn) this.playBtn.classList.add('active');
+                break;
+            case 'overdubbing':
+                if (this.overdubBtn) this.overdubBtn.classList.add('active');
+                break;
+        }
+    }
+
+    updateLayerUI(currentLayer, highestLayer) {
+        this.currentLayer = currentLayer;
+        this.highestLayer = highestLayer;
+
+        this.layerBtns.forEach(btn => {
+            const layer = parseInt(btn.dataset.layer);
+            btn.classList.remove('active', 'has-content');
+
+            if (layer === currentLayer) {
+                btn.classList.add('active');
+            }
+            if (layer <= highestLayer) {
+                btn.classList.add('has-content');
+            }
+        });
+    }
+
+    startStatePolling() {
+        // Poll loop state every 50ms for smooth playhead updates
+        setInterval(async () => {
+            try {
+                const state = await this.getStateFn();
+                if (state) {
+                    // Update playhead position
+                    if (typeof state.playhead !== 'undefined') {
+                        this.updatePlayhead(state.playhead);
+                    }
+
+                    // Update time display
+                    if (typeof state.loopLength !== 'undefined') {
+                        const currentTime = (state.playhead || 0) * state.loopLength;
+                        this.updateTimeDisplay(currentTime, state.loopLength);
+                    }
+
+                    // Update transport state
+                    if (typeof state.state !== 'undefined') {
+                        const stateNames = ['idle', 'recording', 'playing', 'overdubbing'];
+                        const stateName = stateNames[state.state] || 'idle';
+                        if (stateName !== this.state) {
+                            this.updateTransportUI(stateName);
+                        }
+                    }
+
+                    // Update layer UI
+                    if (typeof state.layer !== 'undefined' && typeof state.highestLayer !== 'undefined') {
+                        if (state.layer !== this.currentLayer || state.highestLayer !== this.highestLayer) {
+                            this.updateLayerUI(state.layer, state.highestLayer);
+                        }
+                    }
+
+                    // Update waveform if provided
+                    if (state.waveform) {
+                        this.drawWaveform(state.waveform);
+                    }
+                }
+            } catch (e) {
+                // Silently ignore polling errors
+            }
+        }, 50);
     }
 }
 
@@ -530,8 +899,38 @@ document.addEventListener('dragstart', (e) => e.preventDefault());
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Initializing Fuzz Delay UI...');
+    console.log('Initializing Loop Engine UI...');
     console.log('JUCE available:', typeof window.__JUCE__ !== 'undefined');
+
+    // Tab Controller
+    new TabController();
+
+    // Looper Controller
+    new LooperController();
+
+    // Looper Knobs
+
+    // Loop Start: 0% - 100%
+    new KnobController('loopStart-knob', 'loopStart', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Loop End: 0% - 100%
+    new KnobController('loopEnd-knob', 'loopEnd', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Loop Speed: 0.25x - 4.0x (center = 1.0x)
+    new KnobController('loopSpeed-knob', 'loopSpeed', {
+        formatValue: (v) => {
+            // Map 0-1 to 0.25-4.0 with center at 1.0
+            // Using exponential mapping: 0.25 * 16^v = 0.25 to 4.0
+            const speed = 0.25 * Math.pow(16, v);
+            return `${speed.toFixed(2)}x`;
+        }
+    });
+
+    // Delay Tab Knobs
 
     // Delay Time: 1ms - 2000ms (skewed range)
     new KnobController('delayTime-knob', 'delayTime', {
@@ -597,11 +996,28 @@ document.addEventListener('DOMContentLoaded', () => {
     // Test sounds
     new TestSoundController();
 
-    // Loop toggle
+    // Loop toggle (for test audio)
     new LoopToggleController();
 
     // BPM display and tempo sync
     new BpmDisplayController();
 
-    console.log('Fuzz Delay UI initialized');
+    // Reverse toggle
+    const reverseBtn = document.getElementById('reverse-btn');
+    if (reverseBtn) {
+        let isReversed = false;
+        const setReverseFn = getNativeFunction("setLoopReverse");
+
+        reverseBtn.addEventListener('click', async () => {
+            isReversed = !isReversed;
+            reverseBtn.classList.toggle('active', isReversed);
+            try {
+                await setReverseFn(isReversed);
+            } catch (e) {
+                console.error('Error setting reverse:', e);
+            }
+        });
+    }
+
+    console.log('Loop Engine UI initialized');
 });

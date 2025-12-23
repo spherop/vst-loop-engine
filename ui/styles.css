@@ -143,6 +143,305 @@ html, body {
 }
 
 /* ============================================
+   TAB SYSTEM
+   ============================================ */
+
+.tab-bar {
+    margin-bottom: 4px;
+}
+
+.tab {
+    padding: 8px 20px;
+    background: transparent;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px 6px 0 0;
+    color: #555;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+}
+
+.tab:hover {
+    color: #888;
+    border-color: #444;
+}
+
+.tab.active {
+    background: linear-gradient(180deg, #1a1a1a 0%, #161616 100%);
+    border-color: #ff6b35;
+    border-bottom-color: #161616;
+    color: #ff6b35;
+    text-shadow: 0 0 10px rgba(255, 107, 53, 0.4);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: flex;
+}
+
+/* ============================================
+   LOOPER TRANSPORT
+   ============================================ */
+
+.transport-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 14px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    min-width: 54px;
+}
+
+.transport-icon {
+    font-size: 18px;
+    color: #555;
+    transition: all 0.12s ease;
+}
+
+.transport-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #444;
+    text-transform: uppercase;
+    transition: all 0.12s ease;
+}
+
+.transport-btn:hover {
+    border-color: #555;
+    background: linear-gradient(180deg, #1f1f1f 0%, #141414 100%);
+}
+
+.transport-btn:hover .transport-icon,
+.transport-btn:hover .transport-label {
+    color: #888;
+}
+
+/* Record Button */
+.transport-btn.rec:hover {
+    border-color: #ef5350;
+}
+
+.transport-btn.rec:hover .transport-icon {
+    color: #ef5350;
+}
+
+.transport-btn.rec.active {
+    background: linear-gradient(180deg, #2a1515 0%, #1a0808 100%);
+    border-color: #ef5350;
+    box-shadow: 0 0 16px rgba(239, 83, 80, 0.3);
+}
+
+.transport-btn.rec.active .transport-icon {
+    color: #ff7875;
+    animation: pulse-rec 1s ease-in-out infinite;
+}
+
+.transport-btn.rec.active .transport-label {
+    color: #ef5350;
+}
+
+@keyframes pulse-rec {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Play Button */
+.transport-btn.play:hover {
+    border-color: #4caf50;
+}
+
+.transport-btn.play:hover .transport-icon {
+    color: #4caf50;
+}
+
+.transport-btn.play.active {
+    background: linear-gradient(180deg, #152a15 0%, #081a08 100%);
+    border-color: #4caf50;
+    box-shadow: 0 0 16px rgba(76, 175, 80, 0.3);
+}
+
+.transport-btn.play.active .transport-icon {
+    color: #81c784;
+}
+
+.transport-btn.play.active .transport-label {
+    color: #4caf50;
+}
+
+/* Stop Button */
+.transport-btn.stop:hover {
+    border-color: #ff9800;
+}
+
+.transport-btn.stop:hover .transport-icon {
+    color: #ff9800;
+}
+
+/* Overdub Button */
+.transport-btn.overdub:hover {
+    border-color: #9c27b0;
+}
+
+.transport-btn.overdub:hover .transport-icon {
+    color: #9c27b0;
+}
+
+.transport-btn.overdub.active {
+    background: linear-gradient(180deg, #2a152a 0%, #1a081a 100%);
+    border-color: #9c27b0;
+    box-shadow: 0 0 16px rgba(156, 39, 176, 0.3);
+}
+
+.transport-btn.overdub.active .transport-icon {
+    color: #ce93d8;
+    animation: pulse-rec 1s ease-in-out infinite;
+}
+
+.transport-btn.overdub.active .transport-label {
+    color: #9c27b0;
+}
+
+/* Undo Button */
+.transport-btn.undo:hover {
+    border-color: #2196f3;
+}
+
+.transport-btn.undo:hover .transport-icon {
+    color: #2196f3;
+}
+
+/* Clear Button */
+.transport-btn.clear:hover {
+    border-color: #f44336;
+}
+
+.transport-btn.clear:hover .transport-icon {
+    color: #f44336;
+}
+
+/* ============================================
+   WAVEFORM DISPLAY
+   ============================================ */
+
+.waveform-container {
+    position: relative;
+    width: 100%;
+    height: 80px;
+    background: linear-gradient(180deg, #0a0a0a 0%, #080808 100%);
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.waveform-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #ff6b35;
+    box-shadow: 0 0 8px rgba(255, 107, 53, 0.6);
+    left: 0;
+    pointer-events: none;
+    transition: left 0.05s linear;
+}
+
+.loop-region {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+}
+
+.loop-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: rgba(255, 107, 53, 0.3);
+    cursor: ew-resize;
+    pointer-events: all;
+    transition: background 0.15s ease;
+}
+
+.loop-handle:hover {
+    background: rgba(255, 107, 53, 0.6);
+}
+
+.loop-handle.start {
+    left: 0;
+    border-right: 2px solid #ff6b35;
+}
+
+.loop-handle.end {
+    right: 0;
+    border-left: 2px solid #ff6b35;
+}
+
+/* ============================================
+   LAYER INDICATORS
+   ============================================ */
+
+.layer-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid #2a2a2a;
+    background: linear-gradient(180deg, #151515 0%, #0a0a0a 100%);
+    color: #444;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.layer-btn:hover {
+    border-color: #555;
+    color: #888;
+}
+
+.layer-btn.active {
+    background: linear-gradient(180deg, #2a1a10 0%, #1a1008 100%);
+    border-color: #ff6b35;
+    color: #ff6b35;
+    box-shadow: 0 0 8px rgba(255, 107, 53, 0.2);
+}
+
+.layer-btn.has-content {
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border-color: #444;
+    color: #888;
+}
+
+.layer-btn.has-content.active {
+    background: linear-gradient(180deg, #2a1a10 0%, #1a1008 100%);
+    border-color: #ff6b35;
+    color: #ff8c5a;
+}
+
+/* ============================================
    CONTROLS
    ============================================ */
 
@@ -223,6 +522,35 @@ html, body {
     background: linear-gradient(180deg, #2a1515 0%, #1a0a0a 100%);
     border-color: #ef5350;
     color: #ff7875;
+}
+
+/* Folder Button */
+.folder-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    border: 1px solid #333;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    color: #666;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.12s ease;
+    font-size: 14px;
+}
+
+.folder-btn:hover {
+    border-color: #4caf50;
+    color: #4caf50;
+    background: linear-gradient(180deg, #1f1f1f 0%, #141414 100%);
+}
+
+.folder-btn:active {
+    background: linear-gradient(180deg, #152a15 0%, #0a1a0a 100%);
+    border-color: #4caf50;
+    color: #81c784;
+    box-shadow: 0 0 12px rgba(76, 175, 80, 0.3);
 }
 
 /* Reload Button */
