@@ -211,7 +211,7 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     const auto totalNumOutputChannels = getTotalNumOutputChannels();
     const auto numSamples = buffer.getNumSamples();
 
-    // Track host tempo
+    // Track host tempo and transport state
     if (auto* playHead = getPlayHead())
     {
         if (auto posInfo = playHead->getPosition())
@@ -221,6 +221,32 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
                 float bpm = static_cast<float>(*posInfo->getBpm());
                 lastHostBpm.store(bpm);
                 loopEngine.setHostBpm(bpm);
+            }
+
+            // Track host playing state for transport sync
+            bool hostPlaying = posInfo->getIsPlaying();
+            bool wasPlaying = lastHostPlaying.exchange(hostPlaying);
+
+            // If host transport sync is enabled, control looper based on host state
+            if (hostTransportSyncEnabled.load())
+            {
+                if (hostPlaying && !wasPlaying)
+                {
+                    // Host started playing - start looper playback if we have content
+                    if (loopEngine.hasContent() && loopEngine.getState() == LoopBuffer::State::Idle)
+                    {
+                        loopEngine.play();
+                    }
+                }
+                else if (!hostPlaying && wasPlaying)
+                {
+                    // Host stopped - stop looper
+                    if (loopEngine.getState() == LoopBuffer::State::Playing ||
+                        loopEngine.getState() == LoopBuffer::State::Overdubbing)
+                    {
+                        loopEngine.stop();
+                    }
+                }
             }
         }
     }
@@ -280,28 +306,31 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     delayLineR.setModDepth(modDepth);
     delayLineR.setWarmth(warmth);
 
-    // Process audio
-    if (totalNumInputChannels >= 1)
+    // Process audio through delay (if enabled)
+    if (delayEnabled.load())
     {
-        auto* channelL = buffer.getWritePointer(0);
-
-        for (int sample = 0; sample < numSamples; ++sample)
+        if (totalNumInputChannels >= 1)
         {
-            const float dry = channelL[sample];
-            const float wet = delayLineL.processSample(dry);
-            channelL[sample] = dry * (1.0f - mix) + wet * mix;
+            auto* channelL = buffer.getWritePointer(0);
+
+            for (int sample = 0; sample < numSamples; ++sample)
+            {
+                const float dry = channelL[sample];
+                const float wet = delayLineL.processSample(dry);
+                channelL[sample] = dry * (1.0f - mix) + wet * mix;
+            }
         }
-    }
 
-    if (totalNumInputChannels >= 2)
-    {
-        auto* channelR = buffer.getWritePointer(1);
-
-        for (int sample = 0; sample < numSamples; ++sample)
+        if (totalNumInputChannels >= 2)
         {
-            const float dry = channelR[sample];
-            const float wet = delayLineR.processSample(dry);
-            channelR[sample] = dry * (1.0f - mix) + wet * mix;
+            auto* channelR = buffer.getWritePointer(1);
+
+            for (int sample = 0; sample < numSamples; ++sample)
+            {
+                const float dry = channelR[sample];
+                const float wet = delayLineR.processSample(dry);
+                channelR[sample] = dry * (1.0f - mix) + wet * mix;
+            }
         }
     }
 }
@@ -455,6 +484,31 @@ float LoopEngineProcessor::calculateSyncedDelayTime() const
     const float quarterNoteMs = 60000.0f / bpm;
 
     return std::clamp(quarterNoteMs * multiplier, 1.0f, 2000.0f);
+}
+
+void LoopEngineProcessor::setDelayEnabled(bool enabled)
+{
+    delayEnabled.store(enabled);
+}
+
+bool LoopEngineProcessor::getDelayEnabled() const
+{
+    return delayEnabled.load();
+}
+
+void LoopEngineProcessor::setHostTransportSync(bool enabled)
+{
+    hostTransportSyncEnabled.store(enabled);
+}
+
+bool LoopEngineProcessor::getHostTransportSync() const
+{
+    return hostTransportSyncEnabled.load();
+}
+
+bool LoopEngineProcessor::isHostPlaying() const
+{
+    return lastHostPlaying.load();
 }
 
 bool LoopEngineProcessor::hasEditor() const

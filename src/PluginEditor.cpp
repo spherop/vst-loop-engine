@@ -191,7 +191,22 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("syncEnabled", processorRef.getTempoSyncEnabled());
                       result->setProperty("noteValue", processorRef.getTempoNoteValue());
                       result->setProperty("loopEnabled", processorRef.getLoopEnabled());
+                      result->setProperty("delayEnabled", processorRef.getDelayEnabled());
+                      result->setProperty("hostTransportSync", processorRef.getHostTransportSync());
+                      result->setProperty("hostPlaying", processorRef.isHostPlaying());
                       complete(juce::var(result.get()));
+                  })
+                  .withNativeFunction("setHostTransportSync", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setHostTransportSync(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setDelayEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setDelayEnabled(static_cast<bool>(args[0]));
+                      complete({});
                   })
                   .withNativeFunction("getTestSounds", [this](const juce::Array<juce::var>&, auto complete)
                   {

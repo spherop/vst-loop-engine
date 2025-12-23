@@ -58,23 +58,30 @@
 <body class="bg-fd-bg text-white font-sans h-screen overflow-hidden select-none">
     <div class="flex flex-col h-full max-w-2xl mx-auto">
 
-        <!-- Header -->
-        <header class="pt-4 pb-2 text-center relative">
-            <div class="accent-line w-24 mx-auto mb-3 opacity-50"></div>
-            <h1 class="font-display text-2xl font-black tracking-[0.5em] text-fd-accent uppercase"
-                style="text-shadow: 0 0 30px rgba(255, 107, 53, 0.4);">
-                LOOP
-            </h1>
-            <p class="font-display text-[10px] font-bold tracking-[0.6em] text-fd-text-dim uppercase mt-1">
-                ENGINE
-            </p>
-        </header>
+        <!-- Header with Logo and Tabs -->
+        <header class="flex items-center justify-between px-4 py-3 border-b border-fd-border">
+            <!-- Logo (left) -->
+            <div class="flex items-baseline gap-1">
+                <h1 class="font-display text-lg font-black tracking-[0.3em] text-fd-accent uppercase"
+                    style="text-shadow: 0 0 20px rgba(255, 107, 53, 0.4);">
+                    LOOP
+                </h1>
+                <span class="font-display text-[9px] font-bold tracking-[0.4em] text-fd-text-dim uppercase">
+                    ENGINE
+                </span>
+            </div>
 
-        <!-- Tab Bar -->
-        <nav class="tab-bar flex justify-center gap-2 px-4 pt-2">
-            <button class="tab active" data-tab="looper">LOOPER</button>
-            <button class="tab" data-tab="delay">DELAY</button>
-        </nav>
+            <!-- Tabs (right) -->
+            <nav class="tab-bar flex gap-1">
+                <button class="tab active" data-tab="looper">
+                    <span class="tab-label">LOOPER</span>
+                </button>
+                <button class="tab" data-tab="delay">
+                    <span class="tab-led" id="delay-led"></span>
+                    <span class="tab-label">DELAY</span>
+                </button>
+            </nav>
+        </header>
 
         <!-- Main Content -->
         <main class="flex-1 flex flex-col gap-4 px-4 pb-3 overflow-y-auto">
@@ -368,6 +375,12 @@
                 </div>
                 <!-- Tempo controls -->
                 <div class="flex items-center gap-6">
+                    <!-- Host Transport Sync LED -->
+                    <div class="flex items-center gap-2">
+                        <span class="host-sync-led" id="host-sync-led" title="Sync looper to host transport"></span>
+                        <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">HOST</span>
+                    </div>
+                    <div class="w-[1px] h-4 bg-fd-border"></div>
                     <div class="flex items-center gap-2">
                         <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">BPM</span>
                         <span class="font-mono text-base font-bold text-fd-accent" id="bpm-display"

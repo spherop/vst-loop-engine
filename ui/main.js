@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.2.1";
+const UI_VERSION = "0.2.3";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -519,22 +519,79 @@ class LoopToggleController {
     }
 }
 
-// Tab Controller
+// Tab Controller with LED toggle support
 class TabController {
     constructor() {
         this.tabs = document.querySelectorAll('.tab');
         this.contents = document.querySelectorAll('.tab-content');
         this.currentTab = 'looper';
+
+        // Delay LED toggle state
+        this.delayLed = document.getElementById('delay-led');
+        this.delayEnabled = true;
+        this.setDelayEnabledFn = getNativeFunction("setDelayEnabled");
+
         this.setupEvents();
+        this.fetchInitialState();
+    }
+
+    async fetchInitialState() {
+        try {
+            const getStateFn = getNativeFunction("getTempoState");
+            const state = await getStateFn();
+            if (state && typeof state.delayEnabled !== 'undefined') {
+                this.delayEnabled = state.delayEnabled;
+                this.updateDelayLed();
+            }
+        } catch (e) {
+            console.log('Could not fetch initial delay state');
+        }
     }
 
     setupEvents() {
         this.tabs.forEach(tab => {
-            tab.addEventListener('click', () => {
-                const tabName = tab.dataset.tab;
-                this.switchTab(tabName);
+            tab.addEventListener('click', (e) => {
+                // Check if the click was on the LED
+                if (e.target.classList.contains('tab-led')) {
+                    // LED click - toggle effect bypass
+                    e.stopPropagation();
+                    this.toggleDelayEnabled();
+                } else {
+                    // Regular tab click - switch tabs
+                    const tabName = tab.dataset.tab;
+                    this.switchTab(tabName);
+                }
             });
         });
+
+        // Also add direct click handler on LED for safety
+        if (this.delayLed) {
+            this.delayLed.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleDelayEnabled();
+            });
+        }
+    }
+
+    async toggleDelayEnabled() {
+        this.delayEnabled = !this.delayEnabled;
+        this.updateDelayLed();
+
+        try {
+            await this.setDelayEnabledFn(this.delayEnabled);
+            console.log(`[DELAY] Delay ${this.delayEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling delay:', e);
+            // Revert on error
+            this.delayEnabled = !this.delayEnabled;
+            this.updateDelayLed();
+        }
+    }
+
+    updateDelayLed() {
+        if (this.delayLed) {
+            this.delayLed.classList.toggle('active', this.delayEnabled);
+        }
     }
 
     switchTab(tabName) {
@@ -1299,6 +1356,84 @@ let loopStartKnob = null;
 let loopEndKnob = null;
 let loopSpeedKnob = null;
 
+// Host Transport Sync Controller
+class HostSyncController {
+    constructor() {
+        this.led = document.getElementById('host-sync-led');
+        this.isEnabled = false;
+        this.isHostPlaying = false;
+        this.setHostSyncFn = getNativeFunction("setHostTransportSync");
+
+        this.setupEvents();
+        this.fetchInitialState();
+        this.startPolling();
+    }
+
+    async fetchInitialState() {
+        try {
+            const getStateFn = getNativeFunction("getTempoState");
+            const state = await getStateFn();
+            if (state) {
+                if (typeof state.hostTransportSync !== 'undefined') {
+                    this.isEnabled = state.hostTransportSync;
+                    this.updateLed();
+                }
+                if (typeof state.hostPlaying !== 'undefined') {
+                    this.isHostPlaying = state.hostPlaying;
+                    this.updateLed();
+                }
+            }
+        } catch (e) {
+            console.log('Could not fetch initial host sync state');
+        }
+    }
+
+    setupEvents() {
+        if (this.led) {
+            this.led.addEventListener('click', () => this.toggle());
+        }
+    }
+
+    async toggle() {
+        this.isEnabled = !this.isEnabled;
+        this.updateLed();
+
+        try {
+            await this.setHostSyncFn(this.isEnabled);
+            console.log(`[HOST SYNC] ${this.isEnabled ? 'Enabled' : 'Disabled'}`);
+        } catch (e) {
+            console.error('Error toggling host sync:', e);
+            this.isEnabled = !this.isEnabled;
+            this.updateLed();
+        }
+    }
+
+    updateLed() {
+        if (this.led) {
+            this.led.classList.toggle('active', this.isEnabled);
+            this.led.classList.toggle('playing', this.isEnabled && this.isHostPlaying);
+        }
+    }
+
+    // Poll for host playing state
+    startPolling() {
+        setInterval(async () => {
+            try {
+                const getStateFn = getNativeFunction("getTempoState");
+                const state = await getStateFn();
+                if (state && typeof state.hostPlaying !== 'undefined') {
+                    if (state.hostPlaying !== this.isHostPlaying) {
+                        this.isHostPlaying = state.hostPlaying;
+                        this.updateLed();
+                    }
+                }
+            } catch (e) {
+                // Silently ignore
+            }
+        }, 200);
+    }
+}
+
 // BPM Display and Tempo Sync Controller
 class BpmDisplayController {
     constructor() {
@@ -1520,6 +1655,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // BPM display and tempo sync
     new BpmDisplayController();
+
+    // Host transport sync
+    new HostSyncController();
 
     // Reverse toggle - setup handled in LooperController
     looperController.setupReverseButton();

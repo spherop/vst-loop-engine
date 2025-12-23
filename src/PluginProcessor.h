@@ -65,6 +65,15 @@ public:
     float getHostBpm() const;
     float calculateSyncedDelayTime() const;
 
+    // Delay bypass
+    void setDelayEnabled(bool enabled);
+    bool getDelayEnabled() const;
+
+    // Host transport sync
+    void setHostTransportSync(bool enabled);
+    bool getHostTransportSync() const;
+    bool isHostPlaying() const;
+
     // Loop engine access
     LoopEngine& getLoopEngine() { return loopEngine; }
     const LoopEngine& getLoopEngine() const { return loopEngine; }
@@ -98,6 +107,13 @@ private:
     std::atomic<bool> tempoSyncEnabled { false };
     std::atomic<int> tempoNoteValue { 1 };  // 0=1/4, 1=1/8, 2=1/8T, 3=1/16, 4=1/16T, 5=1/32
     std::atomic<float> lastHostBpm { 120.0f };
+
+    // Delay bypass
+    std::atomic<bool> delayEnabled { true };
+
+    // Host transport sync
+    std::atomic<bool> hostTransportSyncEnabled { false };
+    std::atomic<bool> lastHostPlaying { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoopEngineProcessor)
 };
