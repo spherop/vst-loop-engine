@@ -3,14 +3,14 @@
 
 // Set to true to load UI files from disk (enables hot reload during development)
 // Set to false for production builds (loads from BinaryData)
-#define FUZZ_DELAY_DEV_MODE 1
+#define LOOP_ENGINE_DEV_MODE 1
 
-#if FUZZ_DELAY_DEV_MODE
+#if LOOP_ENGINE_DEV_MODE
 // Path to the ui folder - change this to match your project location
-static const char* DEV_UI_PATH = "/Users/danielnewman/Documents/code/fuzz-delay-plugin/ui/";
+static const char* DEV_UI_PATH = "/Users/danielnewman/Documents/code/vst-loop-engine/ui/";
 #endif
 
-FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
+LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
     : AudioProcessorEditor(&p),
       processorRef(p),
       webView(juce::WebBrowserComponent::Options()
@@ -136,12 +136,12 @@ FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
     startTimerHz(10);
 }
 
-FuzzDelayEditor::~FuzzDelayEditor()
+LoopEngineEditor::~LoopEngineEditor()
 {
     stopTimer();
 }
 
-void FuzzDelayEditor::timerCallback()
+void LoopEngineEditor::timerCallback()
 {
     // Push BPM updates to JavaScript
     const float bpm = processorRef.getHostBpm();
@@ -149,17 +149,17 @@ void FuzzDelayEditor::timerCallback()
     webView.evaluateJavascript(script, nullptr);
 }
 
-void FuzzDelayEditor::paint(juce::Graphics& g)
+void LoopEngineEditor::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colours::black);
 }
 
-void FuzzDelayEditor::resized()
+void LoopEngineEditor::resized()
 {
     webView.setBounds(getLocalBounds());
 }
 
-std::optional<juce::WebBrowserComponent::Resource> FuzzDelayEditor::getResource(const juce::String& url)
+std::optional<juce::WebBrowserComponent::Resource> LoopEngineEditor::getResource(const juce::String& url)
 {
     const auto urlToRetrieve = url == "/" ? juce::String("index.html") : url.fromFirstOccurrenceOf("/", false, false);
 
@@ -172,7 +172,7 @@ std::optional<juce::WebBrowserComponent::Resource> FuzzDelayEditor::getResource(
     else if (urlToRetrieve.endsWith(".js"))
         mimeType = "text/javascript";
 
-#if FUZZ_DELAY_DEV_MODE
+#if LOOP_ENGINE_DEV_MODE
     // DEV MODE: Load from file system for hot reload
     juce::File file(juce::String(DEV_UI_PATH) + urlToRetrieve);
     if (file.existsAsFile())

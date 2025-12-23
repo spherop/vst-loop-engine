@@ -6,11 +6,11 @@
 #include "TestToneGenerator.h"
 #include "TestSoundLoader.h"
 
-class FuzzDelayProcessor : public juce::AudioProcessor
+class LoopEngineProcessor : public juce::AudioProcessor
 {
 public:
-    FuzzDelayProcessor();
-    ~FuzzDelayProcessor() override;
+    LoopEngineProcessor();
+    ~LoopEngineProcessor() override;
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
@@ -91,5 +91,5 @@ private:
     std::atomic<int> tempoNoteValue { 1 };  // 0=1/4, 1=1/8, 2=1/8T, 3=1/16, 4=1/16T, 5=1/32
     std::atomic<float> lastHostBpm { 120.0f };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FuzzDelayProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoopEngineProcessor)
 };

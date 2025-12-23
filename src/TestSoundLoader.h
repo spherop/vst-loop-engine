@@ -12,7 +12,7 @@
  * Samples are loaded from a configurable folder path. The loader scans for
  * WAV, AIFF, MP3, FLAC files and makes them available for playback.
  *
- * Default sample folder: ~/Documents/FuzzDelaySamples/
+ * Default sample folder: ~/Documents/LoopEngineSamples/
  * You can also set a custom path.
  */
 class TestSoundLoader
@@ -36,9 +36,9 @@ public:
 
     static juce::File getDefaultSampleFolder()
     {
-        // Default: ~/Documents/FuzzDelaySamples/
+        // Default: ~/Documents/LoopEngineSamples/
         return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-            .getChildFile("FuzzDelaySamples");
+            .getChildFile("LoopEngineSamples");
     }
 
     void loadSamplesFromFolder(const juce::File& folder)

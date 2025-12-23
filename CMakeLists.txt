@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # Project setup
-project(FuzzDelay VERSION 1.0.0 LANGUAGES CXX)
+project(LoopEngine VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,13 +19,13 @@ CPMAddPackage(
 )
 
 # Plugin configuration
-juce_add_plugin(FuzzDelay
-    COMPANY_NAME "FuzzDelayAudio"
-    PLUGIN_MANUFACTURER_CODE Fzdy
-    PLUGIN_CODE Fzdl
+juce_add_plugin(LoopEngine
+    COMPANY_NAME "LoopEngineAudio"
+    PLUGIN_MANUFACTURER_CODE Lpen
+    PLUGIN_CODE Lpen
     FORMATS VST3 AU Standalone
-    PRODUCT_NAME "Fuzz Delay"
-    BUNDLE_ID "com.fuzzdelayaudio.fuzzdelay"
+    PRODUCT_NAME "Loop Engine"
+    BUNDLE_ID "com.loopengineaudio.loopengine"
     IS_SYNTH FALSE
     NEEDS_MIDI_INPUT FALSE
     NEEDS_MIDI_OUTPUT FALSE
@@ -43,27 +43,27 @@ file(GLOB_RECURSE UI_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/ui/*.js"
 )
 
-juce_add_binary_data(FuzzDelayData
+juce_add_binary_data(LoopEngineData
     HEADER_NAME "BinaryData.h"
     NAMESPACE BinaryData
     SOURCES ${UI_FILES}
 )
 
 # Source files
-target_sources(FuzzDelay
+target_sources(LoopEngine
     PRIVATE
         src/PluginProcessor.cpp
         src/PluginEditor.cpp
 )
 
 # Include directories
-target_include_directories(FuzzDelay
+target_include_directories(LoopEngine
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
 # Compile definitions
-target_compile_definitions(FuzzDelay
+target_compile_definitions(LoopEngine
     PUBLIC
         JUCE_WEB_BROWSER=1
         JUCE_USE_CURL=0
@@ -72,9 +72,9 @@ target_compile_definitions(FuzzDelay
 )
 
 # Link libraries
-target_link_libraries(FuzzDelay
+target_link_libraries(LoopEngine
     PRIVATE
-        FuzzDelayData
+        LoopEngineData
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_gui_extra

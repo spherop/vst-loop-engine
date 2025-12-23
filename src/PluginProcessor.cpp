@@ -2,7 +2,7 @@
 #include "PluginEditor.h"
 #include <algorithm>
 
-FuzzDelayProcessor::FuzzDelayProcessor()
+LoopEngineProcessor::LoopEngineProcessor()
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
@@ -21,11 +21,11 @@ FuzzDelayProcessor::FuzzDelayProcessor()
     warmthParam = apvts.getRawParameterValue("warmth");
 }
 
-FuzzDelayProcessor::~FuzzDelayProcessor()
+LoopEngineProcessor::~LoopEngineProcessor()
 {
 }
 
-juce::AudioProcessorValueTreeState::ParameterLayout FuzzDelayProcessor::createParameterLayout()
+juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
@@ -90,58 +90,58 @@ juce::AudioProcessorValueTreeState::ParameterLayout FuzzDelayProcessor::createPa
     return { params.begin(), params.end() };
 }
 
-const juce::String FuzzDelayProcessor::getName() const
+const juce::String LoopEngineProcessor::getName() const
 {
     return JucePlugin_Name;
 }
 
-bool FuzzDelayProcessor::acceptsMidi() const
+bool LoopEngineProcessor::acceptsMidi() const
 {
     return false;
 }
 
-bool FuzzDelayProcessor::producesMidi() const
+bool LoopEngineProcessor::producesMidi() const
 {
     return false;
 }
 
-bool FuzzDelayProcessor::isMidiEffect() const
+bool LoopEngineProcessor::isMidiEffect() const
 {
     return false;
 }
 
-double FuzzDelayProcessor::getTailLengthSeconds() const
+double LoopEngineProcessor::getTailLengthSeconds() const
 {
     return 2.0;
 }
 
-int FuzzDelayProcessor::getNumPrograms()
+int LoopEngineProcessor::getNumPrograms()
 {
     return 1;
 }
 
-int FuzzDelayProcessor::getCurrentProgram()
+int LoopEngineProcessor::getCurrentProgram()
 {
     return 0;
 }
 
-void FuzzDelayProcessor::setCurrentProgram(int index)
+void LoopEngineProcessor::setCurrentProgram(int index)
 {
     juce::ignoreUnused(index);
 }
 
-const juce::String FuzzDelayProcessor::getProgramName(int index)
+const juce::String LoopEngineProcessor::getProgramName(int index)
 {
     juce::ignoreUnused(index);
     return {};
 }
 
-void FuzzDelayProcessor::changeProgramName(int index, const juce::String& newName)
+void LoopEngineProcessor::changeProgramName(int index, const juce::String& newName)
 {
     juce::ignoreUnused(index, newName);
 }
 
-void FuzzDelayProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
+void LoopEngineProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     // Prepare delay lines
     delayLineL.prepare(sampleRate, 2000); // Max 2 second delay
@@ -152,13 +152,13 @@ void FuzzDelayProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     testToneGenerator.prepare(sampleRate, samplesPerBlock);
 }
 
-void FuzzDelayProcessor::releaseResources()
+void LoopEngineProcessor::releaseResources()
 {
     delayLineL.clear();
     delayLineR.clear();
 }
 
-bool FuzzDelayProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
+bool LoopEngineProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
     if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
         && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
@@ -170,7 +170,7 @@ bool FuzzDelayProcessor::isBusesLayoutSupported(const BusesLayout& layouts) cons
     return true;
 }
 
-void FuzzDelayProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
+void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ignoreUnused(midiMessages);
 
@@ -257,7 +257,7 @@ void FuzzDelayProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     }
 }
 
-void FuzzDelayProcessor::triggerTestSound(int soundIndex)
+void LoopEngineProcessor::triggerTestSound(int soundIndex)
 {
     // If we have samples loaded, use the sample loader
     if (testSoundLoader.getNumSamples() > 0)
@@ -284,31 +284,31 @@ void FuzzDelayProcessor::triggerTestSound(int soundIndex)
     }
 }
 
-void FuzzDelayProcessor::stopTestSound()
+void LoopEngineProcessor::stopTestSound()
 {
     testSoundLoader.stop();
     testToneGenerator.stop();
 }
 
-void FuzzDelayProcessor::setLoopEnabled(bool enabled)
+void LoopEngineProcessor::setLoopEnabled(bool enabled)
 {
     testSoundLoader.setLoopEnabled(enabled);
     testToneGenerator.setLoopEnabled(enabled);
 }
 
-bool FuzzDelayProcessor::getLoopEnabled() const
+bool LoopEngineProcessor::getLoopEnabled() const
 {
     return testSoundLoader.getLoopEnabled();
 }
 
-int FuzzDelayProcessor::getNumTestSounds() const
+int LoopEngineProcessor::getNumTestSounds() const
 {
     if (testSoundLoader.getNumSamples() > 0)
         return testSoundLoader.getNumSamples();
     return 10; // Fallback synth sounds
 }
 
-juce::String FuzzDelayProcessor::getTestSoundName(int index) const
+juce::String LoopEngineProcessor::getTestSoundName(int index) const
 {
     if (testSoundLoader.getNumSamples() > 0)
         return testSoundLoader.getSampleName(index);
@@ -323,7 +323,7 @@ juce::String FuzzDelayProcessor::getTestSoundName(int index) const
     return "---";
 }
 
-juce::StringArray FuzzDelayProcessor::getAllTestSoundNames() const
+juce::StringArray LoopEngineProcessor::getAllTestSoundNames() const
 {
     if (testSoundLoader.getNumSamples() > 0)
         return testSoundLoader.getAllSampleNames();
@@ -335,47 +335,47 @@ juce::StringArray FuzzDelayProcessor::getAllTestSoundNames() const
     };
 }
 
-juce::String FuzzDelayProcessor::getSampleFolderPath() const
+juce::String LoopEngineProcessor::getSampleFolderPath() const
 {
     return testSoundLoader.getSampleFolderPath();
 }
 
-void FuzzDelayProcessor::reloadSamples()
+void LoopEngineProcessor::reloadSamples()
 {
     testSoundLoader.reloadSamples();
 }
 
-bool FuzzDelayProcessor::usingSamplesFromDisk() const
+bool LoopEngineProcessor::usingSamplesFromDisk() const
 {
     return testSoundLoader.getNumSamples() > 0;
 }
 
-void FuzzDelayProcessor::setTempoSync(bool enabled)
+void LoopEngineProcessor::setTempoSync(bool enabled)
 {
     tempoSyncEnabled.store(enabled);
 }
 
-bool FuzzDelayProcessor::getTempoSyncEnabled() const
+bool LoopEngineProcessor::getTempoSyncEnabled() const
 {
     return tempoSyncEnabled.load();
 }
 
-void FuzzDelayProcessor::setTempoNote(int noteIndex)
+void LoopEngineProcessor::setTempoNote(int noteIndex)
 {
     tempoNoteValue.store(std::clamp(noteIndex, 0, 5));
 }
 
-int FuzzDelayProcessor::getTempoNoteValue() const
+int LoopEngineProcessor::getTempoNoteValue() const
 {
     return tempoNoteValue.load();
 }
 
-float FuzzDelayProcessor::getHostBpm() const
+float LoopEngineProcessor::getHostBpm() const
 {
     return lastHostBpm.load();
 }
 
-float FuzzDelayProcessor::calculateSyncedDelayTime() const
+float LoopEngineProcessor::calculateSyncedDelayTime() const
 {
     // Note value multipliers relative to quarter note
     // 0=1/4, 1=1/8, 2=1/8T, 3=1/16, 4=1/16T, 5=1/32
@@ -401,24 +401,24 @@ float FuzzDelayProcessor::calculateSyncedDelayTime() const
     return std::clamp(quarterNoteMs * multiplier, 1.0f, 2000.0f);
 }
 
-bool FuzzDelayProcessor::hasEditor() const
+bool LoopEngineProcessor::hasEditor() const
 {
     return true;
 }
 
-juce::AudioProcessorEditor* FuzzDelayProcessor::createEditor()
+juce::AudioProcessorEditor* LoopEngineProcessor::createEditor()
 {
-    return new FuzzDelayEditor(*this);
+    return new LoopEngineEditor(*this);
 }
 
-void FuzzDelayProcessor::getStateInformation(juce::MemoryBlock& destData)
+void LoopEngineProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
     auto state = apvts.copyState();
     std::unique_ptr<juce::XmlElement> xml(state.createXml());
     copyXmlToBinary(*xml, destData);
 }
 
-void FuzzDelayProcessor::setStateInformation(const void* data, int sizeInBytes)
+void LoopEngineProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
     std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
 
@@ -428,5 +428,5 @@ void FuzzDelayProcessor::setStateInformation(const void* data, int sizeInBytes)
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
-    return new FuzzDelayProcessor();
+    return new LoopEngineProcessor();
 }
