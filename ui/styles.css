@@ -533,6 +533,36 @@ html, body {
 }
 
 /* ============================================
+   LOOP LENGTH SELECTOR
+   ============================================ */
+
+.length-btn {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid #2a2a2a;
+    background: linear-gradient(180deg, #151515 0%, #0a0a0a 100%);
+    color: #666;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.length-btn:hover {
+    border-color: #555;
+    color: #999;
+}
+
+.length-btn.active {
+    background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
+    border-color: var(--looper-accent);
+    color: var(--looper-accent);
+    box-shadow: 0 0 8px var(--looper-accent-glow);
+}
+
+/* ============================================
    CONTROLS
    ============================================ */
 
@@ -817,13 +847,15 @@ html, body {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(10, 10, 10, 0.85);
+    /* Semi-transparent so waveform shows through while recording */
+    background: rgba(10, 10, 10, 0.4);
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 12px;
     z-index: 10;
+    pointer-events: none;  /* Allow clicks through to waveform */
 }
 
 .recording-overlay.hidden {

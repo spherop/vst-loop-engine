@@ -27,32 +27,58 @@ public:
         masterLoopLength = 0;
     }
 
-    // Transport controls
+    // Transport controls - Blooper-style workflow:
+    // 1. REC (idle) -> Start recording
+    // 2. REC (recording) -> Stop recording, start playback
+    // 3. REC (playing) -> Start overdubbing (record on top of playback)
+    // 4. REC (overdubbing) -> Stop overdubbing, continue playback
     void record()
     {
         LoopBuffer::State currentState = getCurrentState();
+        DBG("LoopEngine::record() called, currentState=" + juce::String(static_cast<int>(currentState)));
 
         if (currentState == LoopBuffer::State::Idle)
         {
+            // Calculate target length based on preset bars
+            int targetLength = getTargetLoopLengthSamples();
+            DBG("record() - Idle state, targetLength=" + juce::String(targetLength));
+
             // Start recording on layer 0 (first layer)
             if (highestLayer == 0 && !layers[0].hasContent())
             {
                 currentLayer = 0;
                 // Reset loop parameters to defaults when starting new recording
                 resetLoopParams();
-                layers[0].startRecording();
+                DBG("record() - Starting recording on layer 0");
+                layers[0].startRecording(targetLength);
             }
             else if (highestLayer < NUM_LAYERS - 1)
             {
                 // Start recording on next available layer (overdub)
                 currentLayer = highestLayer + 1;
-                layers[currentLayer].startRecording();
+                // Use master loop length for subsequent layers (or target if first had preset)
+                int layerTarget = (masterLoopLength > 0) ? masterLoopLength : targetLength;
+                DBG("record() - Starting recording on layer " + juce::String(currentLayer));
+                layers[currentLayer].startRecording(layerTarget);
             }
         }
         else if (currentState == LoopBuffer::State::Recording)
         {
-            // Stop recording
+            // Stop recording -> starts playback
+            DBG("record() - Stopping recording");
             stopRecording();
+        }
+        else if (currentState == LoopBuffer::State::Playing)
+        {
+            // Blooper-style: REC while playing starts overdubbing
+            DBG("record() - Playing state, calling overdub()");
+            overdub();
+        }
+        else if (currentState == LoopBuffer::State::Overdubbing)
+        {
+            // REC while overdubbing stops overdub, continues playback
+            DBG("record() - Overdubbing state, stopping overdub");
+            layers[currentLayer].stopOverdub();
         }
     }
 
@@ -71,13 +97,13 @@ public:
         }
     }
 
-    void stopRecording()
+    void stopRecording(bool continueToOverdub = false)
     {
         LoopBuffer::State currentState = getCurrentState();
 
         if (currentState == LoopBuffer::State::Recording)
         {
-            layers[currentLayer].stopRecording();
+            layers[currentLayer].stopRecording(continueToOverdub);
 
             // Set master loop length from first recording
             if (masterLoopLength == 0)
@@ -113,22 +139,33 @@ public:
     void overdub()
     {
         LoopBuffer::State currentState = getCurrentState();
+        DBG("LoopEngine::overdub() called, currentState=" + juce::String(static_cast<int>(currentState)) +
+            " currentLayer=" + juce::String(currentLayer) +
+            " highestLayer=" + juce::String(highestLayer) +
+            " hasContent=" + juce::String(layers[0].hasContent() ? "true" : "false"));
 
         if (currentState == LoopBuffer::State::Playing)
         {
             // Start overdubbing on current layer
+            DBG("Starting overdub on layer " + juce::String(currentLayer));
             layers[currentLayer].startOverdub();
         }
         else if (currentState == LoopBuffer::State::Overdubbing)
         {
             // Stop overdubbing
+            DBG("Stopping overdub on layer " + juce::String(currentLayer));
             layers[currentLayer].stopOverdub();
         }
         else if (currentState == LoopBuffer::State::Idle && highestLayer >= 0 && layers[0].hasContent())
         {
             // If idle with content, play and immediately overdub
+            DBG("Idle with content - starting play + overdub");
             play();
             layers[currentLayer].startOverdub();
+        }
+        else
+        {
+            DBG("overdub() - no action taken");
         }
     }
 
@@ -311,12 +348,14 @@ public:
     {
         std::vector<float> combinedWaveform(numPoints, 0.0f);
 
-        for (int i = 0; i <= highestLayer; ++i)
+        // Include layers with content OR currently recording
+        for (int i = 0; i <= std::max(highestLayer, currentLayer); ++i)
         {
-            if (layers[i].hasContent())
+            bool isRecording = (layers[i].getState() == LoopBuffer::State::Recording);
+            if (layers[i].hasContent() || isRecording)
             {
                 auto layerWaveform = layers[i].getWaveformData(numPoints);
-                for (int j = 0; j < numPoints; ++j)
+                for (size_t j = 0; j < static_cast<size_t>(numPoints); ++j)
                 {
                     combinedWaveform[j] += layerWaveform[j];
                 }
@@ -340,6 +379,38 @@ public:
         return combinedWaveform;
     }
 
+    // Set preset loop length (in bars, 0 = free/unlimited)
+    void setLoopLengthBars(int bars)
+    {
+        presetLengthBars.store(bars);
+        DBG("LoopEngine::setLoopLengthBars(" + juce::String(bars) + ")");
+    }
+
+    int getLoopLengthBars() const { return presetLengthBars.load(); }
+
+    // Set host BPM for calculating bar lengths
+    void setHostBpm(float bpm)
+    {
+        hostBpm.store(bpm);
+    }
+
+    // Get target loop length in samples (0 = unlimited)
+    int getTargetLoopLengthSamples() const
+    {
+        int bars = presetLengthBars.load();
+        if (bars <= 0)
+            return 0;  // Free mode - no limit
+
+        float bpm = hostBpm.load();
+        if (bpm <= 0.0f)
+            bpm = 120.0f;  // Default fallback
+
+        // 4 beats per bar, samples per beat = sampleRate * 60 / BPM
+        double samplesPerBeat = currentSampleRate * 60.0 / static_cast<double>(bpm);
+        double samplesPerBar = samplesPerBeat * 4.0;
+        return static_cast<int>(samplesPerBar * bars);
+    }
+
 private:
     std::array<LoopBuffer, NUM_LAYERS> layers;
     int currentLayer = 0;
@@ -347,6 +418,8 @@ private:
     int masterLoopLength = 0;
     double currentSampleRate = 44100.0;
     bool isReversed = false;  // Master reverse state
+    std::atomic<int> presetLengthBars { 0 };  // 0 = free, 1/2/4/8 = bars
+    std::atomic<float> hostBpm { 120.0f };
 
     LoopBuffer::State getCurrentState() const
     {

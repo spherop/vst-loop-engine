@@ -24,6 +24,16 @@ public:
 
     void prepare(double sampleRate, int samplesPerBlock)
     {
+        juce::String msg = "LoopBuffer::prepare() sampleRate=" + juce::String(sampleRate);
+        DBG(msg);
+
+        // Write to log file for DAW debugging - Documents folder
+        {
+            juce::File logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                .getChildFile("LoopEngine_debug.log");
+            logFile.appendText(juce::Time::getCurrentTime().toString(true, true) + " - " + msg + "\n");
+        }
+
         currentSampleRate = sampleRate;
         maxLoopSamples = static_cast<int>(MAX_LOOP_SECONDS * sampleRate);
 
@@ -55,16 +65,22 @@ public:
     }
 
     // Transport controls
-    void startRecording()
+    void startRecording(int targetLengthSamples = 0)
     {
         if (state.load() == State::Idle)
         {
             clear();
+            targetLoopLength = targetLengthSamples;  // 0 = free/unlimited
             state.store(State::Recording);
+            DBG("LoopBuffer::startRecording() targetLength=" + juce::String(targetLengthSamples) +
+                " samples (" + juce::String(targetLengthSamples / currentSampleRate, 2) + "s)");
         }
     }
 
-    void stopRecording()
+    int getTargetLoopLength() const { return targetLoopLength; }
+
+    // stopRecording with option to continue into overdub mode
+    void stopRecording(bool continueToOverdub = false)
     {
         if (state.load() == State::Recording)
         {
@@ -72,7 +88,33 @@ public:
             loopLength = writeHead;
             loopEnd = loopLength;
             playHead = 0.0f;
-            state.store(State::Playing);
+
+            // If continueToOverdub is true, go into overdub mode instead of just playing
+            if (continueToOverdub)
+            {
+                state.store(State::Overdubbing);
+            }
+            else
+            {
+                state.store(State::Playing);
+            }
+
+            juce::String msg = "LoopBuffer::stopRecording() - loopLength=" + juce::String(loopLength) +
+                " samples (" + juce::String(loopLength / currentSampleRate, 2) + "s)" +
+                " at sampleRate=" + juce::String(currentSampleRate) +
+                " continueToOverdub=" + juce::String(continueToOverdub ? "true" : "false");
+            DBG(msg);
+
+            // Write to log file for DAW debugging - Documents folder
+            {
+                juce::File logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                    .getChildFile("LoopEngine_debug.log");
+                logFile.appendText(juce::Time::getCurrentTime().toString(true, true) + " - " + msg + "\n");
+
+                // Also log the current playback rate
+                juce::String rateMsg = "Current playbackRate target=" + juce::String(playbackRateSmoothed.getTargetValue(), 3);
+                logFile.appendText(juce::Time::getCurrentTime().toString(true, true) + " - " + rateMsg + "\n");
+            }
 
             // Apply crossfade at loop boundary for seamless looping
             applyCrossfade();
@@ -146,7 +188,15 @@ public:
     void setPlaybackRate(float rate)
     {
         // Rate range: 0.25 to 4.0
-        playbackRateSmoothed.setTargetValue(std::clamp(rate, 0.25f, 4.0f));
+        float clampedRate = std::clamp(rate, 0.25f, 4.0f);
+        playbackRateSmoothed.setTargetValue(clampedRate);
+        // Only log when rate actually changes significantly
+        static float lastLoggedRate = 1.0f;
+        if (std::abs(clampedRate - lastLoggedRate) > 0.01f)
+        {
+            DBG("LoopBuffer::setPlaybackRate(" + juce::String(rate, 3) + ") -> clamped to " + juce::String(clampedRate, 3));
+            lastLoggedRate = clampedRate;
+        }
     }
 
     void setReverse(bool reversed)
@@ -178,7 +228,7 @@ public:
                     break;
 
                 case State::Playing:
-                    processPlaying(outputL, outputR);
+                    processPlaying(inputL, inputR, outputL, outputR);
                     break;
 
                 case State::Overdubbing:
@@ -228,31 +278,64 @@ public:
     bool getIsReversed() const { return isReversed.load(); }
 
     // Get waveform data for UI visualization (downsampled)
+    // Works during recording (uses writeHead) and playback (uses loopLength)
     std::vector<float> getWaveformData(int numPoints) const
     {
         std::vector<float> waveform(numPoints, 0.0f);
-        if (loopLength <= 0)
+
+        // Determine the length to visualize
+        int visualLength = loopLength;
+        if (state.load() == State::Recording)
+        {
+            // During recording, show what we've recorded so far
+            // Use target length if set, otherwise use current writeHead position
+            if (targetLoopLength > 0)
+            {
+                visualLength = targetLoopLength;  // Show full target length
+            }
+            else
+            {
+                visualLength = writeHead;  // Show recorded portion
+            }
+        }
+
+        if (visualLength <= 0)
             return waveform;
 
-        const int samplesPerPoint = loopLength / numPoints;
+        const int samplesPerPoint = visualLength / numPoints;
         if (samplesPerPoint <= 0)
             return waveform;
+
+        // For recording with target length, only show samples up to writeHead
+        const int maxSampleToShow = (state.load() == State::Recording) ? writeHead : visualLength;
 
         for (int i = 0; i < numPoints; ++i)
         {
             float maxVal = 0.0f;
             const int startSample = i * samplesPerPoint;
-            const int endSample = std::min(startSample + samplesPerPoint, loopLength);
+            const int endSample = std::min(startSample + samplesPerPoint, maxSampleToShow);
 
-            for (int j = startSample; j < endSample; ++j)
+            // Only process if we have samples in this range
+            if (startSample < maxSampleToShow)
             {
-                float val = std::abs(bufferL[j]) + std::abs(bufferR[j]);
-                maxVal = std::max(maxVal, val * 0.5f);
+                for (int j = startSample; j < endSample; ++j)
+                {
+                    float val = std::abs(bufferL[j]) + std::abs(bufferR[j]);
+                    maxVal = std::max(maxVal, val * 0.5f);
+                }
             }
             waveform[i] = std::min(maxVal, 1.0f);
         }
 
         return waveform;
+    }
+
+    // Get recording progress (0-1) for UI
+    float getRecordingProgress() const
+    {
+        if (state.load() != State::Recording || targetLoopLength <= 0)
+            return 0.0f;
+        return static_cast<float>(writeHead) / static_cast<float>(targetLoopLength);
     }
 
 private:
@@ -274,9 +357,15 @@ private:
     std::atomic<bool> isReversed { false };
     std::atomic<State> state { State::Idle };
 
+    // Preset loop length (0 = free/unlimited)
+    int targetLoopLength = 0;
+
     void processRecording(float inputL, float inputR, float& outputL, float& outputR)
     {
-        if (writeHead < maxLoopSamples)
+        // Check if we've reached the target length (if set)
+        const int effectiveMaxLength = (targetLoopLength > 0) ? targetLoopLength : maxLoopSamples;
+
+        if (writeHead < effectiveMaxLength)
         {
             bufferL[writeHead] = inputL;
             bufferR[writeHead] = inputR;
@@ -284,8 +373,9 @@ private:
         }
         else
         {
-            // Max loop length reached, auto-stop recording
-            stopRecording();
+            // Target or max loop length reached - auto-stop recording
+            // Blooper-style: just switch to play mode, user taps REC again to overdub
+            stopRecording(false);
         }
 
         // Output the input (monitoring)
@@ -293,17 +383,24 @@ private:
         outputR = inputR;
     }
 
-    void processPlaying(float& outputL, float& outputR)
+    void processPlaying(float inputL, float inputR, float& outputL, float& outputR)
     {
         if (loopLength <= 0)
         {
-            outputL = outputR = 0.0f;
+            // Pass through input if no loop content
+            outputL = inputL;
+            outputR = inputR;
             return;
         }
 
-        // Read with interpolation
-        outputL = readWithInterpolation(bufferL, playHead);
-        outputR = readWithInterpolation(bufferR, playHead);
+        // Read loop playback with interpolation
+        float loopL = readWithInterpolation(bufferL, playHead);
+        float loopR = readWithInterpolation(bufferR, playHead);
+
+        // Mix loop playback with input passthrough for seamless monitoring
+        // This allows hearing the instrument while the loop plays
+        outputL = loopL + inputL;
+        outputR = loopR + inputR;
 
         // Advance playhead
         advancePlayhead();

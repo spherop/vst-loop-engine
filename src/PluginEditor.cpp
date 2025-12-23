@@ -68,6 +68,16 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.getLoopEngine().jumpToLayer(static_cast<int>(args[0]) - 1);  // 1-indexed from UI
                       complete({});
                   })
+                  .withNativeFunction("setLoopLengthBars", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int bars = static_cast<int>(args[0]);
+                          processorRef.getLoopEngine().setLoopLengthBars(bars);
+                          DBG("setLoopLengthBars: " + juce::String(bars));
+                      }
+                      complete({});
+                  })
                   .withNativeFunction("setLoopReverse", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       DBG("========================================");
@@ -294,9 +304,11 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
-    setSize(520, 560);
+    // Set default size to fit the full UI without scrolling
+    // The UI has: header, tabs, looper controls, waveform, knobs, sample section, footer
+    setSize(600, 700);
     setResizable(true, true);
-    setResizeLimits(400, 450, 800, 800);
+    setResizeLimits(550, 600, 1000, 1000);
 
     // Start timer for BPM polling (100ms interval)
     startTimerHz(10);

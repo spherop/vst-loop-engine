@@ -85,6 +85,19 @@
                 <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
                     <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/30 to-transparent"></div>
                     <div class="p-4">
+                        <!-- Loop Length Selector -->
+                        <div class="flex justify-center items-center gap-2 mb-3">
+                            <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">LENGTH</span>
+                            <div class="loop-length-selector flex gap-1">
+                                <button class="length-btn active" data-length="free">FREE</button>
+                                <button class="length-btn" data-length="1">1 BAR</button>
+                                <button class="length-btn" data-length="2">2 BAR</button>
+                                <button class="length-btn" data-length="4">4 BAR</button>
+                                <button class="length-btn" data-length="8">8 BAR</button>
+                            </div>
+                        </div>
+                        <!-- Transport Buttons -->
+                        <!-- Blooper-style: REC toggles between record/play/overdub -->
                         <div class="flex justify-center items-center gap-4">
                             <button id="rec-btn" class="transport-btn rec">
                                 <span class="transport-icon">&#9679;</span>
@@ -97,10 +110,6 @@
                             <button id="loop-stop-btn" class="transport-btn stop">
                                 <span class="transport-icon">&#9632;</span>
                                 <span class="transport-label">STOP</span>
-                            </button>
-                            <button id="overdub-btn" class="transport-btn overdub">
-                                <span class="transport-icon">&#8853;</span>
-                                <span class="transport-label">DUB</span>
                             </button>
                             <button id="undo-btn" class="transport-btn undo">
                                 <span class="transport-icon">&#8617;</span>

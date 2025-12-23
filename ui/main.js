@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.1.4";
+const UI_VERSION = "0.2.1";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -597,7 +597,12 @@ class LooperController {
         this.jumpToLayerFn = getNativeFunction("loopJumpToLayer");
         this.resetParamsFn = getNativeFunction("resetLoopParams");
 
+        // Loop length setting (in bars, 0 = free/unlimited)
+        this.loopLengthBars = 0;
+        this.setLoopLengthFn = getNativeFunction("setLoopLengthBars");
+
         this.setupTransport();
+        this.setupLoopLengthSelector();
         this.setupLayers();
         this.setupWaveform();
         this.setupZoomControls();
@@ -652,9 +657,9 @@ class LooperController {
 
     setupTransport() {
         this.recBtn = document.getElementById('rec-btn');
+        this.recLabel = this.recBtn ? this.recBtn.querySelector('.transport-label') : null;
         this.playBtn = document.getElementById('loop-play-btn');
         this.stopBtn = document.getElementById('loop-stop-btn');
-        this.overdubBtn = document.getElementById('overdub-btn');
         this.undoBtn = document.getElementById('undo-btn');
         this.clearBtn = document.getElementById('clear-btn');
         this.timeDisplay = document.getElementById('loop-time-display');
@@ -668,14 +673,37 @@ class LooperController {
         if (this.stopBtn) {
             this.stopBtn.addEventListener('click', () => this.stop());
         }
-        if (this.overdubBtn) {
-            this.overdubBtn.addEventListener('click', () => this.overdub());
-        }
         if (this.undoBtn) {
             this.undoBtn.addEventListener('click', () => this.undo());
         }
         if (this.clearBtn) {
             this.clearBtn.addEventListener('click', () => this.clear());
+        }
+    }
+
+    setupLoopLengthSelector() {
+        this.lengthButtons = document.querySelectorAll('.length-btn');
+
+        this.lengthButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const length = btn.dataset.length;
+                this.setLoopLength(length === 'free' ? 0 : parseInt(length));
+
+                // Update button states
+                this.lengthButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
+    }
+
+    async setLoopLength(bars) {
+        this.loopLengthBars = bars;
+        console.log(`[LOOPER] Setting loop length to ${bars === 0 ? 'FREE' : bars + ' bars'}`);
+
+        try {
+            await this.setLoopLengthFn(bars);
+        } catch (e) {
+            console.error('Error setting loop length:', e);
         }
     }
 
@@ -1149,20 +1177,28 @@ class LooperController {
         this.state = state;
 
         // Reset all buttons
-        [this.recBtn, this.playBtn, this.overdubBtn].forEach(btn => {
+        [this.recBtn, this.playBtn].forEach(btn => {
             if (btn) btn.classList.remove('active');
         });
 
-        // Activate appropriate button
+        // Update REC button label and state based on current state
+        // Blooper-style: REC button shows "REC" normally, "DUB" when overdubbing
         switch (state) {
             case 'recording':
                 if (this.recBtn) this.recBtn.classList.add('active');
+                if (this.recLabel) this.recLabel.textContent = 'REC';
                 break;
             case 'playing':
                 if (this.playBtn) this.playBtn.classList.add('active');
+                if (this.recLabel) this.recLabel.textContent = 'DUB';  // Show that REC will start overdub
                 break;
             case 'overdubbing':
-                if (this.overdubBtn) this.overdubBtn.classList.add('active');
+                if (this.recBtn) this.recBtn.classList.add('active');
+                if (this.recLabel) this.recLabel.textContent = 'DUB';
+                break;
+            case 'idle':
+            default:
+                if (this.recLabel) this.recLabel.textContent = 'REC';
                 break;
         }
 

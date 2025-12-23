@@ -100,10 +100,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         juce::NormalisableRange<float>(0.0f, 1.0f, 0.001f),
         1.0f));
 
+    // Loop Speed: 0.25x to 4.0x, with 1.0x at center (normalized 0.5)
+    // For skew: we need 1.0 = 0.25 + (4.0-0.25) * pow(0.5, 1/skew)
+    // Solving: (1.0-0.25)/(4.0-0.25) = pow(0.5, 1/skew)
+    // 0.2 = pow(0.5, 1/skew) => log(0.2)/log(0.5) = 1/skew => skew = log(0.5)/log(0.2) ≈ 0.431
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"loopSpeed", 1},
         "Loop Speed",
-        juce::NormalisableRange<float>(0.25f, 4.0f, 0.01f, 0.5f),
+        juce::NormalisableRange<float>(0.25f, 4.0f, 0.01f, 0.431f),
         1.0f,
         juce::AudioParameterFloatAttributes().withLabel("x")));
 
@@ -213,7 +217,11 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         if (auto posInfo = playHead->getPosition())
         {
             if (posInfo->getBpm())
-                lastHostBpm.store(static_cast<float>(*posInfo->getBpm()));
+            {
+                float bpm = static_cast<float>(*posInfo->getBpm());
+                lastHostBpm.store(bpm);
+                loopEngine.setHostBpm(bpm);
+            }
         }
     }
 
