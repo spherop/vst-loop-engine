@@ -10,154 +10,208 @@
             theme: {
                 extend: {
                     colors: {
-                        'val-bg': '#0a0a0a',
-                        'val-card': '#1a1a1a',
-                        'val-card-inner': '#121212',
-                        'val-border': '#2a2a2a',
-                        'val-accent': '#64b5f6',
-                        'val-accent-dim': '#1e3a5f',
-                        'val-text': '#888888',
-                        'val-text-dim': '#555555',
+                        'fd-bg': '#0a0a0a',
+                        'fd-surface': '#111111',
+                        'fd-card': '#161616',
+                        'fd-border': '#2a2a2a',
+                        'fd-accent': '#ff6b35',
+                        'fd-accent-dim': '#cc5429',
+                        'fd-text': '#888888',
+                        'fd-text-dim': '#555555',
+                        'fd-highlight': '#ff8c5a',
                     },
                     fontFamily: {
-                        'mono': ['SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', 'monospace'],
+                        'display': ['Orbitron', 'sans-serif'],
+                        'mono': ['JetBrains Mono', 'SF Mono', 'Monaco', 'monospace'],
                     }
                 }
             }
         }
     </script>
     <link rel="stylesheet" href="styles.css">
+    <style>
+        /* Inline critical fonts */
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #ff6b35; }
+
+        /* Decorative line */
+        .accent-line {
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #ff6b35, transparent);
+        }
+
+        /* Section glow on hover */
+        .section-card {
+            transition: all 0.2s ease;
+        }
+        .section-card:hover {
+            border-color: #333;
+            box-shadow: 0 0 20px rgba(255, 107, 53, 0.05);
+        }
+    </style>
 </head>
-<body class="bg-val-bg text-white font-sans h-screen overflow-hidden select-none">
-    <div class="flex flex-col h-full">
+<body class="bg-fd-bg text-white font-sans h-screen overflow-hidden select-none">
+    <div class="flex flex-col h-full max-w-2xl mx-auto">
+
         <!-- Header -->
-        <header class="py-5 text-center border-b border-val-border">
-            <h1 class="text-2xl font-light tracking-[0.5em] text-val-accent uppercase">Fuzz Delay</h1>
+        <header class="pt-4 pb-2 text-center relative">
+            <div class="accent-line w-24 mx-auto mb-3 opacity-50"></div>
+            <h1 class="font-display text-2xl font-black tracking-[0.5em] text-fd-accent uppercase"
+                style="text-shadow: 0 0 30px rgba(255, 107, 53, 0.4);">
+                FUZZ
+            </h1>
+            <p class="font-display text-[10px] font-bold tracking-[0.6em] text-fd-text-dim uppercase mt-1">
+                DELAY
+            </p>
         </header>
 
         <!-- Main Content -->
-        <main class="flex-1 flex flex-col gap-4 p-5 overflow-y-auto">
-            <!-- Delay Section -->
-            <section class="bg-val-card rounded-xl p-5 border border-val-border">
-                <h2 class="text-[10px] font-semibold tracking-[3px] text-val-text-dim uppercase mb-4 pb-2 border-b border-val-border">Delay</h2>
-                <div class="flex justify-center gap-10 flex-wrap">
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Time</span>
-                        <div class="knob knob-large" id="delayTime-knob">
-                            <div class="knob-indicator"></div>
-                        </div>
-                        <span class="font-mono text-sm text-white" id="delayTime-value">300 ms</span>
-                    </div>
+        <main class="flex-1 flex flex-col gap-4 px-4 pb-3 overflow-y-auto">
 
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Feedback</span>
-                        <div class="knob knob-large" id="feedback-knob">
-                            <div class="knob-indicator"></div>
-                        </div>
-                        <span class="font-mono text-sm text-white" id="feedback-value">40%</span>
-                    </div>
+            <!-- DELAY Section -->
+            <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
+                <!-- Section accent -->
+                <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/30 to-transparent"></div>
 
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Tone</span>
-                        <div class="knob knob-large" id="tone-knob">
-                            <div class="knob-indicator"></div>
+                <div class="p-4">
+                    <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
+                        // DELAY
+                    </h2>
+                    <div class="flex justify-center gap-10">
+                        <!-- TIME -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-large" id="delayTime-knob">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="font-mono text-sm font-medium text-white" id="delayTime-value">300 ms</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TIME</span>
                         </div>
-                        <span class="font-mono text-sm text-white" id="tone-value">4.0 kHz</span>
-                    </div>
 
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Mix</span>
-                        <div class="knob knob-large" id="mix-knob">
-                            <div class="knob-indicator"></div>
+                        <!-- FEEDBACK -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-large" id="feedback-knob">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="font-mono text-sm font-medium text-white" id="feedback-value">40%</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">FEEDBACK</span>
                         </div>
-                        <span class="font-mono text-sm text-white" id="mix-value">50%</span>
+
+                        <!-- TONE -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-large" id="tone-knob">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="font-mono text-sm font-medium text-white" id="tone-value">4.0 kHz</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TONE</span>
+                        </div>
+
+                        <!-- MIX -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-large" id="mix-knob">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="font-mono text-sm font-medium text-white" id="mix-value">50%</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">MIX</span>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Character Section -->
-            <section class="bg-val-card rounded-xl p-5 border border-val-border">
-                <h2 class="text-[10px] font-semibold tracking-[3px] text-val-text-dim uppercase mb-4 pb-2 border-b border-val-border">Character</h2>
-                <div class="flex justify-center gap-10 flex-wrap">
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Age</span>
-                        <div class="knob knob-medium" id="age-knob">
-                            <div class="knob-indicator"></div>
-                        </div>
-                        <span class="font-mono text-sm text-white" id="age-value">25%</span>
-                    </div>
+            <!-- CHARACTER Section -->
+            <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
+                <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
 
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Rate</span>
-                        <div class="knob knob-medium" id="modRate-knob">
-                            <div class="knob-indicator"></div>
+                <div class="p-4">
+                    <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
+                        // CHARACTERS
+                    </h2>
+                    <div class="flex justify-center gap-10">
+                        <!-- AGE -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-medium" id="age-knob">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="font-mono text-xs font-medium text-white" id="age-value">25%</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">AGE</span>
                         </div>
-                        <span class="font-mono text-sm text-white" id="modRate-value">0.5 Hz</span>
-                    </div>
 
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Depth</span>
-                        <div class="knob knob-medium" id="modDepth-knob">
-                            <div class="knob-indicator"></div>
+                        <!-- RATE -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-medium" id="modRate-knob">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="font-mono text-xs font-medium text-white" id="modRate-value">0.5 Hz</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">RATE</span>
                         </div>
-                        <span class="font-mono text-sm text-white" id="modDepth-value">3 ms</span>
-                    </div>
 
-                    <div class="flex flex-col items-center gap-2">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text uppercase">Warmth</span>
-                        <div class="knob knob-medium" id="warmth-knob">
-                            <div class="knob-indicator"></div>
+                        <!-- DEPTH -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-medium" id="modDepth-knob">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="font-mono text-xs font-medium text-white" id="modDepth-value">3 ms</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">DEPTH</span>
                         </div>
-                        <span class="font-mono text-sm text-white" id="warmth-value">30%</span>
+
+                        <!-- WARMTH -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-medium" id="warmth-knob">
+                                <div class="knob-indicator"></div>
+                            </div>
+                            <span class="font-mono text-xs font-medium text-white" id="warmth-value">30%</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">WARMTH</span>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- Test Sounds Section -->
-            <section class="bg-val-card rounded-xl p-4 border border-val-border">
-                <div class="flex items-center justify-between flex-wrap gap-4">
-                    <div class="flex items-center gap-3">
-                        <span class="text-[9px] font-semibold tracking-[2px] text-val-text-dim uppercase">Test</span>
-                        <div class="flex gap-2">
-                            <button class="sound-btn" data-sound="0">
-                                <span class="btn-icon">*</span>
-                                <span class="btn-label">Click</span>
+            <!-- TEST Section -->
+            <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
+                <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
+
+                <div class="p-3">
+                    <div class="flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-3">
+                            <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">TEST</span>
+                            <span id="sample-indicator" class="sample-indicator font-display">SYNTH</span>
+                            <select class="sound-select" id="sound-select">
+                                <option value="0">Loading...</option>
+                            </select>
+                            <button class="reload-btn" id="reload-btn" title="Reload samples from ~/Documents/FuzzDelaySamples/">
+                                <span class="reload-icon">&#x21BB;</span>
                             </button>
-                            <button class="sound-btn" data-sound="1">
-                                <span class="btn-icon">||</span>
-                                <span class="btn-label">Drums</span>
+                            <button class="play-btn" id="play-btn">
+                                <span class="play-icon">&#9658;</span>
                             </button>
-                            <button class="sound-btn" data-sound="2">
-                                <span class="btn-icon">~</span>
-                                <span class="btn-label">Synth</span>
-                            </button>
-                            <button class="sound-btn" data-sound="3">
-                                <span class="btn-icon">#</span>
-                                <span class="btn-label">Guitar</span>
-                            </button>
-                            <button class="sound-btn stop-btn" id="btn-stop">
-                                <span class="btn-icon">X</span>
-                                <span class="btn-label">Stop</span>
+                            <button class="stop-btn-small" id="stop-btn">
+                                <span class="stop-icon">&#9632;</span>
                             </button>
                         </div>
+                        <button class="toggle-btn" id="loop-toggle">
+                            <span class="toggle-icon">&#x21BB;</span>
+                            <span class="toggle-label font-display">LOOP</span>
+                        </button>
                     </div>
-                    <button class="toggle-btn" id="loop-toggle">
-                        <span class="toggle-icon">&#x21BB;</span>
-                        <span class="toggle-label">Loop</span>
-                    </button>
                 </div>
             </section>
         </main>
 
         <!-- Footer - Tempo Sync -->
-        <footer class="py-3 px-5 border-t border-val-border">
-            <div class="flex items-center justify-center gap-6 flex-wrap">
+        <footer class="py-3 px-4 border-t border-fd-border bg-fd-surface/50">
+            <div class="flex items-center justify-center gap-6">
                 <div class="flex items-center gap-2">
-                    <span class="text-[9px] font-semibold tracking-[2px] text-val-text-dim uppercase">BPM</span>
-                    <span class="font-mono text-lg text-white min-w-[60px]" id="bpm-display">120.0</span>
+                    <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">BPM</span>
+                    <span class="font-mono text-base font-bold text-fd-accent" id="bpm-display"
+                          style="text-shadow: 0 0 10px rgba(255, 107, 53, 0.3);">120.0</span>
                 </div>
-                <button class="toggle-btn" id="tempo-sync-toggle">
-                    <span class="toggle-label">Sync: Off</span>
+                <div class="w-[1px] h-4 bg-fd-border"></div>
+                <button class="toggle-btn-small" id="tempo-sync-toggle">
+                    <span class="toggle-label font-display">SYNC</span>
                 </button>
                 <select class="note-select" id="note-value-select">
                     <option value="0">1/4</option>

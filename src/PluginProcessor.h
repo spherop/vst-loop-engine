@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "DelayLine.h"
 #include "TestToneGenerator.h"
+#include "TestSoundLoader.h"
 
 class FuzzDelayProcessor : public juce::AudioProcessor
 {
@@ -39,11 +40,19 @@ public:
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
 
-    // Test tone control
-    void triggerTestSound(int soundType);
+    // Test sound control
+    void triggerTestSound(int soundIndex);
     void stopTestSound();
     void setLoopEnabled(bool enabled);
     bool getLoopEnabled() const;
+
+    // Sample loader access
+    int getNumTestSounds() const;
+    juce::String getTestSoundName(int index) const;
+    juce::StringArray getAllTestSoundNames() const;
+    juce::String getSampleFolderPath() const;
+    void reloadSamples();
+    bool usingSamplesFromDisk() const;
 
     // Tempo sync control
     void setTempoSync(bool enabled);
@@ -61,7 +70,8 @@ private:
     DelayLine delayLineL;
     DelayLine delayLineR;
 
-    // Test sounds
+    // Test sounds - sample loader (primary) and synth generator (fallback)
+    TestSoundLoader testSoundLoader;
     TestToneGenerator testToneGenerator;
 
     // Parameter pointers for efficient access

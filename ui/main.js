@@ -255,7 +255,9 @@ class KnobController {
         this.value = normalizedValue;
         const angle = this.minAngle + (this.maxAngle - this.minAngle) * normalizedValue;
         if (this.indicator) {
-            this.indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+            // translateY(-100%) moves indicator up so bottom is at center
+            // rotate() then spins around that bottom point (the knob center)
+            this.indicator.style.transform = `translateY(-100%) rotate(${angle}deg)`;
         }
         if (this.valueDisplay) {
             this.valueDisplay.textContent = this.formatValue(normalizedValue);
@@ -269,49 +271,114 @@ class KnobController {
     }
 }
 
-// Test Sound Controller
+// Test Sound Controller - with dynamic dropdown from loaded samples
 class TestSoundController {
     constructor() {
-        this.activeButton = null;
+        this.isPlaying = false;
         this.triggerTestSoundFn = getNativeFunction("triggerTestSound");
         this.stopTestSoundFn = getNativeFunction("stopTestSound");
-        this.setupButtons();
+        this.getTestSoundsFn = getNativeFunction("getTestSounds");
+        this.reloadSamplesFn = getNativeFunction("reloadSamples");
+        this.setupControls();
+        this.loadSoundList();
     }
 
-    setupButtons() {
-        document.querySelectorAll('.sound-btn[data-sound]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const soundType = parseInt(btn.dataset.sound);
-                this.triggerSound(soundType, btn);
-            });
+    setupControls() {
+        this.soundSelect = document.getElementById('sound-select');
+        this.playBtn = document.getElementById('play-btn');
+        this.stopBtn = document.getElementById('stop-btn');
+        this.reloadBtn = document.getElementById('reload-btn');
+        this.sampleIndicator = document.getElementById('sample-indicator');
+
+        if (this.playBtn) {
+            this.playBtn.addEventListener('click', () => this.play());
+        }
+
+        if (this.stopBtn) {
+            this.stopBtn.addEventListener('click', () => this.stop());
+        }
+
+        if (this.reloadBtn) {
+            this.reloadBtn.addEventListener('click', () => this.reloadSamples());
+        }
+    }
+
+    async loadSoundList() {
+        try {
+            const result = await this.getTestSoundsFn();
+            if (result && result.sounds) {
+                this.populateDropdown(result.sounds);
+                this.updateIndicator(result.usingSamples, result.sampleFolder);
+            }
+        } catch (e) {
+            console.log('Could not load sound list, using defaults');
+        }
+    }
+
+    populateDropdown(sounds) {
+        if (!this.soundSelect) return;
+
+        // Clear existing options
+        this.soundSelect.innerHTML = '';
+
+        // Add new options
+        sounds.forEach((name, index) => {
+            const option = document.createElement('option');
+            option.value = index;
+            option.textContent = name;
+            this.soundSelect.appendChild(option);
         });
+    }
 
-        const stopBtn = document.getElementById('btn-stop');
-        if (stopBtn) {
-            stopBtn.addEventListener('click', () => this.stopSound());
+    updateIndicator(usingSamples, sampleFolder) {
+        if (this.sampleIndicator) {
+            if (usingSamples) {
+                this.sampleIndicator.textContent = 'SAMPLES';
+                this.sampleIndicator.classList.add('active');
+                this.sampleIndicator.title = sampleFolder || '';
+            } else {
+                this.sampleIndicator.textContent = 'SYNTH';
+                this.sampleIndicator.classList.remove('active');
+                this.sampleIndicator.title = 'No samples found - using synthesized sounds';
+            }
         }
     }
 
-    async triggerSound(soundType, button) {
-        if (this.activeButton) {
-            this.activeButton.classList.remove('active');
+    async reloadSamples() {
+        if (this.reloadBtn) {
+            this.reloadBtn.classList.add('loading');
         }
-
-        button.classList.add('active');
-        this.activeButton = button;
 
         try {
-            await this.triggerTestSoundFn(soundType);
+            const result = await this.reloadSamplesFn();
+            if (result && result.sounds) {
+                this.populateDropdown(result.sounds);
+                this.updateIndicator(result.usingSamples);
+            }
+        } catch (e) {
+            console.error('Error reloading samples:', e);
+        }
+
+        if (this.reloadBtn) {
+            this.reloadBtn.classList.remove('loading');
+        }
+    }
+
+    async play() {
+        const soundIndex = this.soundSelect ? parseInt(this.soundSelect.value) : 0;
+        this.isPlaying = true;
+        if (this.playBtn) this.playBtn.classList.add('active');
+
+        try {
+            await this.triggerTestSoundFn(soundIndex);
         } catch (e) {
             console.error('Error triggering sound:', e);
         }
     }
 
-    async stopSound() {
-        if (this.activeButton) {
-            this.activeButton.classList.remove('active');
-            this.activeButton = null;
-        }
+    async stop() {
+        this.isPlaying = false;
+        if (this.playBtn) this.playBtn.classList.remove('active');
 
         try {
             await this.stopTestSoundFn();

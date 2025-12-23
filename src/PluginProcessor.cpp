@@ -147,7 +147,8 @@ void FuzzDelayProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     delayLineL.prepare(sampleRate, 2000); // Max 2 second delay
     delayLineR.prepare(sampleRate, 2000);
 
-    // Prepare test tone generator
+    // Prepare sample loader (primary) and synth generator (fallback)
+    testSoundLoader.prepare(sampleRate, samplesPerBlock);
     testToneGenerator.prepare(sampleRate, samplesPerBlock);
 }
 
@@ -192,8 +193,12 @@ void FuzzDelayProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, numSamples);
 
-    // Add test tone to input if playing
-    testToneGenerator.processBlock(buffer);
+    // Add test sound to input if playing
+    // Use sample loader if samples are available, otherwise fall back to synth
+    if (testSoundLoader.getNumSamples() > 0)
+        testSoundLoader.processBlock(buffer);
+    else
+        testToneGenerator.processBlock(buffer);
 
     // Get delay time - either from parameter or tempo sync
     const float delayTime = tempoSyncEnabled.load()
@@ -252,40 +257,97 @@ void FuzzDelayProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     }
 }
 
-void FuzzDelayProcessor::triggerTestSound(int soundType)
+void FuzzDelayProcessor::triggerTestSound(int soundIndex)
 {
-    switch (soundType)
+    // If we have samples loaded, use the sample loader
+    if (testSoundLoader.getNumSamples() > 0)
     {
-        case 0:
-            testToneGenerator.trigger(TestToneGenerator::SoundType::Click);
-            break;
-        case 1:
-            testToneGenerator.trigger(TestToneGenerator::SoundType::DrumLoop);
-            break;
-        case 2:
-            testToneGenerator.trigger(TestToneGenerator::SoundType::SynthChord);
-            break;
-        case 3:
-            testToneGenerator.trigger(TestToneGenerator::SoundType::GuitarChord);
-            break;
-        default:
-            break;
+        testSoundLoader.trigger(soundIndex);
+    }
+    else
+    {
+        // Fall back to synthesized sounds
+        switch (soundIndex)
+        {
+            case 0:  testToneGenerator.trigger(TestToneGenerator::SoundType::Click); break;
+            case 1:  testToneGenerator.trigger(TestToneGenerator::SoundType::DrumLoop); break;
+            case 2:  testToneGenerator.trigger(TestToneGenerator::SoundType::SynthPad); break;
+            case 3:  testToneGenerator.trigger(TestToneGenerator::SoundType::ElectricGuitar); break;
+            case 4:  testToneGenerator.trigger(TestToneGenerator::SoundType::BassGroove); break;
+            case 5:  testToneGenerator.trigger(TestToneGenerator::SoundType::PianoChord); break;
+            case 6:  testToneGenerator.trigger(TestToneGenerator::SoundType::VocalPhrase); break;
+            case 7:  testToneGenerator.trigger(TestToneGenerator::SoundType::Percussion); break;
+            case 8:  testToneGenerator.trigger(TestToneGenerator::SoundType::AmbientTexture); break;
+            case 9:  testToneGenerator.trigger(TestToneGenerator::SoundType::NoiseBurst); break;
+            default: break;
+        }
     }
 }
 
 void FuzzDelayProcessor::stopTestSound()
 {
+    testSoundLoader.stop();
     testToneGenerator.stop();
 }
 
 void FuzzDelayProcessor::setLoopEnabled(bool enabled)
 {
+    testSoundLoader.setLoopEnabled(enabled);
     testToneGenerator.setLoopEnabled(enabled);
 }
 
 bool FuzzDelayProcessor::getLoopEnabled() const
 {
-    return testToneGenerator.getLoopEnabled();
+    return testSoundLoader.getLoopEnabled();
+}
+
+int FuzzDelayProcessor::getNumTestSounds() const
+{
+    if (testSoundLoader.getNumSamples() > 0)
+        return testSoundLoader.getNumSamples();
+    return 10; // Fallback synth sounds
+}
+
+juce::String FuzzDelayProcessor::getTestSoundName(int index) const
+{
+    if (testSoundLoader.getNumSamples() > 0)
+        return testSoundLoader.getSampleName(index);
+
+    // Fallback names for synthesized sounds
+    static const char* synthNames[] = {
+        "Click", "Drum Loop", "Synth Pad", "Electric Guitar", "Bass Groove",
+        "Piano Chord", "Vocal Phrase", "Percussion", "Ambient Texture", "Noise Burst"
+    };
+    if (index >= 0 && index < 10)
+        return synthNames[index];
+    return "---";
+}
+
+juce::StringArray FuzzDelayProcessor::getAllTestSoundNames() const
+{
+    if (testSoundLoader.getNumSamples() > 0)
+        return testSoundLoader.getAllSampleNames();
+
+    // Fallback names for synthesized sounds
+    return juce::StringArray{
+        "Click", "Drum Loop", "Synth Pad", "Electric Guitar", "Bass Groove",
+        "Piano Chord", "Vocal Phrase", "Percussion", "Ambient Texture", "Noise Burst"
+    };
+}
+
+juce::String FuzzDelayProcessor::getSampleFolderPath() const
+{
+    return testSoundLoader.getSampleFolderPath();
+}
+
+void FuzzDelayProcessor::reloadSamples()
+{
+    testSoundLoader.reloadSamples();
+}
+
+bool FuzzDelayProcessor::usingSamplesFromDisk() const
+{
+    return testSoundLoader.getNumSamples() > 0;
 }
 
 void FuzzDelayProcessor::setTempoSync(bool enabled)

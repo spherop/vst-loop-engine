@@ -1,6 +1,15 @@
 #include "PluginEditor.h"
 #include "BinaryData.h"
 
+// Set to true to load UI files from disk (enables hot reload during development)
+// Set to false for production builds (loads from BinaryData)
+#define FUZZ_DELAY_DEV_MODE 1
+
+#if FUZZ_DELAY_DEV_MODE
+// Path to the ui folder - change this to match your project location
+static const char* DEV_UI_PATH = "/Users/danielnewman/Documents/code/fuzz-delay-plugin/ui/";
+#endif
+
 FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
     : AudioProcessorEditor(&p),
       processorRef(p),
@@ -58,6 +67,36 @@ FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
                       result->setProperty("loopEnabled", processorRef.getLoopEnabled());
                       complete(juce::var(result.get()));
                   })
+                  .withNativeFunction("getTestSounds", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("usingSamples", processorRef.usingSamplesFromDisk());
+                      result->setProperty("sampleFolder", processorRef.getSampleFolderPath());
+
+                      juce::Array<juce::var> names;
+                      const auto allNames = processorRef.getAllTestSoundNames();
+                      for (const auto& name : allNames)
+                          names.add(name);
+                      result->setProperty("sounds", names);
+
+                      complete(juce::var(result.get()));
+                  })
+                  .withNativeFunction("reloadSamples", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.reloadSamples();
+
+                      // Return updated list
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("usingSamples", processorRef.usingSamplesFromDisk());
+
+                      juce::Array<juce::var> names;
+                      const auto allNames = processorRef.getAllTestSoundNames();
+                      for (const auto& name : allNames)
+                          names.add(name);
+                      result->setProperty("sounds", names);
+
+                      complete(juce::var(result.get()));
+                  })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },
                       juce::URL("http://localhost/").getOrigin())),
@@ -89,9 +128,9 @@ FuzzDelayEditor::FuzzDelayEditor(FuzzDelayProcessor& p)
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
-    setSize(700, 500);
+    setSize(520, 420);
     setResizable(true, true);
-    setResizeLimits(500, 400, 1400, 1000);
+    setResizeLimits(400, 350, 800, 600);
 
     // Start timer for BPM polling (100ms interval)
     startTimerHz(10);
@@ -124,7 +163,32 @@ std::optional<juce::WebBrowserComponent::Resource> FuzzDelayEditor::getResource(
 {
     const auto urlToRetrieve = url == "/" ? juce::String("index.html") : url.fromFirstOccurrenceOf("/", false, false);
 
-    // Map URL paths to BinaryData resources
+    // Determine MIME type
+    juce::String mimeType = "application/octet-stream";
+    if (urlToRetrieve.endsWith(".html"))
+        mimeType = "text/html";
+    else if (urlToRetrieve.endsWith(".css"))
+        mimeType = "text/css";
+    else if (urlToRetrieve.endsWith(".js"))
+        mimeType = "text/javascript";
+
+#if FUZZ_DELAY_DEV_MODE
+    // DEV MODE: Load from file system for hot reload
+    juce::File file(juce::String(DEV_UI_PATH) + urlToRetrieve);
+    if (file.existsAsFile())
+    {
+        juce::MemoryBlock fileData;
+        file.loadFileAsData(fileData);
+
+        return juce::WebBrowserComponent::Resource{
+            std::vector<std::byte>(reinterpret_cast<const std::byte*>(fileData.getData()),
+                                   reinterpret_cast<const std::byte*>(fileData.getData()) + fileData.getSize()),
+            mimeType.toStdString()
+        };
+    }
+    return std::nullopt;
+#else
+    // PRODUCTION: Load from BinaryData
     static const std::map<juce::String, std::pair<const char*, int>> resourceMap = {
         {"index.html", {BinaryData::index_html, BinaryData::index_htmlSize}},
         {"styles.css", {BinaryData::styles_css, BinaryData::styles_cssSize}},
@@ -137,18 +201,10 @@ std::optional<juce::WebBrowserComponent::Resource> FuzzDelayEditor::getResource(
 
     const auto& [data, size] = it->second;
 
-    // Determine MIME type
-    juce::String mimeType = "application/octet-stream";
-    if (urlToRetrieve.endsWith(".html"))
-        mimeType = "text/html";
-    else if (urlToRetrieve.endsWith(".css"))
-        mimeType = "text/css";
-    else if (urlToRetrieve.endsWith(".js"))
-        mimeType = "text/javascript";
-
     return juce::WebBrowserComponent::Resource{
         std::vector<std::byte>(reinterpret_cast<const std::byte*>(data),
                                reinterpret_cast<const std::byte*>(data) + size),
         mimeType.toStdString()
     };
+#endif
 }

@@ -10,10 +10,16 @@ class TestToneGenerator
 public:
     enum class SoundType
     {
-        Click,       // Crisp rimshot/sidestick
-        DrumLoop,    // Funky breakbeat-style pattern
-        SynthChord,  // Lush analog pad
-        GuitarChord  // Clean electric chord with chorus
+        Click,          // 0 - Crisp rimshot/sidestick
+        DrumLoop,       // 1 - Funky breakbeat-style pattern
+        SynthPad,       // 2 - Lush analog pad
+        ElectricGuitar, // 3 - Vintage electric riff
+        BassGroove,     // 4 - Funky bass line
+        PianoChord,     // 5 - Jazz piano chord
+        VocalPhrase,    // 6 - Synth vocal "ooh"
+        Percussion,     // 7 - Conga/bongo pattern
+        AmbientTexture, // 8 - Evolving pad texture
+        NoiseBurst      // 9 - White noise burst for testing
     };
 
     TestToneGenerator() = default;
@@ -26,8 +32,14 @@ public:
         // Pre-generate all test sounds
         generateClick();
         generateDrumLoop();
-        generateSynthChord();
-        generateGuitarChord();
+        generateSynthPad();
+        generateElectricGuitar();
+        generateBassGroove();
+        generatePianoChord();
+        generateVocalPhrase();
+        generatePercussion();
+        generateAmbientTexture();
+        generateNoiseBurst();
 
         isPrepared = true;
     }
@@ -110,8 +122,14 @@ private:
 
     juce::AudioBuffer<float> clickBuffer;
     juce::AudioBuffer<float> drumLoopBuffer;
-    juce::AudioBuffer<float> synthChordBuffer;
-    juce::AudioBuffer<float> guitarChordBuffer;
+    juce::AudioBuffer<float> synthPadBuffer;
+    juce::AudioBuffer<float> electricGuitarBuffer;
+    juce::AudioBuffer<float> bassGrooveBuffer;
+    juce::AudioBuffer<float> pianoChordBuffer;
+    juce::AudioBuffer<float> vocalPhraseBuffer;
+    juce::AudioBuffer<float> percussionBuffer;
+    juce::AudioBuffer<float> ambientTextureBuffer;
+    juce::AudioBuffer<float> noiseBurstBuffer;
 
     std::atomic<int> currentSound { 0 };
     std::atomic<int> playbackPosition { 0 };
@@ -122,16 +140,22 @@ private:
     {
         switch (type)
         {
-            case SoundType::Click:       return &clickBuffer;
-            case SoundType::DrumLoop:    return &drumLoopBuffer;
-            case SoundType::SynthChord:  return &synthChordBuffer;
-            case SoundType::GuitarChord: return &guitarChordBuffer;
+            case SoundType::Click:          return &clickBuffer;
+            case SoundType::DrumLoop:       return &drumLoopBuffer;
+            case SoundType::SynthPad:       return &synthPadBuffer;
+            case SoundType::ElectricGuitar: return &electricGuitarBuffer;
+            case SoundType::BassGroove:     return &bassGrooveBuffer;
+            case SoundType::PianoChord:     return &pianoChordBuffer;
+            case SoundType::VocalPhrase:    return &vocalPhraseBuffer;
+            case SoundType::Percussion:     return &percussionBuffer;
+            case SoundType::AmbientTexture: return &ambientTextureBuffer;
+            case SoundType::NoiseBurst:     return &noiseBurstBuffer;
             default: return nullptr;
         }
     }
 
     // =========================================================================
-    // CLICK - Professional rimshot/sidestick with body and crack
+    // 0. CLICK - Professional rimshot/sidestick
     // =========================================================================
     void generateClick()
     {
@@ -149,44 +173,33 @@ private:
             const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
             float sample = 0.0f;
 
-            // Initial transient crack (first 2ms)
             if (t < 0.002f)
             {
                 const float crackEnv = 1.0f - (t / 0.002f);
                 sample += (random.nextFloat() * 2.0f - 1.0f) * crackEnv * crackEnv * 0.9f;
             }
 
-            // Stick body resonance (2-3kHz range)
             const float bodyEnv = std::exp(-t * 60.0f);
             sample += std::sin(2.0f * juce::MathConstants<float>::pi * 2500.0f * t) * bodyEnv * 0.4f;
             sample += std::sin(2.0f * juce::MathConstants<float>::pi * 3200.0f * t) * bodyEnv * 0.25f;
 
-            // Rim resonance (higher pitched ring)
             const float rimEnv = std::exp(-t * 35.0f);
             sample += std::sin(2.0f * juce::MathConstants<float>::pi * 4800.0f * t) * rimEnv * 0.2f;
 
-            // Low body thump
             const float thumpEnv = std::exp(-t * 80.0f);
             sample += std::sin(2.0f * juce::MathConstants<float>::pi * 180.0f * t) * thumpEnv * 0.35f;
 
-            // Slight stereo width
             dataL[i] = sample * 0.7f;
             dataR[i] = sample * 0.7f;
-
-            // Add subtle stereo spread with slight delay
-            if (i > 5)
-            {
-                dataR[i] += dataL[i - 5] * 0.1f;
-            }
         }
     }
 
     // =========================================================================
-    // DRUM LOOP - Funky breakbeat with ghost notes and swing
+    // 1. DRUM LOOP - Funky breakbeat
     // =========================================================================
     void generateDrumLoop()
     {
-        const float bpm = 95.0f; // Funky tempo
+        const float bpm = 95.0f;
         const float beatsPerLoop = 8.0f;
         const float loopDuration = (60.0f / bpm) * beatsPerLoop;
         const int numSamples = static_cast<int>(currentSampleRate * loopDuration);
@@ -198,41 +211,27 @@ private:
         auto* dataR = drumLoopBuffer.getWritePointer(1);
 
         const float samplesPerBeat = static_cast<float>(currentSampleRate) * 60.0f / bpm;
-        const float swing = 0.12f; // Swing amount (0-0.5)
 
-        // Funky pattern inspired by classic breaks
-        // Beat positions: K=Kick, S=Snare, H=HiHat, G=Ghost snare
-
-        // Kicks: 1, 1.5+, 3, 4.5
         addPunchyKick(dataL, dataR, 0, numSamples);
         addPunchyKick(dataL, dataR, static_cast<int>(1.5f * samplesPerBeat), numSamples);
         addPunchyKick(dataL, dataR, static_cast<int>(4.0f * samplesPerBeat), numSamples);
         addPunchyKick(dataL, dataR, static_cast<int>(5.5f * samplesPerBeat), numSamples);
 
-        // Main snares on 2 and 4 (backbeat)
         addFatSnare(dataL, dataR, static_cast<int>(2.0f * samplesPerBeat), numSamples, 1.0f);
         addFatSnare(dataL, dataR, static_cast<int>(6.0f * samplesPerBeat), numSamples, 1.0f);
-
-        // Ghost notes for groove
         addFatSnare(dataL, dataR, static_cast<int>(1.75f * samplesPerBeat), numSamples, 0.25f);
         addFatSnare(dataL, dataR, static_cast<int>(3.5f * samplesPerBeat), numSamples, 0.3f);
         addFatSnare(dataL, dataR, static_cast<int>(5.75f * samplesPerBeat), numSamples, 0.25f);
-        addFatSnare(dataL, dataR, static_cast<int>(7.25f * samplesPerBeat), numSamples, 0.35f);
 
-        // Hi-hats with swing
         for (int i = 0; i < 16; ++i)
         {
             float beatPos = static_cast<float>(i) * 0.5f;
-            // Add swing to off-beats
-            if (i % 2 == 1)
-                beatPos += swing;
-
+            if (i % 2 == 1) beatPos += 0.12f;
             const int samplePos = static_cast<int>(beatPos * samplesPerBeat);
-            const float velocity = (i % 2 == 0) ? 0.6f : 0.35f; // Accent downbeats
+            const float velocity = (i % 2 == 0) ? 0.6f : 0.35f;
             addCrispHiHat(dataL, dataR, samplePos, numSamples, velocity, i % 4 == 3);
         }
 
-        // Normalize
         const float maxLevel = std::max(
             drumLoopBuffer.getMagnitude(0, 0, numSamples),
             drumLoopBuffer.getMagnitude(1, 0, numSamples));
@@ -243,37 +242,21 @@ private:
     void addPunchyKick(float* dataL, float* dataR, int startSample, int bufferLength)
     {
         const int kickLength = static_cast<int>(currentSampleRate * 0.25);
-
-        // Layered kick: sub + punch + click
         float phase = 0.0f;
-        float clickPhase = 0.0f;
 
         for (int i = 0; i < kickLength && (startSample + i) < bufferLength; ++i)
         {
             const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
-
-            // Sub bass layer (pitch drop from 80Hz to 45Hz)
             const float subFreq = 80.0f * std::exp(-t * 8.0f) + 45.0f;
             const float subEnv = std::exp(-t * 12.0f);
             phase += 2.0f * juce::MathConstants<float>::pi * subFreq / static_cast<float>(currentSampleRate);
             float sample = std::sin(phase) * subEnv * 0.8f;
 
-            // Punch layer (100-200Hz with faster decay)
             const float punchFreq = 180.0f * std::exp(-t * 15.0f) + 80.0f;
             const float punchEnv = std::exp(-t * 25.0f);
             sample += std::sin(phase * (punchFreq / subFreq)) * punchEnv * 0.4f;
 
-            // Click transient (first 5ms)
-            if (t < 0.005f)
-            {
-                clickPhase += 2.0f * juce::MathConstants<float>::pi * 3500.0f / static_cast<float>(currentSampleRate);
-                const float clickEnv = 1.0f - (t / 0.005f);
-                sample += std::sin(clickPhase) * clickEnv * clickEnv * 0.3f;
-            }
-
-            // Soft saturation
             sample = std::tanh(sample * 1.5f);
-
             dataL[startSample + i] += sample * 0.75f;
             dataR[startSample + i] += sample * 0.75f;
         }
@@ -283,42 +266,24 @@ private:
     {
         const int snareLength = static_cast<int>(currentSampleRate * 0.18);
         juce::Random random(static_cast<juce::int64>(startSample) + 42);
-
-        // Simple biquad state for noise filtering
-        float noiseZ1 = 0.0f, noiseZ2 = 0.0f;
+        float noiseZ1 = 0.0f;
 
         for (int i = 0; i < snareLength && (startSample + i) < bufferLength; ++i)
         {
             const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
             float sample = 0.0f;
 
-            // Body tone (180-220Hz with pitch bend)
             const float bodyFreq = 200.0f + 40.0f * std::exp(-t * 50.0f);
             const float bodyEnv = std::exp(-t * 18.0f);
             sample += std::sin(2.0f * juce::MathConstants<float>::pi * bodyFreq * t) * bodyEnv * 0.5f;
 
-            // Snare wire noise (bandpass filtered)
             float noise = random.nextFloat() * 2.0f - 1.0f;
-            // Simple highpass for snare wire character
             const float hp = noise - noiseZ1 * 0.7f;
             noiseZ1 = noise;
             const float wireEnv = std::exp(-t * 12.0f) * (1.0f - std::exp(-t * 200.0f));
             sample += hp * wireEnv * 0.55f;
 
-            // Snare rattle (longer tail)
-            const float rattleEnv = std::exp(-t * 8.0f) * (1.0f - std::exp(-t * 100.0f));
-            sample += (random.nextFloat() * 2.0f - 1.0f) * rattleEnv * 0.2f;
-
-            // Initial transient pop
-            if (t < 0.003f)
-            {
-                const float popEnv = 1.0f - (t / 0.003f);
-                sample += (random.nextFloat() * 2.0f - 1.0f) * popEnv * popEnv * 0.6f;
-            }
-
             sample *= velocity;
-
-            // Slight stereo spread
             dataL[startSample + i] += sample * 0.85f;
             dataR[startSample + i] += sample * 0.85f;
         }
@@ -329,30 +294,20 @@ private:
         const float hatDuration = open ? 0.15f : 0.04f;
         const int hatLength = static_cast<int>(currentSampleRate * hatDuration);
         juce::Random random(static_cast<juce::int64>(startSample) + 789);
-
         float z1 = 0.0f, z2 = 0.0f;
 
         for (int i = 0; i < hatLength && (startSample + i) < bufferLength; ++i)
         {
             const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
-
-            // High-frequency metallic noise
             float noise = random.nextFloat() * 2.0f - 1.0f;
-
-            // Resonant highpass filter for metallic character
-            const float cutoff = 6000.0f + 2000.0f * std::sin(t * 15000.0f);
-            const float w = 2.0f * juce::MathConstants<float>::pi * cutoff / static_cast<float>(currentSampleRate);
             const float hp = noise - 1.8f * z1 + 0.85f * z2;
             z2 = z1;
             z1 = noise;
 
-            // Envelope
             const float decayRate = open ? 15.0f : 80.0f;
             const float env = std::exp(-t * decayRate) * (1.0f - std::exp(-t * 500.0f));
-
             float sample = hp * env * velocity * 0.35f;
 
-            // Pan slightly for stereo interest
             const float pan = 0.55f;
             dataL[startSample + i] += sample * (1.0f - pan);
             dataR[startSample + i] += sample * pan;
@@ -360,58 +315,39 @@ private:
     }
 
     // =========================================================================
-    // SYNTH CHORD - Lush analog-style pad with detuning and filter movement
+    // 2. SYNTH PAD - Lush analog-style pad
     // =========================================================================
-    void generateSynthChord()
+    void generateSynthPad()
     {
         const float duration = 3.0f;
         const int numSamples = static_cast<int>(currentSampleRate * duration);
 
-        synthChordBuffer.setSize(2, numSamples);
-        synthChordBuffer.clear();
+        synthPadBuffer.setSize(2, numSamples);
+        synthPadBuffer.clear();
 
-        auto* dataL = synthChordBuffer.getWritePointer(0);
-        auto* dataR = synthChordBuffer.getWritePointer(1);
+        auto* dataL = synthPadBuffer.getWritePointer(0);
+        auto* dataR = synthPadBuffer.getWritePointer(1);
 
-        // Cm7 chord for moody vibe: C3, Eb3, G3, Bb3
         const float baseFreqs[] = { 130.81f, 155.56f, 196.00f, 233.08f };
         const int numNotes = 4;
-        const int numOscs = 3; // 3 oscillators per note for thickness
-
-        // Oscillator phases and detuning
+        const float detune[3] = { -0.08f, 0.0f, 0.07f };
         float phases[4][3] = {};
-        const float detune[3] = { -0.08f, 0.0f, 0.07f }; // Cents of detuning
-
-        // Filter state (simple one-pole lowpass)
         float filterStateL = 0.0f, filterStateR = 0.0f;
-
-        // LFO for subtle movement
         float lfoPhase = 0.0f;
-        const float lfoRate = 0.3f;
 
         for (int i = 0; i < numSamples; ++i)
         {
             const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
-            const float tNorm = static_cast<float>(i) / static_cast<float>(numSamples);
 
-            // ADSR envelope: 0.5s attack, 0.3s decay, 0.7 sustain, 1.5s release
             float envelope;
-            if (t < 0.5f)
-                envelope = t / 0.5f; // Attack
-            else if (t < 0.8f)
-                envelope = 1.0f - 0.3f * ((t - 0.5f) / 0.3f); // Decay to 0.7
-            else if (t < 2.0f)
-                envelope = 0.7f; // Sustain
-            else
-                envelope = 0.7f * (1.0f - (t - 2.0f) / 1.0f); // Release
-
+            if (t < 0.5f) envelope = t / 0.5f;
+            else if (t < 0.8f) envelope = 1.0f - 0.3f * ((t - 0.5f) / 0.3f);
+            else if (t < 2.0f) envelope = 0.7f;
+            else envelope = 0.7f * std::max(0.0f, 1.0f - (t - 2.0f) / 1.0f);
             envelope = std::max(0.0f, envelope);
 
-            // LFO
-            lfoPhase += 2.0f * juce::MathConstants<float>::pi * lfoRate / static_cast<float>(currentSampleRate);
+            lfoPhase += 2.0f * juce::MathConstants<float>::pi * 0.3f / static_cast<float>(currentSampleRate);
             const float lfo = std::sin(lfoPhase);
-
-            // Filter cutoff with envelope and LFO modulation
             const float baseCutoff = 800.0f + 2000.0f * envelope + 300.0f * lfo;
             const float filterCoeff = std::exp(-2.0f * juce::MathConstants<float>::pi * baseCutoff / static_cast<float>(currentSampleRate));
 
@@ -419,179 +355,513 @@ private:
 
             for (int note = 0; note < numNotes; ++note)
             {
-                for (int osc = 0; osc < numOscs; ++osc)
+                for (int osc = 0; osc < 3; ++osc)
                 {
                     const float freq = baseFreqs[note] * std::pow(2.0f, detune[osc] / 1200.0f);
                     phases[note][osc] += 2.0f * juce::MathConstants<float>::pi * freq / static_cast<float>(currentSampleRate);
 
-                    // Saw wave approximation (first 6 harmonics)
                     float saw = 0.0f;
                     for (int h = 1; h <= 6; ++h)
                     {
-                        const float harmFreq = freq * static_cast<float>(h);
-                        if (harmFreq > currentSampleRate * 0.45f) break; // Anti-alias
+                        if (freq * static_cast<float>(h) > currentSampleRate * 0.45f) break;
                         saw += std::sin(phases[note][osc] * static_cast<float>(h)) / static_cast<float>(h);
                     }
                     saw *= 0.6f;
 
-                    // Stereo spread based on oscillator
                     const float pan = 0.5f + (static_cast<float>(osc) - 1.0f) * 0.3f;
                     sampleL += saw * (1.0f - pan);
                     sampleR += saw * pan;
                 }
             }
 
-            // Apply lowpass filter
             filterStateL += (1.0f - filterCoeff) * (sampleL - filterStateL);
             filterStateR += (1.0f - filterCoeff) * (sampleR - filterStateR);
 
-            // Apply envelope and soft saturation
-            float outL = filterStateL * envelope * 0.15f;
-            float outR = filterStateR * envelope * 0.15f;
-
-            outL = std::tanh(outL * 2.0f);
-            outR = std::tanh(outR * 2.0f);
-
-            dataL[i] = outL;
-            dataR[i] = outR;
+            dataL[i] = std::tanh(filterStateL * envelope * 0.3f);
+            dataR[i] = std::tanh(filterStateR * envelope * 0.3f);
         }
     }
 
     // =========================================================================
-    // GUITAR CHORD - Clean electric with subtle chorus and room ambience
+    // 3. ELECTRIC GUITAR - Clean arpeggiated chord with realistic tone
     // =========================================================================
-    void generateGuitarChord()
+    void generateElectricGuitar()
     {
         const float duration = 2.5f;
         const int numSamples = static_cast<int>(currentSampleRate * duration);
 
-        guitarChordBuffer.setSize(2, numSamples);
-        guitarChordBuffer.clear();
+        electricGuitarBuffer.setSize(2, numSamples);
+        electricGuitarBuffer.clear();
 
-        auto* dataL = guitarChordBuffer.getWritePointer(0);
-        auto* dataR = guitarChordBuffer.getWritePointer(1);
+        auto* dataL = electricGuitarBuffer.getWritePointer(0);
+        auto* dataR = electricGuitarBuffer.getWritePointer(1);
 
-        // Am7 chord (open position): A2, E3, G3, C4, E4
-        const float stringFreqs[] = { 110.0f, 164.81f, 196.0f, 261.63f, 329.63f };
-        const int numStrings = 5;
+        // Arpeggiated Am7 chord - realistic guitar voicing
+        // Staggered timing like a fingerpicked pattern
+        struct Note { float freq; float start; float dur; float pan; };
+        const Note notes[] = {
+            { 110.00f, 0.00f, 2.2f, 0.35f },  // A2 - bass note
+            { 164.81f, 0.08f, 2.0f, 0.40f },  // E3
+            { 220.00f, 0.16f, 1.8f, 0.50f },  // A3
+            { 261.63f, 0.24f, 1.6f, 0.55f },  // C4
+            { 329.63f, 0.32f, 1.4f, 0.60f },  // E4
+            { 392.00f, 0.40f, 1.2f, 0.65f },  // G4
+        };
+        const int numNotes = 6;
 
-        // Karplus-Strong delay lines for each string
-        std::vector<std::vector<float>> delayLines(numStrings);
-        std::vector<int> delayIndices(numStrings, 0);
-        std::vector<float> lastSamples(numStrings, 0.0f);
-
-        juce::Random random(42);
-
-        // Initialize delay lines with noise bursts (pluck excitation)
-        for (int s = 0; s < numStrings; ++s)
+        for (int n = 0; n < numNotes; ++n)
         {
-            const int delayLength = static_cast<int>(currentSampleRate / stringFreqs[s]);
-            delayLines[s].resize(static_cast<size_t>(delayLength), 0.0f);
+            const int startSample = static_cast<int>(notes[n].start * currentSampleRate);
+            const int noteSamples = static_cast<int>(notes[n].dur * currentSampleRate);
+            const float freq = notes[n].freq;
 
-            // Noise burst with slight filtering for pluck character
-            float prev = 0.0f;
-            for (int i = 0; i < delayLength; ++i)
+            // Improved Karplus-Strong with better initialization
+            const int periodSamples = static_cast<int>(currentSampleRate / freq);
+            std::vector<float> delayLine(static_cast<size_t>(periodSamples), 0.0f);
+
+            juce::Random random(static_cast<juce::int64>(n * 1000 + 777));
+
+            // Initialize with shaped noise (pick position simulation)
+            // Pick closer to bridge = more harmonics
+            const float pickPos = 0.13f; // 13% from bridge
+            for (int i = 0; i < periodSamples; ++i)
             {
-                float noise = random.nextFloat() * 2.0f - 1.0f;
-                // Simple lowpass to soften the pluck
-                noise = noise * 0.6f + prev * 0.4f;
-                prev = noise;
-                delayLines[s][static_cast<size_t>(i)] = noise;
+                float pos = static_cast<float>(i) / static_cast<float>(periodSamples);
+                // Create a pluck shape - triangular with pick position
+                float pluck;
+                if (pos < pickPos)
+                    pluck = pos / pickPos;
+                else
+                    pluck = (1.0f - pos) / (1.0f - pickPos);
+
+                // Add some noise for realism
+                float noise = random.nextFloat() * 0.3f - 0.15f;
+                delayLine[static_cast<size_t>(i)] = (pluck + noise) * 0.8f;
+            }
+
+            int readIdx = 0;
+            float prevSample = 0.0f;
+            float prevPrevSample = 0.0f;
+
+            // Lowpass filter state for body resonance
+            float bodyFilter = 0.0f;
+
+            for (int i = 0; i < noteSamples && (startSample + i) < numSamples; ++i)
+            {
+                const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
+
+                // Read from delay line
+                float current = delayLine[static_cast<size_t>(readIdx)];
+
+                // Improved lowpass filter (smoother decay, more realistic)
+                // Two-point average with adjustable damping
+                const float damping = 0.996f - (freq / 20000.0f) * 0.01f; // Higher notes decay faster
+                const float brightness = 0.5f + 0.3f * std::exp(-t * 2.0f); // Brightness decreases over time
+
+                float filtered = brightness * current + (1.0f - brightness) * prevSample;
+                filtered = filtered * damping;
+
+                // Store back
+                delayLine[static_cast<size_t>(readIdx)] = filtered;
+                prevPrevSample = prevSample;
+                prevSample = current;
+
+                readIdx = (readIdx + 1) % periodSamples;
+
+                // Envelope - guitar string decay
+                float env = std::exp(-t * 1.8f);
+
+                // Quick attack
+                if (t < 0.002f)
+                    env *= t / 0.002f;
+
+                float sample = current * env;
+
+                // Add body resonance (lowpassed version for warmth)
+                bodyFilter += 0.05f * (sample - bodyFilter);
+                sample = sample * 0.7f + bodyFilter * 0.3f;
+
+                // Gentle tube-style saturation
+                sample = std::tanh(sample * 1.5f) * 0.65f;
+
+                // Stereo placement based on string
+                const float pan = notes[n].pan;
+                dataL[startSample + i] += sample * (1.0f - pan) * 0.7f;
+                dataR[startSample + i] += sample * pan * 0.7f;
             }
         }
 
-        // Strum timing (slight delay between strings)
-        const float strumTime = 0.025f;
-        std::vector<int> strumOffsets(numStrings);
-        for (int s = 0; s < numStrings; ++s)
-            strumOffsets[s] = static_cast<int>(s * strumTime * currentSampleRate);
+        // Add a subtle room reverb tail (simple comb filter)
+        const int reverbDelay = static_cast<int>(currentSampleRate * 0.031f);
+        float reverbL = 0.0f, reverbR = 0.0f;
+        std::vector<float> reverbBufL(static_cast<size_t>(reverbDelay), 0.0f);
+        std::vector<float> reverbBufR(static_cast<size_t>(reverbDelay), 0.0f);
+        int reverbIdx = 0;
 
-        // Chorus LFO
-        float chorusPhaseL = 0.0f, chorusPhaseR = juce::MathConstants<float>::pi * 0.5f;
-        const float chorusRate = 1.2f;
-        const float chorusDepth = 0.002f; // 2ms max modulation
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float dryL = dataL[i];
+            float dryR = dataR[i];
 
-        // Simple reverb (comb filter approximation)
-        const int reverbLength = static_cast<int>(currentSampleRate * 0.05);
-        std::vector<float> reverbL(static_cast<size_t>(reverbLength), 0.0f);
-        std::vector<float> reverbR(static_cast<size_t>(reverbLength), 0.0f);
-        int reverbIndex = 0;
-        const float reverbDecay = 0.35f;
+            float delayedL = reverbBufL[static_cast<size_t>(reverbIdx)];
+            float delayedR = reverbBufR[static_cast<size_t>(reverbIdx)];
+
+            reverbBufL[static_cast<size_t>(reverbIdx)] = dryL + delayedL * 0.3f;
+            reverbBufR[static_cast<size_t>(reverbIdx)] = dryR + delayedR * 0.3f;
+
+            dataL[i] = dryL + delayedL * 0.15f;
+            dataR[i] = dryR + delayedR * 0.15f;
+
+            reverbIdx = (reverbIdx + 1) % reverbDelay;
+        }
+
+        // Normalize
+        const float maxLevel = std::max(
+            electricGuitarBuffer.getMagnitude(0, 0, numSamples),
+            electricGuitarBuffer.getMagnitude(1, 0, numSamples));
+        if (maxLevel > 0.0f)
+            electricGuitarBuffer.applyGain(0.75f / maxLevel);
+    }
+
+    // =========================================================================
+    // 4. BASS GROOVE - Funky slap bass line
+    // =========================================================================
+    void generateBassGroove()
+    {
+        const float duration = 2.0f;
+        const int numSamples = static_cast<int>(currentSampleRate * duration);
+
+        bassGrooveBuffer.setSize(2, numSamples);
+        bassGrooveBuffer.clear();
+
+        auto* dataL = bassGrooveBuffer.getWritePointer(0);
+        auto* dataR = bassGrooveBuffer.getWritePointer(1);
+
+        // Funky bass pattern: E1, G1, A1, rest, E1, E1 (octave), G1
+        struct Note { float freq; float start; float dur; bool slap; };
+        const Note notes[] = {
+            { 41.2f,  0.0f,   0.18f, true },
+            { 49.0f,  0.25f,  0.15f, false },
+            { 55.0f,  0.5f,   0.20f, false },
+            { 41.2f,  0.85f,  0.12f, true },
+            { 82.4f,  1.0f,   0.15f, false },
+            { 49.0f,  1.25f,  0.25f, false },
+            { 41.2f,  1.6f,   0.30f, true },
+        };
+        const int numNotes = 7;
+
+        for (int n = 0; n < numNotes; ++n)
+        {
+            const int startSample = static_cast<int>(notes[n].start * currentSampleRate);
+            const int noteSamples = static_cast<int>(notes[n].dur * currentSampleRate);
+
+            float phase = 0.0f;
+            const float freq = notes[n].freq;
+
+            for (int i = 0; i < noteSamples && (startSample + i) < numSamples; ++i)
+            {
+                const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
+
+                // Envelope: fast attack, moderate decay
+                float env;
+                if (t < 0.005f) env = t / 0.005f;
+                else env = std::exp(-t * 8.0f) * 0.7f + 0.3f * std::exp(-t * 2.0f);
+
+                // Pitch envelope for slap
+                float pitchEnv = 1.0f;
+                if (notes[n].slap && t < 0.02f)
+                    pitchEnv = 1.0f + (1.0f - t / 0.02f) * 0.5f;
+
+                phase += 2.0f * juce::MathConstants<float>::pi * freq * pitchEnv / static_cast<float>(currentSampleRate);
+
+                // Bass with harmonics
+                float sample = std::sin(phase) * 0.6f;
+                sample += std::sin(phase * 2.0f) * 0.25f * env;
+                sample += std::sin(phase * 3.0f) * 0.1f * env;
+
+                // Slap pop transient
+                if (notes[n].slap && t < 0.01f)
+                {
+                    const float popEnv = 1.0f - t / 0.01f;
+                    sample += std::sin(phase * 8.0f) * popEnv * popEnv * 0.4f;
+                }
+
+                sample *= env;
+                sample = std::tanh(sample * 1.5f) * 0.7f;
+
+                dataL[startSample + i] += sample;
+                dataR[startSample + i] += sample;
+            }
+        }
+    }
+
+    // =========================================================================
+    // 5. PIANO CHORD - Jazz voicing
+    // =========================================================================
+    void generatePianoChord()
+    {
+        const float duration = 2.5f;
+        const int numSamples = static_cast<int>(currentSampleRate * duration);
+
+        pianoChordBuffer.setSize(2, numSamples);
+        pianoChordBuffer.clear();
+
+        auto* dataL = pianoChordBuffer.getWritePointer(0);
+        auto* dataR = pianoChordBuffer.getWritePointer(1);
+
+        // Cmaj9 voicing: C3, E3, G3, B3, D4
+        const float freqs[] = { 130.81f, 164.81f, 196.0f, 246.94f, 293.66f };
+        const int numNotes = 5;
+
+        for (int n = 0; n < numNotes; ++n)
+        {
+            float phase = 0.0f;
+            const float freq = freqs[n];
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
+
+                // Piano-like envelope
+                float env;
+                if (t < 0.01f) env = t / 0.01f;
+                else env = std::exp(-t * 1.5f);
+
+                phase += 2.0f * juce::MathConstants<float>::pi * freq / static_cast<float>(currentSampleRate);
+
+                // Piano harmonics (hammer strike characteristic)
+                float sample = 0.0f;
+                sample += std::sin(phase) * 0.5f;
+                sample += std::sin(phase * 2.0f) * 0.25f * std::exp(-t * 3.0f);
+                sample += std::sin(phase * 3.0f) * 0.15f * std::exp(-t * 4.0f);
+                sample += std::sin(phase * 4.0f) * 0.08f * std::exp(-t * 5.0f);
+                sample += std::sin(phase * 5.0f) * 0.04f * std::exp(-t * 6.0f);
+
+                // Slight inharmonicity
+                sample += std::sin(phase * 2.01f) * 0.02f * std::exp(-t * 3.0f);
+
+                sample *= env * 0.15f;
+
+                // Stereo placement based on pitch
+                const float pan = 0.3f + static_cast<float>(n) * 0.1f;
+                dataL[i] += sample * (1.0f - pan);
+                dataR[i] += sample * pan;
+            }
+        }
+    }
+
+    // =========================================================================
+    // 6. VOCAL PHRASE - Synth "ooh" sound
+    // =========================================================================
+    void generateVocalPhrase()
+    {
+        const float duration = 2.0f;
+        const int numSamples = static_cast<int>(currentSampleRate * duration);
+
+        vocalPhraseBuffer.setSize(2, numSamples);
+        vocalPhraseBuffer.clear();
+
+        auto* dataL = vocalPhraseBuffer.getWritePointer(0);
+        auto* dataR = vocalPhraseBuffer.getWritePointer(1);
+
+        const float baseFreq = 220.0f; // A3
+        float phase = 0.0f;
+
+        // Formant frequencies for "ooh" vowel
+        const float formant1 = 300.0f;
+        const float formant2 = 870.0f;
+        const float formant3 = 2240.0f;
 
         for (int i = 0; i < numSamples; ++i)
         {
             const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
 
-            // Guitar body resonance envelope
-            float envelope;
-            if (t < 0.01f)
-                envelope = t / 0.01f;
-            else
-                envelope = std::exp(-(t - 0.01f) * 1.8f);
+            // Envelope with vibrato
+            float env;
+            if (t < 0.3f) env = t / 0.3f;
+            else if (t < 1.5f) env = 1.0f;
+            else env = std::max(0.0f, 1.0f - (t - 1.5f) / 0.5f);
 
-            float sampleL = 0.0f, sampleR = 0.0f;
+            // Vibrato
+            const float vibrato = 1.0f + 0.015f * std::sin(t * 25.0f) * std::min(1.0f, t / 0.5f);
 
-            // Process each string
-            for (int s = 0; s < numStrings; ++s)
+            phase += 2.0f * juce::MathConstants<float>::pi * baseFreq * vibrato / static_cast<float>(currentSampleRate);
+
+            // Generate harmonics
+            float sample = 0.0f;
+            for (int h = 1; h <= 20; ++h)
             {
-                const int effectivePos = i - strumOffsets[s];
-                if (effectivePos < 0) continue;
+                const float harmFreq = baseFreq * static_cast<float>(h);
+                if (harmFreq > currentSampleRate * 0.4f) break;
 
-                const int delayLen = static_cast<int>(delayLines[s].size());
-                const int idx = delayIndices[s];
+                // Apply formant shaping
+                float formantGain = 0.0f;
+                formantGain += std::exp(-std::pow((harmFreq - formant1) / 80.0f, 2.0f));
+                formantGain += std::exp(-std::pow((harmFreq - formant2) / 120.0f, 2.0f)) * 0.5f;
+                formantGain += std::exp(-std::pow((harmFreq - formant3) / 200.0f, 2.0f)) * 0.3f;
 
-                // Karplus-Strong: read, filter, write back
-                const float current = delayLines[s][static_cast<size_t>(idx)];
-                const float filtered = 0.5f * (current + lastSamples[s]);
-                lastSamples[s] = current;
-
-                // Decay factor (higher strings decay faster)
-                const float decay = 0.996f - static_cast<float>(s) * 0.0003f;
-                delayLines[s][static_cast<size_t>(idx)] = filtered * decay;
-
-                delayIndices[s] = (idx + 1) % delayLen;
-
-                // Pan strings across stereo field
-                const float pan = 0.3f + static_cast<float>(s) * 0.1f;
-                sampleL += current * (1.0f - pan);
-                sampleR += current * pan;
+                sample += std::sin(phase * static_cast<float>(h)) * formantGain / static_cast<float>(h);
             }
 
-            sampleL *= envelope;
-            sampleR *= envelope;
+            sample *= env * 0.3f;
 
-            // Chorus effect
-            chorusPhaseL += 2.0f * juce::MathConstants<float>::pi * chorusRate / static_cast<float>(currentSampleRate);
-            chorusPhaseR += 2.0f * juce::MathConstants<float>::pi * chorusRate / static_cast<float>(currentSampleRate);
+            dataL[i] = sample;
+            dataR[i] = sample;
+        }
+    }
 
-            const float chorusModL = std::sin(chorusPhaseL) * chorusDepth * static_cast<float>(currentSampleRate);
-            const float chorusModR = std::sin(chorusPhaseR) * chorusDepth * static_cast<float>(currentSampleRate);
+    // =========================================================================
+    // 7. PERCUSSION - Conga pattern
+    // =========================================================================
+    void generatePercussion()
+    {
+        const float duration = 2.0f;
+        const int numSamples = static_cast<int>(currentSampleRate * duration);
 
-            // Simple chorus using short delay modulation
-            if (i > static_cast<int>(chorusDepth * currentSampleRate * 2.0f))
+        percussionBuffer.setSize(2, numSamples);
+        percussionBuffer.clear();
+
+        auto* dataL = percussionBuffer.getWritePointer(0);
+        auto* dataR = percussionBuffer.getWritePointer(1);
+
+        // Conga pattern timings and types (0=low, 1=high, 2=slap)
+        struct Hit { float time; int type; float vel; };
+        const Hit hits[] = {
+            { 0.0f,   0, 1.0f },
+            { 0.25f,  1, 0.7f },
+            { 0.5f,   2, 0.9f },
+            { 0.75f,  1, 0.6f },
+            { 1.0f,   0, 1.0f },
+            { 1.2f,   1, 0.5f },
+            { 1.35f,  1, 0.6f },
+            { 1.5f,   2, 0.85f },
+            { 1.75f,  0, 0.7f },
+        };
+        const int numHits = 9;
+
+        for (int h = 0; h < numHits; ++h)
+        {
+            const int startSample = static_cast<int>(hits[h].time * currentSampleRate);
+            const float baseFreq = (hits[h].type == 0) ? 200.0f : ((hits[h].type == 1) ? 280.0f : 350.0f);
+            const int hitLength = static_cast<int>(currentSampleRate * 0.2);
+
+            juce::Random random(startSample);
+
+            for (int i = 0; i < hitLength && (startSample + i) < numSamples; ++i)
             {
-                const int chorusDelayL = static_cast<int>(chorusDepth * currentSampleRate + chorusModL);
-                const int chorusDelayR = static_cast<int>(chorusDepth * currentSampleRate + chorusModR);
-                sampleL = sampleL * 0.7f + dataL[i - chorusDelayL] * 0.3f;
-                sampleR = sampleR * 0.7f + dataR[i - chorusDelayR] * 0.3f;
+                const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
+
+                // Pitch drop
+                const float freq = baseFreq * (1.0f + 0.5f * std::exp(-t * 50.0f));
+                const float env = std::exp(-t * 20.0f);
+
+                float sample = std::sin(2.0f * juce::MathConstants<float>::pi * freq * t) * env;
+
+                // Add click for slap
+                if (hits[h].type == 2 && t < 0.003f)
+                {
+                    sample += (random.nextFloat() * 2.0f - 1.0f) * (1.0f - t / 0.003f) * 0.5f;
+                }
+
+                sample *= hits[h].vel * 0.6f;
+
+                // Stereo placement
+                const float pan = 0.4f + hits[h].type * 0.15f;
+                dataL[startSample + i] += sample * (1.0f - pan);
+                dataR[startSample + i] += sample * pan;
             }
+        }
+    }
 
-            // Room ambience (simple comb reverb)
-            const float reverbIn = (sampleL + sampleR) * 0.5f;
-            const float reverbOut = reverbL[static_cast<size_t>(reverbIndex)] * reverbDecay;
-            reverbL[static_cast<size_t>(reverbIndex)] = reverbIn + reverbOut * 0.3f;
-            reverbR[static_cast<size_t>((reverbIndex + reverbLength / 3) % reverbLength)] = reverbIn + reverbOut * 0.25f;
-            reverbIndex = (reverbIndex + 1) % reverbLength;
+    // =========================================================================
+    // 8. AMBIENT TEXTURE - Evolving pad with noise
+    // =========================================================================
+    void generateAmbientTexture()
+    {
+        const float duration = 4.0f;
+        const int numSamples = static_cast<int>(currentSampleRate * duration);
 
-            sampleL += reverbOut * 0.15f;
-            sampleR += reverbR[static_cast<size_t>((reverbIndex + reverbLength * 2 / 3) % reverbLength)] * reverbDecay * 0.15f;
+        ambientTextureBuffer.setSize(2, numSamples);
+        ambientTextureBuffer.clear();
 
-            // Gentle tube-like warmth
-            sampleL = std::tanh(sampleL * 1.2f) * 0.6f;
-            sampleR = std::tanh(sampleR * 1.2f) * 0.6f;
+        auto* dataL = ambientTextureBuffer.getWritePointer(0);
+        auto* dataR = ambientTextureBuffer.getWritePointer(1);
 
-            dataL[i] = sampleL;
-            dataR[i] = sampleR;
+        juce::Random random(999);
+        float filterL = 0.0f, filterR = 0.0f;
+        float lfo1 = 0.0f, lfo2 = 0.0f;
+        float phase1 = 0.0f, phase2 = 0.0f;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
+
+            // Slow envelope
+            float env;
+            if (t < 1.5f) env = t / 1.5f;
+            else if (t < 3.0f) env = 1.0f;
+            else env = std::max(0.0f, 1.0f - (t - 3.0f) / 1.0f);
+
+            // LFOs
+            lfo1 += 2.0f * juce::MathConstants<float>::pi * 0.1f / static_cast<float>(currentSampleRate);
+            lfo2 += 2.0f * juce::MathConstants<float>::pi * 0.07f / static_cast<float>(currentSampleRate);
+
+            // Two drones
+            const float freq1 = 110.0f + std::sin(lfo1) * 5.0f;
+            const float freq2 = 165.0f + std::sin(lfo2) * 7.0f;
+
+            phase1 += 2.0f * juce::MathConstants<float>::pi * freq1 / static_cast<float>(currentSampleRate);
+            phase2 += 2.0f * juce::MathConstants<float>::pi * freq2 / static_cast<float>(currentSampleRate);
+
+            float sampleL = std::sin(phase1) * 0.3f + std::sin(phase2) * 0.2f;
+            float sampleR = std::sin(phase1 + 0.5f) * 0.3f + std::sin(phase2 + 0.3f) * 0.2f;
+
+            // Add filtered noise
+            const float noise = random.nextFloat() * 2.0f - 1.0f;
+            const float cutoff = 500.0f + 300.0f * std::sin(lfo1 * 0.5f);
+            const float coeff = std::exp(-2.0f * juce::MathConstants<float>::pi * cutoff / static_cast<float>(currentSampleRate));
+
+            filterL += (1.0f - coeff) * (noise * 0.1f - filterL);
+            filterR += (1.0f - coeff) * (noise * 0.1f - filterR);
+
+            sampleL += filterL;
+            sampleR += filterR;
+
+            dataL[i] = sampleL * env * 0.5f;
+            dataR[i] = sampleR * env * 0.5f;
+        }
+    }
+
+    // =========================================================================
+    // 9. NOISE BURST - White noise for testing transients
+    // =========================================================================
+    void generateNoiseBurst()
+    {
+        const float duration = 0.5f;
+        const int numSamples = static_cast<int>(currentSampleRate * duration);
+
+        noiseBurstBuffer.setSize(2, numSamples);
+        noiseBurstBuffer.clear();
+
+        auto* dataL = noiseBurstBuffer.getWritePointer(0);
+        auto* dataR = noiseBurstBuffer.getWritePointer(1);
+
+        juce::Random random(12345);
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float t = static_cast<float>(i) / static_cast<float>(currentSampleRate);
+
+            // Fast attack, exponential decay
+            float env;
+            if (t < 0.001f) env = t / 0.001f;
+            else env = std::exp(-t * 10.0f);
+
+            const float noiseL = random.nextFloat() * 2.0f - 1.0f;
+            const float noiseR = random.nextFloat() * 2.0f - 1.0f;
+
+            dataL[i] = noiseL * env * 0.7f;
+            dataR[i] = noiseR * env * 0.7f;
         }
     }
 
