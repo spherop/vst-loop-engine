@@ -343,13 +343,29 @@ public:
         // Process ALL layers with content up to highestLayer
         // Each layer can be independently muted regardless of currentLayer
         bool anyPlaying = false;
+
+        // Debug: log layer processing once per second
+        static int debugCounter = 0;
+        bool shouldLog = (++debugCounter % 1000 == 0);
+
         for (int i = 0; i <= highestLayer; ++i)
         {
-            if (!layers[i].hasContent() && layers[i].getState() != LoopBuffer::State::Recording)
+            bool hasContent = layers[i].hasContent();
+            bool isRecording = (layers[i].getState() == LoopBuffer::State::Recording);
+            bool isMuted = layers[i].getMuted();
+
+            if (!hasContent && !isRecording)
                 continue;
 
+            if (shouldLog)
+            {
+                DBG("Layer " + juce::String(i) + ": hasContent=" + juce::String(hasContent ? 1 : 0) +
+                    " state=" + juce::String(static_cast<int>(layers[i].getState())) +
+                    " muted=" + juce::String(isMuted ? 1 : 0));
+            }
+
             // Skip muted layers (but still advance playhead so they stay in sync)
-            if (layers[i].getMuted())
+            if (isMuted)
             {
                 // Create a dummy buffer just to advance the layer's state
                 juce::AudioBuffer<float> dummyBuffer(numChannels, numSamples);

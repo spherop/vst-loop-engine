@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.3.5";
+const UI_VERSION = "0.3.6";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -1125,6 +1125,11 @@ class LooperController {
 
         // Draw per-layer waveforms if available (colored, stacked)
         if (hasLayerData) {
+            // Debug: log once when we have multiple layers
+            if (layerWaveforms.length > 1 && !this._loggedLayerColors) {
+                console.log(`[DRAW] Drawing ${layerWaveforms.length} layers with colors:`, this.layerColors.slice(0, layerWaveforms.length));
+                this._loggedLayerColors = true;
+            }
             for (let layerIdx = 0; layerIdx < layerWaveforms.length; layerIdx++) {
                 const layerData = layerWaveforms[layerIdx];
                 if (!layerData || layerData.length === 0) continue;
@@ -1477,6 +1482,10 @@ class LooperController {
 
                     // Update waveform if provided (with per-layer colors if available)
                     if (state.layerWaveforms || state.waveform) {
+                        // Debug: log layer waveform data
+                        if (state.layerWaveforms && state.layerWaveforms.length > 1) {
+                            console.log(`[WAVEFORM] ${state.layerWaveforms.length} layers, mutes:`, state.layerMutes);
+                        }
                         this.drawWaveform(state.waveform, state.layerWaveforms, state.layerMutes);
                     }
 
