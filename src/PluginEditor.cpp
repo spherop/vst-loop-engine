@@ -32,6 +32,8 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(loopStartRelay)
                   .withOptionsFrom(loopEndRelay)
                   .withOptionsFrom(loopSpeedRelay)
+                  .withOptionsFrom(loopPitchRelay)
+                  .withOptionsFrom(loopFadeRelay)
                   .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().record();
@@ -129,6 +131,10 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           param->setValueNotifyingHost(param->convertTo0to1(1.0f));
                       if (auto* param = processorRef.getAPVTS().getParameter("loopReverse"))
                           param->setValueNotifyingHost(0.0f);
+                      if (auto* param = processorRef.getAPVTS().getParameter("loopPitch"))
+                          param->setValueNotifyingHost(param->convertTo0to1(0.0f));  // 0 semitones
+                      if (auto* param = processorRef.getAPVTS().getParameter("loopFade"))
+                          param->setValueNotifyingHost(param->convertTo0to1(100.0f));  // 100% (no fade)
 
                       DBG("resetLoopParams complete");
                       complete({});
@@ -314,7 +320,13 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                         processorRef.getAPVTS().undoManager),
       loopSpeedAttachment(*processorRef.getAPVTS().getParameter("loopSpeed"),
                           loopSpeedRelay,
-                          processorRef.getAPVTS().undoManager)
+                          processorRef.getAPVTS().undoManager),
+      loopPitchAttachment(*processorRef.getAPVTS().getParameter("loopPitch"),
+                          loopPitchRelay,
+                          processorRef.getAPVTS().undoManager),
+      loopFadeAttachment(*processorRef.getAPVTS().getParameter("loopFade"),
+                         loopFadeRelay,
+                         processorRef.getAPVTS().undoManager)
 {
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

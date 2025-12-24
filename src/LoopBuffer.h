@@ -47,6 +47,12 @@ public:
         // Prepare smoothed values
         playbackRateSmoothed.reset(sampleRate, 0.05);  // 50ms smoothing
         playbackRateSmoothed.setCurrentAndTargetValue(1.0f);
+
+        pitchRatioSmoothed.reset(sampleRate, 0.1);  // 100ms smoothing for pitch
+        pitchRatioSmoothed.setCurrentAndTargetValue(1.0f);
+
+        fadeSmoothed.reset(sampleRate, 0.1);  // 100ms smoothing for fade
+        fadeSmoothed.setCurrentAndTargetValue(1.0f);  // Default to 100% (no fade)
     }
 
     void clear()
@@ -62,6 +68,14 @@ public:
         state.store(State::Idle);
         isReversed.store(false);
         playbackRateSmoothed.setCurrentAndTargetValue(1.0f);
+        pitchRatioSmoothed.setCurrentAndTargetValue(1.0f);
+        fadeSmoothed.setCurrentAndTargetValue(1.0f);
+        grainPhase = 0.0f;
+        pitchReadPos1 = 0.0f;
+        pitchReadPos2 = 0.0f;
+        wasPitchShifting = false;
+        currentFadeMultiplier = 1.0f;
+        lastPlayheadPosition = 0.0f;
     }
 
     // Transport controls
@@ -127,6 +141,8 @@ public:
         {
             if (loopLength > 0)
             {
+                // Reset fade multiplier when starting overdub so new content is at full volume
+                currentFadeMultiplier = 1.0f;
                 state.store(State::Overdubbing);
             }
         }
@@ -145,17 +161,23 @@ public:
     {
         if (loopLength > 0)
         {
+            // Reset fade multiplier when starting playback
+            currentFadeMultiplier = 1.0f;
+            lastPlayheadPosition = 0.0f;
+
             // Start from appropriate end based on direction
             if (isReversed.load())
             {
                 // For reverse playback, start from the end
                 const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
                 playHead = static_cast<float>(effectiveEnd - 1);
+                lastPlayheadPosition = 1.0f;  // Start at end for reverse
             }
             else
             {
                 // For forward playback, start from the beginning
                 playHead = static_cast<float>(loopStart);
+                lastPlayheadPosition = 0.0f;
             }
             state.store(State::Playing);
         }
@@ -202,6 +224,41 @@ public:
     void setReverse(bool reversed)
     {
         isReversed.store(reversed);
+    }
+
+    // Pitch shift in semitones (-12 to +12)
+    void setPitchShift(float semitones)
+    {
+        float clampedSemitones = std::clamp(semitones, -12.0f, 12.0f);
+        // Convert semitones to pitch ratio: ratio = 2^(semitones/12)
+        float targetRatio = std::pow(2.0f, clampedSemitones / 12.0f);
+        pitchRatioSmoothed.setTargetValue(targetRatio);
+
+        // Debug logging
+        static int logCounter = 0;
+        if (++logCounter % 10000 == 0) {
+            DBG("setPitchShift: semitones=" + juce::String(semitones, 2) +
+                " -> ratio=" + juce::String(targetRatio, 4));
+        }
+    }
+
+    float getPitchShift() const
+    {
+        // Convert ratio back to semitones for UI
+        float ratio = pitchRatioSmoothed.getTargetValue();
+        return 12.0f * std::log2(ratio);
+    }
+
+    // Fade/decay amount: 0.0 = fade after one loop, 1.0 = no fade (infinite)
+    void setFade(float fadeAmount)
+    {
+        float clampedFade = std::clamp(fadeAmount, 0.0f, 1.0f);
+        fadeSmoothed.setTargetValue(clampedFade);
+    }
+
+    float getFade() const
+    {
+        return fadeSmoothed.getTargetValue();
     }
 
     // Process audio
@@ -354,11 +411,25 @@ private:
 
     // Playback control
     juce::SmoothedValue<float> playbackRateSmoothed;
+    juce::SmoothedValue<float> pitchRatioSmoothed;
+    juce::SmoothedValue<float> fadeSmoothed;  // 0.0 = full fade, 1.0 = no fade
     std::atomic<bool> isReversed { false };
     std::atomic<State> state { State::Idle };
 
     // Preset loop length (0 = free/unlimited)
     int targetLoopLength = 0;
+
+    // Granular pitch shifter state
+    // Uses two overlapping grains for smooth pitch shifting
+    static constexpr int GRAIN_SIZE = 2048;  // Grain size in samples
+    float grainPhase = 0.0f;       // Phase within current grain cycle (0-1)
+    float pitchReadPos1 = 0.0f;    // Continuous read position for grain 1
+    float pitchReadPos2 = 0.0f;    // Continuous read position for grain 2
+    bool wasPitchShifting = false; // Track when pitch shifting state changes
+
+    // Fade/decay tracking
+    float currentFadeMultiplier = 1.0f;  // Current fade level (starts at 1.0, decays each loop)
+    float lastPlayheadPosition = 0.0f;   // For detecting loop boundary crossings
 
     void processRecording(float inputL, float inputR, float& outputL, float& outputR)
     {
@@ -393,9 +464,48 @@ private:
             return;
         }
 
-        // Read loop playback with interpolation
-        float loopL = readWithInterpolation(bufferL, playHead);
-        float loopR = readWithInterpolation(bufferR, playHead);
+        // Get current pitch ratio and fade
+        const float pitchRatio = pitchRatioSmoothed.getNextValue();
+        const float fadeTarget = fadeSmoothed.getNextValue();
+
+        // Detect loop boundary crossing for fade decay
+        const float currentPos = getPlayheadPosition();
+        const bool loopWrapped = detectLoopWrap(lastPlayheadPosition, currentPos);
+        lastPlayheadPosition = currentPos;
+
+        if (loopWrapped)
+        {
+            // Apply fade decay when loop wraps around
+            // fadeTarget of 1.0 = no decay, 0.0 = instant silence
+            currentFadeMultiplier *= fadeTarget;
+        }
+
+        // If completely faded, stop the loop
+        if (currentFadeMultiplier < 0.001f)
+        {
+            outputL = inputL;
+            outputR = inputR;
+            return;
+        }
+
+        float loopL, loopR;
+
+        // SIMPLE TEST: Just read at pitchRatio speed to verify basic pitch change works
+        // This will cause the loop to play through faster/slower AND change pitch
+        // (true pitch shifting without speed change requires the granular approach)
+        //
+        // For now, let's verify the pitch actually changes with this simple approach
+        loopL = readWithInterpolation(bufferL, playHead);
+        loopR = readWithInterpolation(bufferR, playHead);
+
+        // Keep these synced for when we re-enable granular
+        pitchReadPos1 = playHead;
+        pitchReadPos2 = playHead;
+        wasPitchShifting = (std::abs(pitchRatio - 1.0f) >= 0.001f);
+
+        // Apply fade multiplier
+        loopL *= currentFadeMultiplier;
+        loopR *= currentFadeMultiplier;
 
         // Mix loop playback with input passthrough for seamless monitoring
         // This allows hearing the instrument while the loop plays
@@ -432,11 +542,12 @@ private:
         outputL += inputL;
         outputR += inputR;
 
-        // Advance playhead
-        advancePlayhead();
+        // Advance playhead WITHOUT pitch ratio (recording must happen at normal speed)
+        advancePlayhead(false);
     }
 
-    void advancePlayhead()
+    // Advance playhead - applyPitch should be false during recording/overdubbing
+    void advancePlayhead(bool applyPitch = true)
     {
         const float rate = playbackRateSmoothed.getNextValue();
         const bool reversed = isReversed.load();
@@ -447,9 +558,23 @@ private:
         if (effectiveLength <= 0)
             return;
 
+        // Only apply pitch ratio during pure playback, not during recording/overdubbing
+        // During recording, we need to write at normal speed
+        float effectiveRate = rate;
+        if (applyPitch)
+        {
+            const float pitchRatio = pitchRatioSmoothed.getNextValue();
+            effectiveRate *= pitchRatio;
+        }
+        else
+        {
+            // Still need to consume the smoothed value to keep it advancing
+            pitchRatioSmoothed.getNextValue();
+        }
+
         if (reversed)
         {
-            playHead -= rate;
+            playHead -= effectiveRate;
             // Wrap around for proper looping at any speed
             while (playHead < effectiveStart)
             {
@@ -458,7 +583,7 @@ private:
         }
         else
         {
-            playHead += rate;
+            playHead += effectiveRate;
             // Wrap around for proper looping at any speed
             while (playHead >= effectiveEnd)
             {
@@ -477,6 +602,82 @@ private:
         const float frac = position - std::floor(position);
 
         return buffer[idx0] * (1.0f - frac) + buffer[idx1] * frac;
+    }
+
+    // Simple pitch shift: just read at a different rate
+    // For now, let's try the simplest possible approach
+    // and see if we get ANY pitch change at all
+    float readWithPitchShift(const std::vector<float>& buffer, float pitchRatio)
+    {
+        if (loopLength <= 0)
+            return 0.0f;
+
+        const int effectiveStart = loopStart;
+        const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
+        const float effectiveLength = static_cast<float>(effectiveEnd - effectiveStart);
+
+        if (effectiveLength <= 0)
+            return 0.0f;
+
+        // Debug: log pitch ratio periodically
+        static int debugCounter = 0;
+        if (++debugCounter % 48000 == 0) {
+            DBG("readWithPitchShift: pitchRatio=" + juce::String(pitchRatio, 4) +
+                " pitchReadPos1=" + juce::String(pitchReadPos1, 1) +
+                " playHead=" + juce::String(playHead, 1) +
+                " grainPhase=" + juce::String(grainPhase, 3));
+        }
+
+        // Wrap helper for positions within loop bounds
+        auto wrapPos = [effectiveStart, effectiveLength, effectiveEnd](float pos) {
+            while (pos < effectiveStart) pos += effectiveLength;
+            while (pos >= effectiveEnd) pos -= effectiveLength;
+            return pos;
+        };
+
+        // Calculate Hann windows for each tap
+        const float phase1 = grainPhase;
+        const float phase2 = std::fmod(grainPhase + 0.5f, 1.0f);
+
+        // Hann window: 0.5 * (1 - cos(2*pi*phase))
+        const float window1 = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * phase1));
+        const float window2 = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * phase2));
+
+        // Read from both tap positions
+        float pos1 = wrapPos(pitchReadPos1);
+        float pos2 = wrapPos(pitchReadPos2);
+
+        const float sample1 = readWithInterpolation(buffer, pos1);
+        const float sample2 = readWithInterpolation(buffer, pos2);
+
+        // Advance both read positions at pitchRatio speed
+        pitchReadPos1 += pitchRatio;
+        pitchReadPos2 += pitchRatio;
+
+        // Keep read positions wrapped
+        pitchReadPos1 = wrapPos(pitchReadPos1);
+        pitchReadPos2 = wrapPos(pitchReadPos2);
+
+        // Advance the phase counter
+        float prevPhase = grainPhase;
+        grainPhase += 1.0f / static_cast<float>(GRAIN_SIZE);
+
+        // When tap 1's window completes, reset it to playhead
+        if (grainPhase >= 1.0f)
+        {
+            grainPhase -= 1.0f;
+            pitchReadPos1 = playHead;
+        }
+
+        // When tap 2's window completes
+        float prevPhase2 = std::fmod(prevPhase + 0.5f, 1.0f);
+        float newPhase2 = std::fmod(grainPhase + 0.5f, 1.0f);
+        if (newPhase2 < prevPhase2)
+        {
+            pitchReadPos2 = playHead;
+        }
+
+        return sample1 * window1 + sample2 * window2;
     }
 
     void applyCrossfade()
@@ -507,6 +708,22 @@ private:
         else if (x < -1.0f)
             return -1.0f + std::exp(-(-x - 1.0f));
         return x;
+    }
+
+    // Detect if the playhead wrapped around (crossed loop boundary)
+    bool detectLoopWrap(float prevPos, float currentPos)
+    {
+        // Forward playback: detect when position jumps from high to low
+        if (!isReversed.load())
+        {
+            // If previous was > 0.9 and current is < 0.1, loop wrapped forward
+            return (prevPos > 0.9f && currentPos < 0.1f);
+        }
+        else
+        {
+            // Reverse playback: detect when position jumps from low to high
+            return (prevPos < 0.1f && currentPos > 0.9f);
+        }
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoopBuffer)

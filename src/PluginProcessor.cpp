@@ -116,6 +116,23 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         "Loop Reverse",
         false));
 
+    // Pitch shift: -12 to +12 semitones, with 0 at center
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"loopPitch", 1},
+        "Loop Pitch",
+        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("st")));
+
+    // Loop fade/decay: 0% (play once) to 100% (infinite loop)
+    // This is like feedback for a delay - controls how much signal remains per loop cycle
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"loopFade", 1},
+        "Loop Fade",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        100.0f,  // Default to 100% (no fade - infinite loop)
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
     return { params.begin(), params.end() };
 }
 
@@ -271,6 +288,10 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         loopEngine.setSpeed(loopSpeedParam->load());
     if (auto* loopReverseParam = apvts.getRawParameterValue("loopReverse"))
         loopEngine.setReverse(loopReverseParam->load() > 0.5f);
+    if (auto* loopPitchParam = apvts.getRawParameterValue("loopPitch"))
+        loopEngine.setPitchShift(loopPitchParam->load());
+    if (auto* loopFadeParam = apvts.getRawParameterValue("loopFade"))
+        loopEngine.setFade(loopFadeParam->load() / 100.0f);  // Convert 0-100% to 0-1
 
     // Process through loop engine
     loopEngine.processBlock(buffer);

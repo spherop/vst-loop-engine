@@ -34,6 +34,8 @@ private:
     juce::WebSliderRelay loopStartRelay { "loopStart" };
     juce::WebSliderRelay loopEndRelay { "loopEnd" };
     juce::WebSliderRelay loopSpeedRelay { "loopSpeed" };
+    juce::WebSliderRelay loopPitchRelay { "loopPitch" };
+    juce::WebSliderRelay loopFadeRelay { "loopFade" };
 
     juce::WebBrowserComponent webView;
 
@@ -53,6 +55,8 @@ private:
     juce::WebSliderParameterAttachment loopStartAttachment;
     juce::WebSliderParameterAttachment loopEndAttachment;
     juce::WebSliderParameterAttachment loopSpeedAttachment;
+    juce::WebSliderParameterAttachment loopPitchAttachment;
+    juce::WebSliderParameterAttachment loopFadeAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
 

@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.2.3";
+const UI_VERSION = "0.3.2";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -196,7 +196,15 @@ class KnobController {
     }
 
     setupEvents() {
-        this.element.addEventListener('mousedown', (e) => this.startDrag(e));
+        this.element.addEventListener('mousedown', (e) => {
+            // Cmd+click (Mac) or Ctrl+click (Windows) to reset to default
+            if (e.metaKey || e.ctrlKey) {
+                e.preventDefault();
+                this.resetToDefault();
+                return;
+            }
+            this.startDrag(e);
+        });
         document.addEventListener('mousemove', (e) => this.drag(e));
         document.addEventListener('mouseup', () => this.endDrag());
 
@@ -218,6 +226,12 @@ class KnobController {
             this.setValue(Math.max(0, Math.min(1, this.value + delta)));
             this.sendToJuce();
         }, { passive: false });
+
+        // Double-click to reset to default
+        this.element.addEventListener('dblclick', (e) => {
+            e.preventDefault();
+            this.resetToDefault();
+        });
     }
 
     setupJuceBinding() {
@@ -314,6 +328,11 @@ class KnobController {
 
     sendToJuce() {
         if (this.sliderState) {
+            // Debug logging for pitch parameter
+            if (this.paramName === 'loopPitch') {
+                const scaled = this.sliderState.normalisedToScaledValue(this.value);
+                console.log(`[PITCH SEND] normalized=${this.value.toFixed(3)} -> scaled=${scaled.toFixed(2)} (props: start=${this.sliderState.properties.start}, end=${this.sliderState.properties.end})`);
+            }
             this.sliderState.setNormalisedValue(this.value);
         }
     }
@@ -698,6 +717,14 @@ class LooperController {
             if (loopSpeedKnob) {
                 loopSpeedKnob.resetToDefault();
                 console.log('[SYNC] Reset loopSpeed knob to default');
+            }
+            if (loopPitchKnob) {
+                loopPitchKnob.resetToDefault();
+                console.log('[SYNC] Reset loopPitch knob to default');
+            }
+            if (loopFadeKnob) {
+                loopFadeKnob.resetToDefault();
+                console.log('[SYNC] Reset loopFade knob to default');
             }
 
             // Reset reverse button state via native function
@@ -1355,6 +1382,8 @@ let looperController = null;
 let loopStartKnob = null;
 let loopEndKnob = null;
 let loopSpeedKnob = null;
+let loopPitchKnob = null;
+let loopFadeKnob = null;
 
 // Host Transport Sync Controller
 class HostSyncController {
@@ -1582,6 +1611,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return `${speed.toFixed(2)}x`;
         },
         defaultValue: 0.5  // Default to 1.0x speed
+    });
+
+    // Loop Pitch: -12 to +12 semitones (center = 0)
+    // The C++ parameter sends scaled values (-12 to +12)
+    loopPitchKnob = new KnobController('loopPitch-knob', 'loopPitch', {
+        formatValue: (v) => {
+            // v is normalized 0-1, but we need to show the actual semitone value
+            // The SliderState will have received properties from C++ with start=-12, end=12
+            const state = getSliderState('loopPitch');
+            const start = state?.properties?.start ?? -12;
+            const end = state?.properties?.end ?? 12;
+            const semitones = v * (end - start) + start;
+            const sign = semitones >= 0 ? '+' : '';
+            console.log(`[PITCH] formatValue: normalized=${v.toFixed(3)}, start=${start}, end=${end}, semitones=${semitones.toFixed(2)}`);
+            return `${sign}${semitones.toFixed(1)} st`;
+        },
+        defaultValue: 0.5  // Default to 0 semitones (no pitch shift)
+    });
+
+    // Add additional debug logging for pitch slider state
+    const pitchState = getSliderState('loopPitch');
+    pitchState.propertiesChangedEvent.addListener(() => {
+        console.log(`[PITCH] Properties changed:`, pitchState.properties);
+    });
+    pitchState.valueChangedEvent.addListener(() => {
+        console.log(`[PITCH] Value changed: scaledValue=${pitchState.scaledValue}, normalized=${pitchState.getNormalisedValue().toFixed(3)}`);
+    });
+
+    // Loop Fade: 0% (play once) to 100% (infinite loop)
+    loopFadeKnob = new KnobController('loopFade-knob', 'loopFade', {
+        formatValue: (v) => `${Math.round(v * 100)}%`,
+        defaultValue: 1.0  // Default to 100% (no fade - infinite loop)
     });
 
     // Delay Tab Knobs

@@ -88,12 +88,16 @@ public:
         isReversed = false;
 
         // Reset all layers to default loop parameters
+        // NOTE: Pitch and Fade are NOT reset here because they are controlled
+        // by APVTS parameters which are updated on every audio callback.
+        // Resetting them here causes oscillation between 0 and the parameter value.
         for (int i = 0; i < NUM_LAYERS; ++i)
         {
             layers[i].setLoopStart(0.0f);
             layers[i].setLoopEnd(1.0f);
             layers[i].setPlaybackRate(1.0f);
             layers[i].setReverse(false);
+            // Pitch and fade are controlled by APVTS, don't reset here
         }
     }
 
@@ -241,6 +245,24 @@ public:
         for (int i = 0; i < NUM_LAYERS; ++i)
         {
             layers[i].setReverse(reversed);
+        }
+    }
+
+    void setPitchShift(float semitones)
+    {
+        // Apply to ALL layers so new layers get the current setting
+        for (int i = 0; i < NUM_LAYERS; ++i)
+        {
+            layers[i].setPitchShift(semitones);
+        }
+    }
+
+    // Fade/decay: 0.0 = fade completely after one loop, 1.0 = no fade (infinite)
+    void setFade(float fadeAmount)
+    {
+        for (int i = 0; i < NUM_LAYERS; ++i)
+        {
+            layers[i].setFade(fadeAmount);
         }
     }
 
