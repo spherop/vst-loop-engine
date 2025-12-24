@@ -2,8 +2,10 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
+#include "PhaseVocoder.h"
 #include <vector>
 #include <atomic>
+#include <array>
 
 class LoopBuffer
 {
@@ -53,6 +55,12 @@ public:
 
         fadeSmoothed.reset(sampleRate, 0.1);  // 100ms smoothing for fade
         fadeSmoothed.setCurrentAndTargetValue(1.0f);  // Default to 100% (no fade)
+
+        // Prepare phase vocoder for high-quality pitch shifting during playback
+        phaseVocoder.prepare(sampleRate);
+
+        // Initialize granular pitch shifter grains (for monitoring/lower latency)
+        initGrains();
     }
 
     void clear()
@@ -71,12 +79,12 @@ public:
         playbackRateSmoothed.setCurrentAndTargetValue(1.0f);
         pitchRatioSmoothed.setCurrentAndTargetValue(1.0f);
         fadeSmoothed.setCurrentAndTargetValue(1.0f);
-        grainPhase = 0.0f;
-        pitchReadPos1 = 0.0f;
-        pitchReadPos2 = 0.0f;
-        wasPitchShifting = false;
         currentFadeMultiplier = 1.0f;
         lastPlayheadPosition = 0.0f;
+
+        // Reset pitch shifters
+        phaseVocoder.reset();
+        initGrains();
     }
 
     // Transport controls
@@ -212,6 +220,8 @@ public:
     void stop()
     {
         state.store(State::Idle);
+        // Reset pitch shifter to prevent latent audio from continuing
+        phaseVocoder.reset();
     }
 
     // Parameter setters
@@ -468,6 +478,18 @@ private:
     float currentFadeMultiplier = 1.0f;  // Current fade level (starts at 1.0, decays each loop)
     float lastPlayheadPosition = 0.0f;   // For detecting loop boundary crossings
 
+    // FFT Phase Vocoder for high-quality pitch shifting during playback
+    StereoPhaseVocoder phaseVocoder;
+
+    void initGrains()
+    {
+        // Reset granular pitch shifter state
+        grainPhase = 0.0f;
+        pitchReadPos1 = 0.0f;
+        pitchReadPos2 = static_cast<float>(GRAIN_SIZE) / 2.0f;  // Offset by half grain
+        wasPitchShifting = false;
+    }
+
     void processRecording(float inputL, float inputR, float& outputL, float& outputR)
     {
         // Check if we've reached the target length (if set)
@@ -501,36 +523,43 @@ private:
             return;
         }
 
-        // Get current pitch ratio (consume smoothed value even if not using fade)
+        // Get current pitch ratio
         const float pitchRatio = pitchRatioSmoothed.getNextValue();
         fadeSmoothed.getNextValue();  // Consume but don't use - fade only applies in overdub
 
-        // Track position for UI (no fade decay in playback mode)
+        // Track position for UI
         lastPlayheadPosition = getPlayheadPosition();
+
+        // Read from loop buffer at current playhead
+        float rawL = readWithInterpolation(bufferL, playHead);
+        float rawR = readWithInterpolation(bufferR, playHead);
 
         float loopL, loopR;
 
-        // SIMPLE TEST: Just read at pitchRatio speed to verify basic pitch change works
-        // This will cause the loop to play through faster/slower AND change pitch
-        // (true pitch shifting without speed change requires the granular approach)
-        //
-        // For now, let's verify the pitch actually changes with this simple approach
-        loopL = readWithInterpolation(bufferL, playHead);
-        loopR = readWithInterpolation(bufferR, playHead);
+        // Check if pitch shifting is needed
+        const bool isPitchShifting = std::abs(pitchRatio - 1.0f) >= 0.001f;
 
-        // Keep these synced for when we re-enable granular
-        pitchReadPos1 = playHead;
-        pitchReadPos2 = playHead;
-        wasPitchShifting = (std::abs(pitchRatio - 1.0f) >= 0.001f);
+        if (isPitchShifting)
+        {
+            // Use FFT phase vocoder for high-quality pitch shifting
+            // The vocoder changes pitch WITHOUT affecting playback speed
+            phaseVocoder.setPitchRatio(pitchRatio);
+            phaseVocoder.processSample(rawL, rawR, loopL, loopR);
+        }
+        else
+        {
+            // No pitch shift needed - pass through directly
+            loopL = rawL;
+            loopR = rawR;
+        }
 
-        // No fade in playback mode - fade only applies during overdub
         // Mix loop playback with input passthrough for seamless monitoring
-        // This allows hearing the instrument while the loop plays
         outputL = loopL + inputL;
         outputR = loopR + inputR;
 
-        // Advance playhead
-        advancePlayhead();
+        // Advance playhead at NORMAL speed (not affected by pitch ratio)
+        // This is the key difference from tape-style pitch shifting
+        advancePlayhead(false);  // false = don't multiply by pitch ratio
     }
 
     void processOverdubbing(float inputL, float inputR, float& outputL, float& outputR)

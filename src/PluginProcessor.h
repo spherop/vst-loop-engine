@@ -5,8 +5,6 @@
 #include "DelayLine.h"
 #include "LoopEngine.h"
 #include "DegradeProcessor.h"
-#include "TestToneGenerator.h"
-#include "TestSoundLoader.h"
 
 class LoopEngineProcessor : public juce::AudioProcessor
 {
@@ -41,22 +39,6 @@ public:
     void setStateInformation(const void* data, int sizeInBytes) override;
 
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
-
-    // Test sound control
-    void triggerTestSound(int soundIndex);
-    void stopTestSound();
-    void setLoopEnabled(bool enabled);
-    bool getLoopEnabled() const;
-
-    // Sample loader access
-    int getNumTestSounds() const;
-    juce::String getTestSoundName(int index) const;
-    juce::StringArray getAllTestSoundNames() const;
-    juce::String getSampleFolderPath() const;
-    void reloadSamples();
-    bool usingSamplesFromDisk() const;
-    void setSampleFolder(const juce::String& path);
-    TestSoundLoader& getTestSoundLoader() { return testSoundLoader; }
 
     // Tempo sync control
     void setTempoSync(bool enabled);
@@ -104,10 +86,6 @@ private:
     DelayLine delayLineR;
     LoopEngine loopEngine;
     DegradeProcessor degradeProcessor;
-
-    // Test sounds - sample loader (primary) and synth generator (fallback)
-    TestSoundLoader testSoundLoader;
-    TestToneGenerator testToneGenerator;
 
     // Parameter pointers for efficient access
     std::atomic<float>* delayTimeParam = nullptr;

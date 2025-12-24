@@ -551,7 +551,15 @@ public:
         DBG("LoopEngine::setLoopLengthBars(" + juce::String(bars) + ")");
     }
 
+    // Set additional beats (0-7, adds to bars)
+    void setLoopLengthBeats(int beats)
+    {
+        presetLengthBeats.store(std::clamp(beats, 0, 7));
+        DBG("LoopEngine::setLoopLengthBeats(" + juce::String(beats) + ")");
+    }
+
     int getLoopLengthBars() const { return presetLengthBars.load(); }
+    int getLoopLengthBeats() const { return presetLengthBeats.load(); }
 
     // Set host BPM for calculating bar lengths
     void setHostBpm(float bpm)
@@ -563,17 +571,22 @@ public:
     int getTargetLoopLengthSamples() const
     {
         int bars = presetLengthBars.load();
-        if (bars <= 0)
+        int beats = presetLengthBeats.load();
+
+        // If both are 0, it's free mode
+        if (bars <= 0 && beats <= 0)
             return 0;  // Free mode - no limit
 
         float bpm = hostBpm.load();
         if (bpm <= 0.0f)
             bpm = 120.0f;  // Default fallback
 
-        // 4 beats per bar, samples per beat = sampleRate * 60 / BPM
+        // Calculate total beats: bars * 4 + additional beats
+        int totalBeats = (bars * 4) + beats;
+
+        // samples per beat = sampleRate * 60 / BPM
         double samplesPerBeat = currentSampleRate * 60.0 / static_cast<double>(bpm);
-        double samplesPerBar = samplesPerBeat * 4.0;
-        return static_cast<int>(samplesPerBar * bars);
+        return static_cast<int>(samplesPerBeat * totalBeats);
     }
 
 private:
@@ -583,7 +596,8 @@ private:
     int masterLoopLength = 0;
     double currentSampleRate = 44100.0;
     bool isReversed = false;  // Master reverse state
-    std::atomic<int> presetLengthBars { 0 };  // 0 = free, 1/2/4/8 = bars
+    std::atomic<int> presetLengthBars { 0 };  // 0 = free, 1-16 = bars
+    std::atomic<int> presetLengthBeats { 0 }; // 0-7 additional beats
     std::atomic<float> hostBpm { 120.0f };
 
     LoopBuffer::State getCurrentState() const

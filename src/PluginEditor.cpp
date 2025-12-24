@@ -114,6 +114,16 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       }
                       complete({});
                   })
+                  .withNativeFunction("setLoopLengthBeats", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int beats = static_cast<int>(args[0]);
+                          processorRef.getLoopEngine().setLoopLengthBeats(beats);
+                          DBG("setLoopLengthBeats: " + juce::String(beats));
+                      }
+                      complete({});
+                  })
                   .withNativeFunction("setLoopReverse", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       DBG("========================================");
@@ -214,23 +224,6 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
 
                       complete(juce::var(result.get()));
                   })
-                  .withNativeFunction("triggerTestSound", [this](const juce::Array<juce::var>& args, auto complete)
-                  {
-                      if (args.size() > 0)
-                          processorRef.triggerTestSound(static_cast<int>(args[0]));
-                      complete({});
-                  })
-                  .withNativeFunction("stopTestSound", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      processorRef.stopTestSound();
-                      complete({});
-                  })
-                  .withNativeFunction("setLoopEnabled", [this](const juce::Array<juce::var>& args, auto complete)
-                  {
-                      if (args.size() > 0)
-                          processorRef.setLoopEnabled(static_cast<bool>(args[0]));
-                      complete({});
-                  })
                   .withNativeFunction("setTempoSync", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
@@ -249,7 +242,6 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("bpm", processorRef.getHostBpm());
                       result->setProperty("syncEnabled", processorRef.getTempoSyncEnabled());
                       result->setProperty("noteValue", processorRef.getTempoNoteValue());
-                      result->setProperty("loopEnabled", processorRef.getLoopEnabled());
                       result->setProperty("delayEnabled", processorRef.getDelayEnabled());
                       result->setProperty("hostTransportSync", processorRef.getHostTransportSync());
                       result->setProperty("hostPlaying", processorRef.isHostPlaying());
@@ -311,77 +303,6 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("hpQ", degrade.getCurrentHPQ());
                       result->setProperty("lpQ", degrade.getCurrentLPQ());
                       complete(juce::var(result.get()));
-                  })
-                  .withNativeFunction("getTestSounds", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
-                      result->setProperty("usingSamples", processorRef.usingSamplesFromDisk());
-                      result->setProperty("sampleFolder", processorRef.getSampleFolderPath());
-
-                      juce::Array<juce::var> names;
-                      const auto allNames = processorRef.getAllTestSoundNames();
-                      for (const auto& name : allNames)
-                          names.add(name);
-                      result->setProperty("sounds", names);
-
-                      complete(juce::var(result.get()));
-                  })
-                  .withNativeFunction("reloadSamples", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      processorRef.reloadSamples();
-
-                      // Return updated list
-                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
-                      result->setProperty("usingSamples", processorRef.usingSamplesFromDisk());
-
-                      juce::Array<juce::var> names;
-                      const auto allNames = processorRef.getAllTestSoundNames();
-                      for (const auto& name : allNames)
-                          names.add(name);
-                      result->setProperty("sounds", names);
-
-                      complete(juce::var(result.get()));
-                  })
-                  .withNativeFunction("chooseSampleFolder", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      // Create file chooser (must persist during async operation)
-                      fileChooser = std::make_unique<juce::FileChooser>(
-                          "Select Sample Folder",
-                          juce::File(processorRef.getSampleFolderPath()),
-                          "",
-                          true);
-
-                      fileChooser->launchAsync(
-                          juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories,
-                          [this, complete](const juce::FileChooser& fc)
-                          {
-                              auto results = fc.getResults();
-                              if (results.size() > 0)
-                              {
-                                  juce::File folder = results[0];
-                                  processorRef.setSampleFolder(folder.getFullPathName());
-
-                                  // Return updated state
-                                  juce::DynamicObject::Ptr result = new juce::DynamicObject();
-                                  result->setProperty("usingSamples", processorRef.usingSamplesFromDisk());
-                                  result->setProperty("sampleFolder", processorRef.getSampleFolderPath());
-
-                                  juce::Array<juce::var> names;
-                                  const auto allNames = processorRef.getAllTestSoundNames();
-                                  for (const auto& name : allNames)
-                                      names.add(name);
-                                  result->setProperty("sounds", names);
-
-                                  complete(juce::var(result.get()));
-                              }
-                              else
-                              {
-                                  // User cancelled - return current state
-                                  juce::DynamicObject::Ptr result = new juce::DynamicObject();
-                                  result->setProperty("cancelled", true);
-                                  complete(juce::var(result.get()));
-                              }
-                          });
                   })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },

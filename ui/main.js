@@ -358,206 +358,6 @@ class KnobController {
     }
 }
 
-// Test Sound Controller - with dynamic dropdown from loaded samples
-class TestSoundController {
-    constructor() {
-        this.isPlaying = false;
-        this.triggerTestSoundFn = getNativeFunction("triggerTestSound");
-        this.stopTestSoundFn = getNativeFunction("stopTestSound");
-        this.getTestSoundsFn = getNativeFunction("getTestSounds");
-        this.reloadSamplesFn = getNativeFunction("reloadSamples");
-        this.chooseFolderFn = getNativeFunction("chooseSampleFolder");
-        this.setupControls();
-        this.loadSoundList();
-    }
-
-    setupControls() {
-        this.soundSelect = document.getElementById('sound-select');
-        this.playBtn = document.getElementById('play-btn');
-        this.stopBtn = document.getElementById('stop-btn');
-        this.reloadBtn = document.getElementById('reload-btn');
-        this.folderBtn = document.getElementById('folder-btn');
-        this.folderPath = document.getElementById('folder-path');
-        this.sampleIndicator = document.getElementById('sample-indicator');
-
-        if (this.playBtn) {
-            this.playBtn.addEventListener('click', () => this.play());
-        }
-
-        if (this.stopBtn) {
-            this.stopBtn.addEventListener('click', () => this.stop());
-        }
-
-        if (this.reloadBtn) {
-            this.reloadBtn.addEventListener('click', () => this.reloadSamples());
-        }
-
-        if (this.folderBtn) {
-            this.folderBtn.addEventListener('click', () => this.chooseFolder());
-        }
-    }
-
-    async loadSoundList() {
-        try {
-            const result = await this.getTestSoundsFn();
-            if (result && result.sounds) {
-                this.populateDropdown(result.sounds);
-                this.updateIndicator(result.usingSamples, result.sampleFolder);
-            }
-        } catch (e) {
-            console.log('Could not load sound list, using defaults');
-        }
-    }
-
-    populateDropdown(sounds) {
-        if (!this.soundSelect) return;
-
-        // Clear existing options
-        this.soundSelect.innerHTML = '';
-
-        // Add new options
-        sounds.forEach((name, index) => {
-            const option = document.createElement('option');
-            option.value = index;
-            option.textContent = name;
-            this.soundSelect.appendChild(option);
-        });
-    }
-
-    updateIndicator(usingSamples, sampleFolder) {
-        if (this.sampleIndicator) {
-            if (usingSamples) {
-                this.sampleIndicator.textContent = 'SAMPLES';
-                this.sampleIndicator.classList.add('active');
-                this.sampleIndicator.title = sampleFolder || '';
-            } else {
-                this.sampleIndicator.textContent = 'SYNTH';
-                this.sampleIndicator.classList.remove('active');
-                this.sampleIndicator.title = 'No samples found - using synthesized sounds';
-            }
-        }
-
-        // Update folder path display
-        if (this.folderPath && sampleFolder) {
-            // Shorten the path for display
-            const shortPath = sampleFolder.replace(/^\/Users\/[^\/]+/, '~');
-            this.folderPath.textContent = shortPath;
-            this.folderPath.title = sampleFolder;
-        }
-    }
-
-    async chooseFolder() {
-        if (this.folderBtn) {
-            this.folderBtn.classList.add('loading');
-        }
-
-        try {
-            const result = await this.chooseFolderFn();
-            if (result && !result.cancelled) {
-                if (result.sounds) {
-                    this.populateDropdown(result.sounds);
-                }
-                this.updateIndicator(result.usingSamples, result.sampleFolder);
-            }
-        } catch (e) {
-            console.error('Error choosing folder:', e);
-        }
-
-        if (this.folderBtn) {
-            this.folderBtn.classList.remove('loading');
-        }
-    }
-
-    async reloadSamples() {
-        if (this.reloadBtn) {
-            this.reloadBtn.classList.add('loading');
-        }
-
-        try {
-            const result = await this.reloadSamplesFn();
-            if (result && result.sounds) {
-                this.populateDropdown(result.sounds);
-                this.updateIndicator(result.usingSamples);
-            }
-        } catch (e) {
-            console.error('Error reloading samples:', e);
-        }
-
-        if (this.reloadBtn) {
-            this.reloadBtn.classList.remove('loading');
-        }
-    }
-
-    async play() {
-        const soundIndex = this.soundSelect ? parseInt(this.soundSelect.value) : 0;
-        this.isPlaying = true;
-        if (this.playBtn) this.playBtn.classList.add('active');
-
-        try {
-            await this.triggerTestSoundFn(soundIndex);
-        } catch (e) {
-            console.error('Error triggering sound:', e);
-        }
-    }
-
-    async stop() {
-        this.isPlaying = false;
-        if (this.playBtn) this.playBtn.classList.remove('active');
-
-        try {
-            await this.stopTestSoundFn();
-        } catch (e) {
-            console.error('Error stopping sound:', e);
-        }
-    }
-}
-
-// Loop Toggle Controller
-class LoopToggleController {
-    constructor() {
-        this.element = document.getElementById('loop-toggle');
-        this.isEnabled = false;
-        this.setLoopFn = getNativeFunction("setLoopEnabled");
-
-        if (this.element) {
-            this.element.addEventListener('click', () => this.toggle());
-        }
-
-        // Get initial state
-        this.fetchInitialState();
-    }
-
-    async fetchInitialState() {
-        try {
-            const getStateFn = getNativeFunction("getTempoState");
-            const state = await getStateFn();
-            if (state && typeof state.loopEnabled !== 'undefined') {
-                this.isEnabled = state.loopEnabled;
-                this.updateUI();
-            }
-        } catch (e) {
-            console.log('Could not fetch initial loop state');
-        }
-    }
-
-    async toggle() {
-        this.isEnabled = !this.isEnabled;
-        this.updateUI();
-
-        try {
-            await this.setLoopFn(this.isEnabled);
-        } catch (e) {
-            console.error('Error setting loop:', e);
-        }
-    }
-
-    updateUI() {
-        if (this.element) {
-            this.element.classList.toggle('active', this.isEnabled);
-        }
-    }
-}
-
 // Tab Controller with LED toggle support
 class TabController {
     constructor() {
@@ -774,9 +574,11 @@ class LooperController {
         this.jumpToLayerFn = getNativeFunction("loopJumpToLayer");
         this.resetParamsFn = getNativeFunction("resetLoopParams");
 
-        // Loop length setting (in bars, 0 = free/unlimited)
+        // Loop length setting (bars + beats)
         this.loopLengthBars = 0;
-        this.setLoopLengthFn = getNativeFunction("setLoopLengthBars");
+        this.loopLengthBeats = 0;
+        this.setLoopLengthBarsFn = getNativeFunction("setLoopLengthBars");
+        this.setLoopLengthBeatsFn = getNativeFunction("setLoopLengthBeats");
 
         this.setupTransport();
         this.setupLoopLengthSelector();
@@ -871,28 +673,45 @@ class LooperController {
     }
 
     setupLoopLengthSelector() {
-        this.lengthButtons = document.querySelectorAll('.length-btn');
+        this.barsSelect = document.getElementById('bars-select');
+        this.beatsSelect = document.getElementById('beats-select');
 
-        this.lengthButtons.forEach(btn => {
-            btn.addEventListener('click', () => {
-                const length = btn.dataset.length;
-                this.setLoopLength(length === 'free' ? 0 : parseInt(length));
-
-                // Update button states
-                this.lengthButtons.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
+        if (this.barsSelect) {
+            this.barsSelect.addEventListener('change', () => {
+                const bars = parseInt(this.barsSelect.value);
+                this.setLoopLengthBars(bars);
             });
-        });
+        }
+
+        if (this.beatsSelect) {
+            this.beatsSelect.addEventListener('change', () => {
+                const beats = parseInt(this.beatsSelect.value);
+                this.setLoopLengthBeats(beats);
+            });
+        }
     }
 
-    async setLoopLength(bars) {
+    async setLoopLengthBars(bars) {
         this.loopLengthBars = bars;
-        console.log(`[LOOPER] Setting loop length to ${bars === 0 ? 'FREE' : bars + ' bars'}`);
+        const totalBeats = (bars * 4) + this.loopLengthBeats;
+        console.log(`[LOOPER] Setting loop length: ${bars} bars + ${this.loopLengthBeats} beats = ${totalBeats} total beats`);
 
         try {
-            await this.setLoopLengthFn(bars);
+            await this.setLoopLengthBarsFn(bars);
         } catch (e) {
-            console.error('Error setting loop length:', e);
+            console.error('Error setting loop length bars:', e);
+        }
+    }
+
+    async setLoopLengthBeats(beats) {
+        this.loopLengthBeats = beats;
+        const totalBeats = (this.loopLengthBars * 4) + beats;
+        console.log(`[LOOPER] Setting loop length: ${this.loopLengthBars} bars + ${beats} beats = ${totalBeats} total beats`);
+
+        try {
+            await this.setLoopLengthBeatsFn(beats);
+        } catch (e) {
+            console.error('Error setting loop length beats:', e);
         }
     }
 
@@ -2283,12 +2102,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Degrade section controller
     new DegradeController();
-
-    // Test sounds
-    new TestSoundController();
-
-    // Loop toggle (for test audio)
-    new LoopToggleController();
 
     // BPM display and tempo sync
     new BpmDisplayController();

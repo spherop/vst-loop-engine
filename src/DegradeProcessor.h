@@ -265,13 +265,22 @@ private:
     float lastLpFreq = 20000.0f, lastLpQ = 0.707f;
     juce::SmoothedValue<float> lpFreqSmooth, lpQSmooth;
 
-    // Bit crusher
+    // Bit crusher with dithering
     juce::SmoothedValue<float> bitDepthSmooth;
+    juce::Random ditherRandom;
+    float noiseShapeError = 0.0f;  // For first-order noise shaping
 
-    // Sample rate reducer
+    // Sample rate reducer with anti-aliasing
     float srHoldL = 0.0f, srHoldR = 0.0f;
+    float srPrevHoldL = 0.0f, srPrevHoldR = 0.0f;  // Previous held values for interpolation
     float srCounter = 0.0f;
     juce::SmoothedValue<float> srReductionSmooth;
+
+    // Anti-alias filter state for sample rate reduction
+    float srAAB0 = 1.0f, srAAB1 = 0.0f, srAAB2 = 0.0f, srAAA1 = 0.0f, srAAA2 = 0.0f;
+    float srAAX1L = 0.0f, srAAX2L = 0.0f, srAAY1L = 0.0f, srAAY2L = 0.0f;
+    float srAAX1R = 0.0f, srAAX2R = 0.0f, srAAY1R = 0.0f, srAAY2R = 0.0f;
+    float lastSRAAFreq = 0.0f;
 
     // Wobble (tape flutter effect using modulated delay)
     std::vector<float> wobbleDelayBufferL;
@@ -390,15 +399,48 @@ private:
         if (bits >= 15.9f)
             return input;  // No crushing
 
-        // Quantize to fewer bits
+        // Number of quantization levels
         const float levels = std::pow(2.0f, bits);
-        return std::round(input * levels) / levels;
+        const float stepSize = 2.0f / levels;  // -1 to 1 range
+
+        // Triangular probability density function (TPDF) dithering
+        // Sum of two uniform random numbers creates triangular distribution
+        // This eliminates quantization distortion and replaces it with
+        // less objectionable white noise
+        const float dither1 = ditherRandom.nextFloat() - 0.5f;
+        const float dither2 = ditherRandom.nextFloat() - 0.5f;
+        const float dither = (dither1 + dither2) * stepSize;
+
+        // Apply dither before quantization
+        float dithered = input + dither;
+
+        // Quantize
+        float quantized = std::round(dithered * levels) / levels;
+
+        // Simple first-order noise shaping (error feedback)
+        // Pushes quantization noise to higher frequencies
+        float error = input - quantized;
+        float shaped = quantized + noiseShapeError * 0.5f;
+        noiseShapeError = error;
+
+        // Soft clamp to avoid overflow from dither
+        return std::clamp(shaped, -1.0f, 1.0f);
     }
 
     void processSampleRateReduction(float& left, float& right, float targetRate)
     {
         if (targetRate >= currentSampleRate - 100.0f)
             return;  // No reduction needed
+
+        // Anti-aliasing: Apply low-pass filter before downsampling
+        // This prevents aliasing artifacts that make the effect sound harsh
+        // Use a simple but effective 2-pole butterworth at the target Nyquist
+        const float nyquist = targetRate * 0.45f;  // Slightly below Nyquist for safety
+        updateSRAntiAliasCoeffs(nyquist);
+
+        // Apply anti-alias filter
+        left = processSRAntiAlias(left, true);
+        right = processSRAntiAlias(right, false);
 
         // Calculate step size for sample-and-hold
         const float step = static_cast<float>(currentSampleRate) / targetRate;
@@ -411,8 +453,57 @@ private:
             srHoldR = right;
         }
 
-        left = srHoldL;
-        right = srHoldR;
+        // Linear interpolation between held samples for smoother output
+        // This acts as a simple reconstruction filter
+        const float t = srCounter / step;  // 0-1 interpolation factor
+        left = srPrevHoldL * (1.0f - t) + srHoldL * t;
+        right = srPrevHoldR * (1.0f - t) + srHoldR * t;
+
+        // Store previous hold values when we capture new ones
+        if (srCounter < 1.0f)
+        {
+            srPrevHoldL = srHoldL;
+            srPrevHoldR = srHoldR;
+        }
+    }
+
+    void updateSRAntiAliasCoeffs(float freq)
+    {
+        // Only update if frequency changed significantly
+        if (std::abs(freq - lastSRAAFreq) < 10.0f)
+            return;
+
+        lastSRAAFreq = freq;
+
+        // 2-pole Butterworth low-pass for anti-aliasing
+        const float omega = 2.0f * juce::MathConstants<float>::pi * freq / static_cast<float>(currentSampleRate);
+        const float sinOmega = std::sin(omega);
+        const float cosOmega = std::cos(omega);
+        const float alpha = sinOmega / (2.0f * 0.707f);  // Q = 0.707 for Butterworth
+
+        const float a0 = 1.0f + alpha;
+        srAAB0 = ((1.0f - cosOmega) / 2.0f) / a0;
+        srAAB1 = (1.0f - cosOmega) / a0;
+        srAAB2 = ((1.0f - cosOmega) / 2.0f) / a0;
+        srAAA1 = (-2.0f * cosOmega) / a0;
+        srAAA2 = (1.0f - alpha) / a0;
+    }
+
+    float processSRAntiAlias(float input, bool isLeft)
+    {
+        float& x1 = isLeft ? srAAX1L : srAAX1R;
+        float& x2 = isLeft ? srAAX2L : srAAX2R;
+        float& y1 = isLeft ? srAAY1L : srAAY1R;
+        float& y2 = isLeft ? srAAY2L : srAAY2R;
+
+        float output = srAAB0 * input + srAAB1 * x1 + srAAB2 * x2 - srAAA1 * y1 - srAAA2 * y2;
+
+        x2 = x1;
+        x1 = input;
+        y2 = y1;
+        y1 = output;
+
+        return output;
     }
 
     void processWobble(float& left, float& right, float amount)

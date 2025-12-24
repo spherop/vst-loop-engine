@@ -627,30 +627,43 @@ html, body {
    LOOP LENGTH SELECTOR
    ============================================ */
 
-.length-btn {
-    padding: 4px 10px;
-    border-radius: 4px;
-    border: 1px solid #2a2a2a;
-    background: linear-gradient(180deg, #151515 0%, #0a0a0a 100%);
-    color: #666;
-    font-family: 'Orbitron', sans-serif;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    cursor: pointer;
-    transition: all 0.12s ease;
-}
-
-.length-btn:hover {
-    border-color: #555;
-    color: #999;
-}
-
-.length-btn.active {
-    background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
-    border-color: var(--looper-accent);
+/* Bars + Beats selectors */
+.bars-select,
+.beats-select {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--looper-accent);
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 4px 22px 4px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%2366bb6a' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    min-width: 52px;
+}
+
+.bars-select:hover,
+.beats-select:hover {
+    border-color: var(--looper-accent);
+}
+
+.bars-select:focus,
+.beats-select:focus {
+    outline: none;
+    border-color: var(--looper-accent);
     box-shadow: 0 0 8px var(--looper-accent-glow);
+}
+
+.bars-select option,
+.beats-select option {
+    background: #1a1a1a;
+    color: #ccc;
 }
 
 /* ============================================

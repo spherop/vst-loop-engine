@@ -96,15 +96,36 @@
                 <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
                     <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/30 to-transparent"></div>
                     <div class="p-4">
-                        <!-- Loop Length Selector -->
-                        <div class="flex justify-center items-center gap-2 mb-3">
+                        <!-- Loop Length Selector - Bars + Beats -->
+                        <div class="flex justify-center items-center gap-3 mb-3">
                             <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">LENGTH</span>
-                            <div class="loop-length-selector flex gap-1">
-                                <button class="length-btn active" data-length="free">FREE</button>
-                                <button class="length-btn" data-length="1">1 BAR</button>
-                                <button class="length-btn" data-length="2">2 BAR</button>
-                                <button class="length-btn" data-length="4">4 BAR</button>
-                                <button class="length-btn" data-length="8">8 BAR</button>
+                            <div class="loop-length-selector flex items-center gap-2">
+                                <select class="bars-select" id="bars-select" title="Bars (0 = free mode)">
+                                    <option value="0">FREE</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                    <option value="6">6</option>
+                                    <option value="7">7</option>
+                                    <option value="8">8</option>
+                                    <option value="12">12</option>
+                                    <option value="16">16</option>
+                                </select>
+                                <span class="font-display text-[9px] font-bold tracking-[1px] text-fd-text-dim uppercase">BARS</span>
+                                <span class="text-fd-text-dim">+</span>
+                                <select class="beats-select" id="beats-select" title="Additional beats">
+                                    <option value="0">0</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                    <option value="6">6</option>
+                                    <option value="7">7</option>
+                                </select>
+                                <span class="font-display text-[9px] font-bold tracking-[1px] text-fd-text-dim uppercase">BEATS</span>
                             </div>
                         </div>
                         <!-- Transport Buttons -->
@@ -509,42 +530,6 @@
                 </section>
             </div>
 
-            <!-- TEST Section (Global - visible on both tabs) -->
-            <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
-
-                <div class="p-3">
-                    <div class="flex items-center justify-between gap-4">
-                        <div class="flex items-center gap-3">
-                            <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">TEST</span>
-                            <span id="sample-indicator" class="sample-indicator font-display">SYNTH</span>
-                            <select class="sound-select" id="sound-select">
-                                <option value="0">Loading...</option>
-                            </select>
-                            <button class="folder-btn" id="folder-btn" title="Choose sample folder">
-                                <span class="folder-icon">&#128193;</span>
-                            </button>
-                            <button class="reload-btn" id="reload-btn" title="Reload samples">
-                                <span class="reload-icon">&#x21BB;</span>
-                            </button>
-                            <button class="play-btn" id="play-btn">
-                                <span class="play-icon">&#9658;</span>
-                            </button>
-                            <button class="stop-btn-small" id="stop-btn">
-                                <span class="stop-icon">&#9632;</span>
-                            </button>
-                        </div>
-                        <button class="toggle-btn" id="loop-toggle">
-                            <span class="toggle-icon">&#x21BB;</span>
-                            <span class="toggle-label font-display">LOOP</span>
-                        </button>
-                    </div>
-                    <!-- Folder path display -->
-                    <div class="mt-2 text-[9px] text-fd-text-dim font-mono truncate" id="folder-path" title="">
-                        ~/Documents/LoopEngineSamples
-                    </div>
-                </div>
-            </section>
         </main>
 
         <!-- Footer - Tempo Sync -->
@@ -552,7 +537,7 @@
             <div class="flex items-center justify-between">
                 <!-- Version ticker -->
                 <div class="flex items-center gap-1">
-                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v0.1.3</span>
+                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v0.1.5</span>
                 </div>
                 <!-- Tempo controls -->
                 <div class="flex items-center gap-6">
