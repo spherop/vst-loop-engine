@@ -70,6 +70,10 @@ public:
     void setDelayEnabled(bool enabled);
     bool getDelayEnabled() const;
 
+    // Degrade master bypass
+    void setDegradeEnabled(bool enabled);
+    bool getDegradeEnabled() const;
+
     // Degrade processor access
     DegradeProcessor& getDegradeProcessor() { return degradeProcessor; }
     void setDegradeScrambleSubdiv(int subdiv);

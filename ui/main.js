@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.3.7";
+const UI_VERSION = "0.3.8";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -570,20 +570,38 @@ class TabController {
         this.delayEnabled = true;
         this.setDelayEnabledFn = getNativeFunction("setDelayEnabled");
 
+        // Degrade LED toggle state
+        this.degradeLed = document.getElementById('degrade-led');
+        this.degradeEnabled = true;
+        this.setDegradeEnabledFn = getNativeFunction("setDegradeEnabled");
+
         this.setupEvents();
         this.fetchInitialState();
     }
 
     async fetchInitialState() {
         try {
-            const getStateFn = getNativeFunction("getTempoState");
-            const state = await getStateFn();
-            if (state && typeof state.delayEnabled !== 'undefined') {
-                this.delayEnabled = state.delayEnabled;
+            // Fetch delay state
+            const getTempoStateFn = getNativeFunction("getTempoState");
+            const tempoState = await getTempoStateFn();
+            if (tempoState && typeof tempoState.delayEnabled !== 'undefined') {
+                this.delayEnabled = tempoState.delayEnabled;
                 this.updateDelayLed();
             }
         } catch (e) {
             console.log('Could not fetch initial delay state');
+        }
+
+        try {
+            // Fetch degrade state
+            const getDegradeStateFn = getNativeFunction("getDegradeState");
+            const degradeState = await getDegradeStateFn();
+            if (degradeState && typeof degradeState.enabled !== 'undefined') {
+                this.degradeEnabled = degradeState.enabled;
+                this.updateDegradeLed();
+            }
+        } catch (e) {
+            console.log('Could not fetch initial degrade state');
         }
     }
 
@@ -592,9 +610,14 @@ class TabController {
             tab.addEventListener('click', (e) => {
                 // Check if the click was on the LED
                 if (e.target.classList.contains('tab-led')) {
-                    // LED click - toggle effect bypass
+                    // LED click - toggle effect bypass based on which tab
                     e.stopPropagation();
-                    this.toggleDelayEnabled();
+                    const tabName = tab.dataset.tab;
+                    if (tabName === 'delay') {
+                        this.toggleDelayEnabled();
+                    } else if (tabName === 'degrade') {
+                        this.toggleDegradeEnabled();
+                    }
                 } else {
                     // Regular tab click - switch tabs
                     const tabName = tab.dataset.tab;
@@ -603,11 +626,17 @@ class TabController {
             });
         });
 
-        // Also add direct click handler on LED for safety
+        // Also add direct click handler on LEDs for safety
         if (this.delayLed) {
             this.delayLed.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.toggleDelayEnabled();
+            });
+        }
+        if (this.degradeLed) {
+            this.degradeLed.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleDegradeEnabled();
             });
         }
     }
@@ -627,9 +656,30 @@ class TabController {
         }
     }
 
+    async toggleDegradeEnabled() {
+        this.degradeEnabled = !this.degradeEnabled;
+        this.updateDegradeLed();
+
+        try {
+            await this.setDegradeEnabledFn(this.degradeEnabled);
+            console.log(`[DEGRADE] Degrade ${this.degradeEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling degrade:', e);
+            // Revert on error
+            this.degradeEnabled = !this.degradeEnabled;
+            this.updateDegradeLed();
+        }
+    }
+
     updateDelayLed() {
         if (this.delayLed) {
             this.delayLed.classList.toggle('active', this.delayEnabled);
+        }
+    }
+
+    updateDegradeLed() {
+        if (this.degradeLed) {
+            this.degradeLed.classList.toggle('active', this.degradeEnabled);
         }
     }
 
@@ -652,6 +702,25 @@ class TabController {
                 content.classList.remove('active');
             }
         });
+
+        // When switching back to looper tab, resize the waveform canvas
+        // This fixes the issue where the canvas becomes blank after visiting other tabs
+        if (tabName === 'looper' && looperController) {
+            // Small delay to let the DOM update first
+            requestAnimationFrame(() => {
+                looperController.resizeCanvas();
+                // Also redraw the waveform if we have data
+                if (looperController.lastWaveformData || looperController.lastLayerWaveforms) {
+                    looperController.drawWaveform(
+                        looperController.lastWaveformData,
+                        looperController.lastLayerWaveforms,
+                        looperController.lastLayerMutes
+                    );
+                } else {
+                    looperController.drawEmptyWaveform();
+                }
+            });
+        }
     }
 }
 
@@ -1100,6 +1169,11 @@ class LooperController {
     }
 
     drawWaveform(waveformData, layerWaveforms, layerMutes) {
+        // Store the last waveform data for redrawing after tab switches
+        this.lastWaveformData = waveformData;
+        this.lastLayerWaveforms = layerWaveforms;
+        this.lastLayerMutes = layerMutes;
+
         if (!this.ctx) {
             return;
         }

@@ -267,6 +267,12 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.setDelayEnabled(static_cast<bool>(args[0]));
                       complete({});
                   })
+                  .withNativeFunction("setDegradeEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setDegradeEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
                   .withNativeFunction("setDegradeScrambleSubdiv", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
@@ -294,6 +300,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withNativeFunction("getDegradeState", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("enabled", processorRef.getDegradeEnabled());
                       result->setProperty("filterEnabled", processorRef.getDegradeFilterEnabled());
                       result->setProperty("lofiEnabled", processorRef.getDegradeLofiEnabled());
                       result->setProperty("scramblerEnabled", processorRef.getDegradeScramblerEnabled());

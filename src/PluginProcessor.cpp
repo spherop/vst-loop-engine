@@ -619,6 +619,16 @@ bool LoopEngineProcessor::getDelayEnabled() const
     return delayEnabled.load();
 }
 
+void LoopEngineProcessor::setDegradeEnabled(bool enabled)
+{
+    degradeProcessor.setEnabled(enabled);
+}
+
+bool LoopEngineProcessor::getDegradeEnabled() const
+{
+    return degradeProcessor.isEnabled();
+}
+
 void LoopEngineProcessor::setDegradeScrambleSubdiv(int subdiv)
 {
     degradeProcessor.setScramblerSubdiv(subdiv);

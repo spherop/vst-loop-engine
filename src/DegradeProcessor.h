@@ -69,6 +69,10 @@ public:
 
     void processBlock(juce::AudioBuffer<float>& buffer)
     {
+        // Master bypass - skip all processing if disabled
+        if (!masterEnabled.load())
+            return;
+
         const int numSamples = buffer.getNumSamples();
         float* leftChannel = buffer.getWritePointer(0);
         float* rightChannel = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -217,6 +221,10 @@ public:
         mixSmooth.setTargetValue(std::clamp(mix, 0.0f, 1.0f));
     }
 
+    // Master bypass control
+    void setEnabled(bool on) { masterEnabled.store(on); }
+    bool isEnabled() const { return masterEnabled.load(); }
+
     // Section bypass controls
     void setFilterEnabled(bool on) { filterEnabled.store(on); }
     void setLofiEnabled(bool on) { lofiEnabled.store(on); }
@@ -234,6 +242,9 @@ public:
 
 private:
     double currentSampleRate = 44100.0;
+
+    // Master bypass
+    std::atomic<bool> masterEnabled { true };
 
     // Section bypass states
     std::atomic<bool> filterEnabled { true };
