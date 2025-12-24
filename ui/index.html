@@ -386,7 +386,14 @@
                 <section class="section-card degrade-section bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
                     <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-degrade-accent/30 to-transparent"></div>
                     <div class="p-4">
-                        <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">// FILTER</h2>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="section-led degrade-led active" id="filter-led"></div>
+                            <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase">// FILTER</h2>
+                        </div>
+                        <!-- Filter Visualization -->
+                        <div class="filter-viz-container mb-4">
+                            <canvas id="filter-viz-canvas" class="filter-viz-canvas" width="500" height="60"></canvas>
+                        </div>
                         <div class="flex justify-center gap-6">
                             <!-- HP Freq -->
                             <div class="flex flex-col items-center gap-2">
@@ -428,7 +435,10 @@
                 <section class="section-card degrade-section bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
                     <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-degrade-accent/20 to-transparent"></div>
                     <div class="p-4">
-                        <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">// LO-FI</h2>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="section-led degrade-led active" id="lofi-led"></div>
+                            <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase">// LO-FI</h2>
+                        </div>
                         <div class="flex justify-center gap-10">
                             <!-- Bit Depth -->
                             <div class="flex flex-col items-center gap-2">
@@ -462,7 +472,10 @@
                 <section class="section-card degrade-section bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
                     <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-degrade-accent/20 to-transparent"></div>
                     <div class="p-4">
-                        <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">// SCRAMBLER</h2>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="section-led degrade-led active" id="scrambler-led"></div>
+                            <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase">// SCRAMBLER</h2>
+                        </div>
                         <div class="flex justify-center items-end gap-8">
                             <!-- Subdivision Selector -->
                             <div class="flex flex-col items-center gap-2">

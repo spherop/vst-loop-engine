@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.3.6";
+const UI_VERSION = "0.3.7";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -1671,6 +1671,292 @@ class BpmDisplayController {
     }
 }
 
+// Degrade section controller with LEDs and filter visualization
+class DegradeController {
+    constructor() {
+        // Section LEDs
+        this.filterLed = document.getElementById('filter-led');
+        this.lofiLed = document.getElementById('lofi-led');
+        this.scramblerLed = document.getElementById('scrambler-led');
+
+        // Section containers (for dimming when disabled)
+        this.filterSection = this.filterLed?.closest('.degrade-section');
+        this.lofiSection = this.lofiLed?.closest('.degrade-section');
+        this.scramblerSection = this.scramblerLed?.closest('.degrade-section');
+
+        // Filter visualization canvas
+        this.filterCanvas = document.getElementById('filter-viz-canvas');
+        this.filterCtx = this.filterCanvas?.getContext('2d');
+
+        // State
+        this.filterEnabled = true;
+        this.lofiEnabled = true;
+        this.scramblerEnabled = true;
+
+        // Native functions
+        this.setFilterEnabledFn = getNativeFunction('setDegradeFilterEnabled');
+        this.setLofiEnabledFn = getNativeFunction('setDegradeLofiEnabled');
+        this.setScramblerEnabledFn = getNativeFunction('setDegradeScramblerEnabled');
+        this.getDegradeStateFn = getNativeFunction('getDegradeState');
+
+        // Current filter params for visualization
+        this.hpFreq = 20;
+        this.lpFreq = 20000;
+        this.hpQ = 0.707;
+        this.lpQ = 0.707;
+
+        this.setupEvents();
+        this.fetchInitialState();
+        this.startPolling();
+    }
+
+    setupEvents() {
+        if (this.filterLed) {
+            this.filterLed.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleFilter();
+            });
+        }
+        if (this.lofiLed) {
+            this.lofiLed.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleLofi();
+            });
+        }
+        if (this.scramblerLed) {
+            this.scramblerLed.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleScrambler();
+            });
+        }
+    }
+
+    async fetchInitialState() {
+        try {
+            const state = await this.getDegradeStateFn();
+            if (state) {
+                this.filterEnabled = state.filterEnabled !== false;
+                this.lofiEnabled = state.lofiEnabled !== false;
+                this.scramblerEnabled = state.scramblerEnabled !== false;
+                this.updateUI();
+            }
+        } catch (e) {
+            console.log('Could not fetch initial degrade state');
+        }
+    }
+
+    async toggleFilter() {
+        this.filterEnabled = !this.filterEnabled;
+        this.updateUI();
+        try {
+            await this.setFilterEnabledFn(this.filterEnabled);
+            console.log(`[DEGRADE] Filter ${this.filterEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling filter:', e);
+            this.filterEnabled = !this.filterEnabled;
+            this.updateUI();
+        }
+    }
+
+    async toggleLofi() {
+        this.lofiEnabled = !this.lofiEnabled;
+        this.updateUI();
+        try {
+            await this.setLofiEnabledFn(this.lofiEnabled);
+            console.log(`[DEGRADE] Lo-Fi ${this.lofiEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling lo-fi:', e);
+            this.lofiEnabled = !this.lofiEnabled;
+            this.updateUI();
+        }
+    }
+
+    async toggleScrambler() {
+        this.scramblerEnabled = !this.scramblerEnabled;
+        this.updateUI();
+        try {
+            await this.setScramblerEnabledFn(this.scramblerEnabled);
+            console.log(`[DEGRADE] Scrambler ${this.scramblerEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling scrambler:', e);
+            this.scramblerEnabled = !this.scramblerEnabled;
+            this.updateUI();
+        }
+    }
+
+    updateUI() {
+        // Update LEDs
+        if (this.filterLed) {
+            this.filterLed.classList.toggle('active', this.filterEnabled);
+        }
+        if (this.lofiLed) {
+            this.lofiLed.classList.toggle('active', this.lofiEnabled);
+        }
+        if (this.scramblerLed) {
+            this.scramblerLed.classList.toggle('active', this.scramblerEnabled);
+        }
+
+        // Update section opacity (but keep clickable)
+        if (this.filterSection) {
+            this.filterSection.style.opacity = this.filterEnabled ? '1' : '0.5';
+        }
+        if (this.lofiSection) {
+            this.lofiSection.style.opacity = this.lofiEnabled ? '1' : '0.5';
+        }
+        if (this.scramblerSection) {
+            this.scramblerSection.style.opacity = this.scramblerEnabled ? '1' : '0.5';
+        }
+    }
+
+    startPolling() {
+        // Poll for filter visualization updates
+        setInterval(async () => {
+            try {
+                const state = await this.getDegradeStateFn();
+                if (state) {
+                    // Update filter params for visualization
+                    if (typeof state.hpFreq !== 'undefined') this.hpFreq = state.hpFreq;
+                    if (typeof state.lpFreq !== 'undefined') this.lpFreq = state.lpFreq;
+                    if (typeof state.hpQ !== 'undefined') this.hpQ = state.hpQ;
+                    if (typeof state.lpQ !== 'undefined') this.lpQ = state.lpQ;
+
+                    // Redraw filter visualization
+                    this.drawFilterVisualization();
+                }
+            } catch (e) {
+                // Silently ignore polling errors
+            }
+        }, 100);
+    }
+
+    drawFilterVisualization() {
+        if (!this.filterCtx || !this.filterCanvas) return;
+
+        const width = this.filterCanvas.width;
+        const height = this.filterCanvas.height;
+        const ctx = this.filterCtx;
+
+        // Clear canvas
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw grid lines
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 1;
+
+        // Vertical grid (frequency markers: 100Hz, 1kHz, 10kHz)
+        const freqMarkers = [100, 1000, 10000];
+        freqMarkers.forEach(freq => {
+            const x = this.freqToX(freq, width);
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+            ctx.stroke();
+        });
+
+        // Horizontal center line (0dB)
+        ctx.beginPath();
+        ctx.moveTo(0, height / 2);
+        ctx.lineTo(width, height / 2);
+        ctx.stroke();
+
+        // Draw combined filter response curve
+        ctx.beginPath();
+        ctx.strokeStyle = '#66bb6a';
+        ctx.lineWidth = 2;
+
+        for (let i = 0; i < width; i++) {
+            const freq = this.xToFreq(i, width);
+            const hpResponse = this.getHPResponse(freq);
+            const lpResponse = this.getLPResponse(freq);
+            const combinedDb = hpResponse + lpResponse;
+
+            // Map dB to y (0dB at center, +/-24dB at edges)
+            const y = height / 2 - (combinedDb / 24) * (height / 2);
+
+            if (i === 0) {
+                ctx.moveTo(i, Math.max(0, Math.min(height, y)));
+            } else {
+                ctx.lineTo(i, Math.max(0, Math.min(height, y)));
+            }
+        }
+        ctx.stroke();
+
+        // Draw HP and LP cutoff markers
+        ctx.fillStyle = '#66bb6a';
+        ctx.font = '9px "JetBrains Mono", monospace';
+
+        // HP marker
+        const hpX = this.freqToX(this.hpFreq, width);
+        ctx.fillStyle = 'rgba(102, 187, 106, 0.3)';
+        ctx.fillRect(0, 0, hpX, height);
+
+        // LP marker
+        const lpX = this.freqToX(this.lpFreq, width);
+        ctx.fillStyle = 'rgba(102, 187, 106, 0.3)';
+        ctx.fillRect(lpX, 0, width - lpX, height);
+
+        // Frequency labels
+        ctx.fillStyle = '#444';
+        ctx.textAlign = 'center';
+        ctx.fillText('100', this.freqToX(100, width), height - 3);
+        ctx.fillText('1k', this.freqToX(1000, width), height - 3);
+        ctx.fillText('10k', this.freqToX(10000, width), height - 3);
+    }
+
+    // Convert frequency to X position (logarithmic scale, 20Hz to 20kHz)
+    freqToX(freq, width) {
+        const minFreq = 20;
+        const maxFreq = 20000;
+        const logMin = Math.log10(minFreq);
+        const logMax = Math.log10(maxFreq);
+        const logFreq = Math.log10(Math.max(minFreq, Math.min(maxFreq, freq)));
+        return ((logFreq - logMin) / (logMax - logMin)) * width;
+    }
+
+    // Convert X position to frequency
+    xToFreq(x, width) {
+        const minFreq = 20;
+        const maxFreq = 20000;
+        const logMin = Math.log10(minFreq);
+        const logMax = Math.log10(maxFreq);
+        const logFreq = logMin + (x / width) * (logMax - logMin);
+        return Math.pow(10, logFreq);
+    }
+
+    // Calculate HP filter response in dB at given frequency
+    getHPResponse(freq) {
+        const ratio = freq / this.hpFreq;
+        // Second-order high-pass: -12dB/octave below cutoff
+        if (ratio < 1) {
+            const octaves = Math.log2(1 / ratio);
+            return -12 * octaves + (this.hpQ - 0.707) * 6 * Math.exp(-octaves);
+        }
+        // Resonance peak at cutoff
+        if (ratio < 2) {
+            const peak = (this.hpQ - 0.707) * 6;
+            return peak * Math.exp(-Math.abs(ratio - 1) * 2);
+        }
+        return 0;
+    }
+
+    // Calculate LP filter response in dB at given frequency
+    getLPResponse(freq) {
+        const ratio = freq / this.lpFreq;
+        // Second-order low-pass: -12dB/octave above cutoff
+        if (ratio > 1) {
+            const octaves = Math.log2(ratio);
+            return -12 * octaves + (this.lpQ - 0.707) * 6 * Math.exp(-octaves);
+        }
+        // Resonance peak at cutoff
+        if (ratio > 0.5) {
+            const peak = (this.lpQ - 0.707) * 6;
+            return peak * Math.exp(-Math.abs(ratio - 1) * 2);
+        }
+        return 0;
+    }
+}
+
 // Global BPM update function called from C++ timer
 window.updateBpmDisplay = function(bpm) {
     const bpmEl = document.getElementById('bpm-display');
@@ -1920,6 +2206,9 @@ document.addEventListener('DOMContentLoaded', () => {
             await setScrambleSubdivFn(subdiv);
         });
     }
+
+    // Degrade section controller
+    new DegradeController();
 
     // Test sounds
     new TestSoundController();

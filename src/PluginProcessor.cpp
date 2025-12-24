@@ -624,6 +624,36 @@ void LoopEngineProcessor::setDegradeScrambleSubdiv(int subdiv)
     degradeProcessor.setScramblerSubdiv(subdiv);
 }
 
+void LoopEngineProcessor::setDegradeFilterEnabled(bool enabled)
+{
+    degradeProcessor.setFilterEnabled(enabled);
+}
+
+void LoopEngineProcessor::setDegradeLofiEnabled(bool enabled)
+{
+    degradeProcessor.setLofiEnabled(enabled);
+}
+
+void LoopEngineProcessor::setDegradeScramblerEnabled(bool enabled)
+{
+    degradeProcessor.setScramblerEnabled(enabled);
+}
+
+bool LoopEngineProcessor::getDegradeFilterEnabled() const
+{
+    return degradeProcessor.getFilterEnabled();
+}
+
+bool LoopEngineProcessor::getDegradeLofiEnabled() const
+{
+    return degradeProcessor.getLofiEnabled();
+}
+
+bool LoopEngineProcessor::getDegradeScramblerEnabled() const
+{
+    return degradeProcessor.getScramblerEnabled();
+}
+
 void LoopEngineProcessor::setHostTransportSync(bool enabled)
 {
     hostTransportSyncEnabled.store(enabled);

@@ -44,18 +44,23 @@ public:
         srHoldR = 0.0f;
         srCounter = 0.0f;
 
-        // Reset wobble
-        wobblePhase = 0.0f;
+        // Initialize wobble delay buffer (for tape flutter effect)
+        // Need ~50ms of buffer for pitch modulation at low frequencies
+        int wobbleBufferSize = static_cast<int>(sampleRate * 0.1); // 100ms
+        wobbleDelayBufferL.resize(wobbleBufferSize, 0.0f);
+        wobbleDelayBufferR.resize(wobbleBufferSize, 0.0f);
+        wobbleWritePos = 0;
         wobbleLfoPhase = 0.0f;
 
-        // Initialize scrambler buffer (max 2 seconds at 48kHz for segments)
-        int maxScrambleSize = static_cast<int>(sampleRate * 2.0);
+        // Initialize scrambler buffer (store up to 4 bars worth at 60bpm = 16 seconds max)
+        int maxScrambleSize = static_cast<int>(sampleRate * 8.0);
         scrambleBufferL.resize(maxScrambleSize, 0.0f);
         scrambleBufferR.resize(maxScrambleSize, 0.0f);
-        scrambleReadPos = 0;
         scrambleWritePos = 0;
+        scrambleReadPos = 0;
         segmentPosition = 0;
         currentSegment = 0;
+        scrambleBufferFilled = false;
 
         // Initialize segment order
         for (int i = 0; i < MAX_SCRAMBLE_SEGMENTS; ++i)
@@ -64,9 +69,6 @@ public:
 
     void processBlock(juce::AudioBuffer<float>& buffer)
     {
-        if (!enabled.load())
-            return;
-
         const int numSamples = buffer.getNumSamples();
         float* leftChannel = buffer.getWritePointer(0);
         float* rightChannel = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -76,9 +78,12 @@ public:
             float inputL = leftChannel[i];
             float inputR = rightChannel ? rightChannel[i] : inputL;
 
-            // Store dry signal
+            // Store dry signal for final mix
             float dryL = inputL;
             float dryR = inputR;
+
+            float wetL = inputL;
+            float wetR = inputR;
 
             // Get smoothed values
             const float hpFreq = hpFreqSmooth.getNextValue();
@@ -90,33 +95,41 @@ public:
             const float wobbleAmt = wobbleAmountSmooth.getNextValue();
             const float mix = mixSmooth.getNextValue();
 
-            // Update filter coefficients if needed
-            updateHighPassCoeffs(hpFreq, hpQ);
-            updateLowPassCoeffs(lpFreq, lpQ);
-
-            // 1. High-pass filter (biquad)
-            float wetL = processHighPass(inputL, true);
-            float wetR = processHighPass(inputR, false);
-
-            // 2. Low-pass filter (biquad)
-            wetL = processLowPass(wetL, true);
-            wetR = processLowPass(wetR, false);
-
-            // 3. Bit crusher
-            wetL = processBitCrush(wetL, bitDepth);
-            wetR = processBitCrush(wetR, bitDepth);
-
-            // 4. Sample rate reduction
-            processSampleRateReduction(wetL, wetR, srTarget);
-
-            // 5. Wobble (pitch/speed instability)
-            if (wobbleAmt > 0.001f)
+            // ==== FILTER SECTION ====
+            if (filterEnabled.load())
             {
-                processWobble(wetL, wetR, wobbleAmt);
+                // Update filter coefficients if needed
+                updateHighPassCoeffs(hpFreq, hpQ);
+                updateLowPassCoeffs(lpFreq, lpQ);
+
+                // High-pass filter (biquad)
+                wetL = processHighPass(wetL, true);
+                wetR = processHighPass(wetR, false);
+
+                // Low-pass filter (biquad)
+                wetL = processLowPass(wetL, true);
+                wetR = processLowPass(wetR, false);
             }
 
-            // 6. Scrambler
-            if (scramblerSubdiv > 0)
+            // ==== LO-FI SECTION ====
+            if (lofiEnabled.load())
+            {
+                // Bit crusher
+                wetL = processBitCrush(wetL, bitDepth);
+                wetR = processBitCrush(wetR, bitDepth);
+
+                // Sample rate reduction
+                processSampleRateReduction(wetL, wetR, srTarget);
+
+                // Wobble (tape flutter - pitch instability)
+                if (wobbleAmt > 0.001f)
+                {
+                    processWobble(wetL, wetR, wobbleAmt);
+                }
+            }
+
+            // ==== SCRAMBLER SECTION ====
+            if (scramblerEnabled.load() && scramblerSubdiv > 0)
             {
                 processScrambler(wetL, wetR);
             }
@@ -181,16 +194,22 @@ public:
 
     void setTempo(float bpm)
     {
-        currentBpm = std::clamp(bpm, 20.0f, 300.0f);
-        if (scramblerSubdiv > 0)
-            calculateSegmentSize();
+        if (std::abs(bpm - currentBpm) > 0.1f)
+        {
+            currentBpm = std::clamp(bpm, 20.0f, 300.0f);
+            if (scramblerSubdiv > 0)
+                calculateSegmentSize();
+        }
     }
 
     void setLoopLengthSamples(int len)
     {
-        loopLengthSamples = len;
-        if (scramblerSubdiv > 0)
-            calculateSegmentSize();
+        if (len != loopLengthSamples)
+        {
+            loopLengthSamples = len;
+            if (scramblerSubdiv > 0)
+                calculateSegmentSize();
+        }
     }
 
     void setMix(float mix)
@@ -198,13 +217,28 @@ public:
         mixSmooth.setTargetValue(std::clamp(mix, 0.0f, 1.0f));
     }
 
-    void setEnabled(bool on)
-    {
-        enabled.store(on);
-    }
+    // Section bypass controls
+    void setFilterEnabled(bool on) { filterEnabled.store(on); }
+    void setLofiEnabled(bool on) { lofiEnabled.store(on); }
+    void setScramblerEnabled(bool on) { scramblerEnabled.store(on); }
+
+    bool getFilterEnabled() const { return filterEnabled.load(); }
+    bool getLofiEnabled() const { return lofiEnabled.load(); }
+    bool getScramblerEnabled() const { return scramblerEnabled.load(); }
+
+    // Get current filter frequencies for visualization
+    float getCurrentHPFreq() const { return lastHpFreq; }
+    float getCurrentLPFreq() const { return lastLpFreq; }
+    float getCurrentHPQ() const { return lastHpQ; }
+    float getCurrentLPQ() const { return lastLpQ; }
 
 private:
     double currentSampleRate = 44100.0;
+
+    // Section bypass states
+    std::atomic<bool> filterEnabled { true };
+    std::atomic<bool> lofiEnabled { true };
+    std::atomic<bool> scramblerEnabled { true };
 
     // Biquad HP filter coefficients and state
     float hpB0 = 1.0f, hpB1 = 0.0f, hpB2 = 0.0f, hpA1 = 0.0f, hpA2 = 0.0f;
@@ -228,33 +262,31 @@ private:
     float srCounter = 0.0f;
     juce::SmoothedValue<float> srReductionSmooth;
 
-    // Wobble (LFO-modulated pitch)
-    float wobblePhase = 0.0f;
-    float wobbleLfoPhase = 0.0f;
-    static constexpr int WOBBLE_BUFFER_SIZE = 4096;
-    std::array<float, WOBBLE_BUFFER_SIZE> wobbleBufferL{};
-    std::array<float, WOBBLE_BUFFER_SIZE> wobbleBufferR{};
+    // Wobble (tape flutter effect using modulated delay)
+    std::vector<float> wobbleDelayBufferL;
+    std::vector<float> wobbleDelayBufferR;
     int wobbleWritePos = 0;
+    float wobbleLfoPhase = 0.0f;
     juce::SmoothedValue<float> wobbleAmountSmooth;
 
     // Scrambler
     static constexpr int MAX_SCRAMBLE_SEGMENTS = 32;
     std::vector<float> scrambleBufferL, scrambleBufferR;
     std::array<int, MAX_SCRAMBLE_SEGMENTS> segmentOrder{};
-    int scrambleReadPos = 0;
     int scrambleWritePos = 0;
+    int scrambleReadPos = 0;
     int currentSegment = 0;
     int segmentSamples = 0;
     int segmentPosition = 0;
     int scramblerSubdiv = 0;
     float currentBpm = 120.0f;
     int loopLengthSamples = 0;
+    bool scrambleBufferFilled = false;
     juce::SmoothedValue<float> scramblerAmountSmooth;
     juce::Random scrambleRandom;
 
     // Mix
     juce::SmoothedValue<float> mixSmooth;
-    std::atomic<bool> enabled { true };
 
     void resetFilters()
     {
@@ -374,37 +406,57 @@ private:
 
     void processWobble(float& left, float& right, float amount)
     {
-        // Write to wobble buffer
-        wobbleBufferL[wobbleWritePos] = left;
-        wobbleBufferR[wobbleWritePos] = right;
+        // Tape flutter effect: use a slow LFO to modulate delay time
+        // This creates pitch variations similar to tape wow/flutter
 
-        // LFO for random pitch/speed variation
-        wobbleLfoPhase += (0.5f + scrambleRandom.nextFloat() * 2.0f) / static_cast<float>(currentSampleRate);
+        if (wobbleDelayBufferL.empty())
+            return;
+
+        const int bufferSize = static_cast<int>(wobbleDelayBufferL.size());
+
+        // Write current sample to delay buffer
+        wobbleDelayBufferL[wobbleWritePos] = left;
+        wobbleDelayBufferR[wobbleWritePos] = right;
+
+        // LFO for flutter effect
+        // Use multiple LFOs at different rates for more organic sound
+        // Primary: ~4Hz (wow), Secondary: ~0.5Hz (flutter)
+        const float primaryRate = 4.0f / static_cast<float>(currentSampleRate);
+        const float secondaryRate = 0.5f / static_cast<float>(currentSampleRate);
+
+        wobbleLfoPhase += primaryRate;
         if (wobbleLfoPhase >= 1.0f)
             wobbleLfoPhase -= 1.0f;
 
-        // Generate wobble offset using sine + noise
-        const float lfo = std::sin(wobbleLfoPhase * 2.0f * juce::MathConstants<float>::pi);
-        const float noise = scrambleRandom.nextFloat() * 2.0f - 1.0f;
+        // Combine two sine waves for more complex motion
+        const float primaryLfo = std::sin(wobbleLfoPhase * 2.0f * juce::MathConstants<float>::pi);
+        const float secondaryLfo = std::sin(wobbleLfoPhase * 0.125f * 2.0f * juce::MathConstants<float>::pi);
 
-        // Wobble amount controls delay variation (0-50 samples)
-        const float maxWobble = 50.0f * amount;
-        const float wobbleOffset = (lfo * 0.7f + noise * 0.3f) * maxWobble;
+        // Combined modulation (primary contributes more)
+        const float lfoValue = primaryLfo * 0.7f + secondaryLfo * 0.3f;
 
-        // Read position with wobble
-        float readPos = static_cast<float>(wobbleWritePos) - 100.0f - wobbleOffset;
+        // Base delay is ~10ms, modulation adds +/- 5ms based on amount
+        // At 48kHz: 10ms = 480 samples, 5ms = 240 samples
+        const float baseDelaySamples = static_cast<float>(currentSampleRate) * 0.010f; // 10ms
+        const float modulationDepth = static_cast<float>(currentSampleRate) * 0.005f * amount; // 0-5ms
+
+        const float delaySamples = baseDelaySamples + lfoValue * modulationDepth;
+
+        // Calculate read position with fractional delay
+        float readPos = static_cast<float>(wobbleWritePos) - delaySamples;
         while (readPos < 0.0f)
-            readPos += WOBBLE_BUFFER_SIZE;
+            readPos += static_cast<float>(bufferSize);
 
-        // Linear interpolation
-        const int idx0 = static_cast<int>(readPos) % WOBBLE_BUFFER_SIZE;
-        const int idx1 = (idx0 + 1) % WOBBLE_BUFFER_SIZE;
+        // Linear interpolation for smooth delay changes
+        const int idx0 = static_cast<int>(readPos) % bufferSize;
+        const int idx1 = (idx0 + 1) % bufferSize;
         const float frac = readPos - std::floor(readPos);
 
-        left = wobbleBufferL[idx0] * (1.0f - frac) + wobbleBufferL[idx1] * frac;
-        right = wobbleBufferR[idx0] * (1.0f - frac) + wobbleBufferR[idx1] * frac;
+        left = wobbleDelayBufferL[idx0] * (1.0f - frac) + wobbleDelayBufferL[idx1] * frac;
+        right = wobbleDelayBufferR[idx0] * (1.0f - frac) + wobbleDelayBufferR[idx1] * frac;
 
-        wobbleWritePos = (wobbleWritePos + 1) % WOBBLE_BUFFER_SIZE;
+        // Advance write position
+        wobbleWritePos = (wobbleWritePos + 1) % bufferSize;
     }
 
     void calculateSegmentSize()
@@ -417,26 +469,41 @@ private:
 
         // Calculate segment size based on subdivision
         // subdiv: 1=1/4, 2=1/8, 3=1/16, 4=1/32
-        const int subdivisions = 1 << (scramblerSubdiv + 1);  // 4, 8, 16, 32
+        int subdivisions;
+        switch (scramblerSubdiv)
+        {
+            case 1: subdivisions = 4; break;   // Quarter notes
+            case 2: subdivisions = 8; break;   // Eighth notes
+            case 3: subdivisions = 16; break;  // Sixteenth notes
+            case 4: subdivisions = 32; break;  // Thirty-second notes
+            default: subdivisions = 4;
+        }
 
         if (loopLengthSamples > 0)
         {
-            // Free-time mode: divide loop into segments
+            // Use loop length to determine segment size
             segmentSamples = loopLengthSamples / subdivisions;
         }
         else
         {
-            // Tempo-synced mode
+            // Fall back to tempo-based calculation (assume 1 bar)
             const float beatsPerSecond = currentBpm / 60.0f;
             const float samplesPerBeat = static_cast<float>(currentSampleRate) / beatsPerSecond;
             const float samplesPerBar = samplesPerBeat * 4.0f;  // Assuming 4/4
-            segmentSamples = static_cast<int>(samplesPerBar / static_cast<float>(subdivisions));
+            segmentSamples = static_cast<int>(samplesPerBar * 4.0f / static_cast<float>(subdivisions));
         }
 
-        // Minimum segment size
-        segmentSamples = std::max(segmentSamples, 256);
+        // Ensure minimum segment size (avoid tiny glitchy segments)
+        segmentSamples = std::max(segmentSamples, static_cast<int>(currentSampleRate * 0.05)); // Min 50ms
 
-        // Regenerate segment order
+        // Reset scrambler state
+        scrambleBufferFilled = false;
+        scrambleWritePos = 0;
+        scrambleReadPos = 0;
+        segmentPosition = 0;
+        currentSegment = 0;
+
+        // Generate initial segment order
         updateSegmentOrder();
     }
 
@@ -444,75 +511,101 @@ private:
     {
         const float amount = scramblerAmountSmooth.getCurrentValue();
 
+        // Number of segments we'll work with
+        const int numSegments = std::min(MAX_SCRAMBLE_SEGMENTS,
+            segmentSamples > 0 ? static_cast<int>(scrambleBufferL.size()) / segmentSamples : 1);
+
         // Start with sequential order
-        for (int i = 0; i < MAX_SCRAMBLE_SEGMENTS; ++i)
+        for (int i = 0; i < numSegments; ++i)
             segmentOrder[i] = i;
 
         // Shuffle based on amount (0 = no shuffle, 1 = full random)
-        if (amount > 0.01f)
+        if (amount > 0.01f && numSegments > 1)
         {
-            const int numSwaps = static_cast<int>(amount * MAX_SCRAMBLE_SEGMENTS);
-            for (int i = 0; i < numSwaps; ++i)
+            // Fisher-Yates shuffle with probability based on amount
+            for (int i = numSegments - 1; i > 0; --i)
             {
-                const int a = scrambleRandom.nextInt(MAX_SCRAMBLE_SEGMENTS);
-                const int b = scrambleRandom.nextInt(MAX_SCRAMBLE_SEGMENTS);
-                std::swap(segmentOrder[a], segmentOrder[b]);
+                if (scrambleRandom.nextFloat() < amount)
+                {
+                    const int j = scrambleRandom.nextInt(i + 1);
+                    std::swap(segmentOrder[i], segmentOrder[j]);
+                }
             }
         }
     }
 
     void processScrambler(float& left, float& right)
     {
-        if (segmentSamples <= 0)
+        if (segmentSamples <= 0 || scrambleBufferL.empty())
             return;
 
-        // Write to scramble buffer
-        const int writeIdx = scrambleWritePos % static_cast<int>(scrambleBufferL.size());
-        scrambleBufferL[writeIdx] = left;
-        scrambleBufferR[writeIdx] = right;
-        scrambleWritePos++;
+        const int bufferSize = static_cast<int>(scrambleBufferL.size());
+        const int numSegments = std::min(MAX_SCRAMBLE_SEGMENTS, bufferSize / segmentSamples);
 
-        // Calculate read position based on current segment
-        const int numSegments = std::min(MAX_SCRAMBLE_SEGMENTS,
-            static_cast<int>(scrambleBufferL.size()) / segmentSamples);
+        if (numSegments < 2)
+            return;
 
-        if (numSegments <= 1)
+        // Write incoming audio to buffer
+        scrambleBufferL[scrambleWritePos] = left;
+        scrambleBufferR[scrambleWritePos] = right;
+
+        // Need to fill at least one full set of segments before outputting scrambled audio
+        const int requiredSamples = numSegments * segmentSamples;
+
+        if (!scrambleBufferFilled)
         {
-            // Not enough buffer for scrambling, pass through
+            scrambleWritePos++;
+            if (scrambleWritePos >= requiredSamples)
+            {
+                scrambleBufferFilled = true;
+                scrambleWritePos = 0;
+                scrambleReadPos = 0;
+                segmentPosition = 0;
+                currentSegment = 0;
+                updateSegmentOrder();
+            }
+            // Pass through while filling buffer
             return;
         }
 
-        // Map current segment to scrambled segment
+        // Map current segment position to scrambled segment
         const int mappedSegment = segmentOrder[currentSegment % numSegments];
+        const int readOffset = mappedSegment * segmentSamples + segmentPosition;
 
-        // Calculate read position
-        const int segmentStart = mappedSegment * segmentSamples;
-        int readIdx = (segmentStart + segmentPosition) % static_cast<int>(scrambleBufferL.size());
+        // Calculate actual read position in circular buffer
+        int readIdx = readOffset % bufferSize;
 
-        // Ensure we have valid data (don't read ahead of write)
-        const int bufferDelay = numSegments * segmentSamples;
-        if (scrambleWritePos < bufferDelay)
+        // Crossfade at segment boundaries to avoid clicks
+        float crossfade = 1.0f;
+        const int crossfadeSamples = std::min(64, segmentSamples / 8);
+
+        if (segmentPosition < crossfadeSamples)
         {
-            // Still filling buffer, pass through
-            return;
+            crossfade = static_cast<float>(segmentPosition) / static_cast<float>(crossfadeSamples);
+        }
+        else if (segmentPosition >= segmentSamples - crossfadeSamples)
+        {
+            crossfade = static_cast<float>(segmentSamples - segmentPosition) / static_cast<float>(crossfadeSamples);
         }
 
-        // Read from scrambled position (with delay)
-        readIdx = (scrambleWritePos - bufferDelay + readIdx) % static_cast<int>(scrambleBufferL.size());
-        if (readIdx < 0)
-            readIdx += static_cast<int>(scrambleBufferL.size());
+        // Read from scrambled position
+        float scrambledL = scrambleBufferL[readIdx];
+        float scrambledR = scrambleBufferR[readIdx];
 
-        left = scrambleBufferL[readIdx];
-        right = scrambleBufferR[readIdx];
+        // Apply crossfade between original and scrambled
+        left = left * (1.0f - crossfade) + scrambledL * crossfade;
+        right = right * (1.0f - crossfade) + scrambledR * crossfade;
 
-        // Advance position within segment
+        // Advance positions
+        scrambleWritePos = (scrambleWritePos + 1) % bufferSize;
         segmentPosition++;
+
         if (segmentPosition >= segmentSamples)
         {
             segmentPosition = 0;
             currentSegment++;
 
-            // Periodically re-shuffle
+            // Re-shuffle periodically for variation
             if (currentSegment % numSegments == 0)
             {
                 updateSegmentOrder();

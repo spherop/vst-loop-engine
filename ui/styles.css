@@ -1206,6 +1206,58 @@ html, body {
    DEGRADE TAB STYLES
    ============================================ */
 
+/* Section LED (for bypass toggle) */
+.section-led {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.section-led:hover {
+    border-color: #555;
+}
+
+/* Degrade section LED uses green */
+.degrade-led.active {
+    background: var(--degrade-accent);
+    border-color: var(--degrade-accent);
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,0.3),
+        0 0 8px var(--degrade-accent-glow);
+}
+
+/* Disabled section styling */
+.degrade-section.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.degrade-section.disabled .knob,
+.degrade-section.disabled .subdiv-select {
+    pointer-events: none;
+}
+
+/* Filter visualization */
+.filter-viz-container {
+    width: 100%;
+    height: 60px;
+    background: linear-gradient(180deg, #0a0a0a 0%, #080808 100%);
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.filter-viz-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
 /* Degrade knobs use green accent */
 .degrade-knob:hover {
     box-shadow:

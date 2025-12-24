@@ -273,6 +273,38 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.setDegradeScrambleSubdiv(static_cast<int>(args[0]));
                       complete({});
                   })
+                  .withNativeFunction("setDegradeFilterEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setDegradeFilterEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setDegradeLofiEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setDegradeLofiEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setDegradeScramblerEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setDegradeScramblerEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("getDegradeState", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("filterEnabled", processorRef.getDegradeFilterEnabled());
+                      result->setProperty("lofiEnabled", processorRef.getDegradeLofiEnabled());
+                      result->setProperty("scramblerEnabled", processorRef.getDegradeScramblerEnabled());
+                      // Filter visualization data
+                      auto& degrade = processorRef.getDegradeProcessor();
+                      result->setProperty("hpFreq", degrade.getCurrentHPFreq());
+                      result->setProperty("lpFreq", degrade.getCurrentLPFreq());
+                      result->setProperty("hpQ", degrade.getCurrentHPQ());
+                      result->setProperty("lpQ", degrade.getCurrentLPQ());
+                      complete(juce::var(result.get()));
+                  })
                   .withNativeFunction("getTestSounds", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       juce::DynamicObject::Ptr result = new juce::DynamicObject();

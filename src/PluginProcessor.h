@@ -74,6 +74,14 @@ public:
     DegradeProcessor& getDegradeProcessor() { return degradeProcessor; }
     void setDegradeScrambleSubdiv(int subdiv);
 
+    // Degrade section bypass
+    void setDegradeFilterEnabled(bool enabled);
+    void setDegradeLofiEnabled(bool enabled);
+    void setDegradeScramblerEnabled(bool enabled);
+    bool getDegradeFilterEnabled() const;
+    bool getDegradeLofiEnabled() const;
+    bool getDegradeScramblerEnabled() const;
+
     // Host transport sync
     void setHostTransportSync(bool enabled);
     bool getHostTransportSync() const;
