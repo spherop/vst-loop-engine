@@ -60,6 +60,8 @@ target_sources(LoopEngine
 target_include_directories(LoopEngine
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib/signalsmith-stretch
+        ${CMAKE_CURRENT_SOURCE_DIR}/lib  # For signalsmith-linear/stft.h
 )
 
 # Compile definitions
