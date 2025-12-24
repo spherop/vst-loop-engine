@@ -122,6 +122,10 @@
                                 <span class="transport-icon">&#8617;</span>
                                 <span class="transport-label">UNDO</span>
                             </button>
+                            <button id="redo-btn" class="transport-btn redo">
+                                <span class="transport-icon">&#8618;</span>
+                                <span class="transport-label">REDO</span>
+                            </button>
                             <button id="clear-btn" class="transport-btn clear">
                                 <span class="transport-icon">&#10005;</span>
                                 <span class="transport-label">CLEAR</span>
@@ -221,7 +225,33 @@
                                 <div class="knob knob-medium" id="loopPitch-knob">
                                     <div class="knob-indicator"></div>
                                 </div>
-                                <span class="font-mono text-xs font-medium text-white" id="loopPitch-value">0 st</span>
+                                <select class="pitch-select" id="pitch-select">
+                                    <option value="-12">-12</option>
+                                    <option value="-11">-11</option>
+                                    <option value="-10">-10</option>
+                                    <option value="-9">-9</option>
+                                    <option value="-8">-8</option>
+                                    <option value="-7">-7</option>
+                                    <option value="-6">-6</option>
+                                    <option value="-5">-5</option>
+                                    <option value="-4">-4</option>
+                                    <option value="-3">-3</option>
+                                    <option value="-2">-2</option>
+                                    <option value="-1">-1</option>
+                                    <option value="0" selected>0</option>
+                                    <option value="1">+1</option>
+                                    <option value="2">+2</option>
+                                    <option value="3">+3</option>
+                                    <option value="4">+4</option>
+                                    <option value="5">+5</option>
+                                    <option value="6">+6</option>
+                                    <option value="7">+7</option>
+                                    <option value="8">+8</option>
+                                    <option value="9">+9</option>
+                                    <option value="10">+10</option>
+                                    <option value="11">+11</option>
+                                    <option value="12">+12</option>
+                                </select>
                                 <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">PITCH</span>
                             </div>
 

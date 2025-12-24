@@ -538,6 +538,7 @@ html, body {
    ============================================ */
 
 .layer-btn {
+    position: relative;
     width: 24px;
     height: 24px;
     border-radius: 4px;
@@ -573,6 +574,28 @@ html, body {
     background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
     border-color: var(--looper-accent);
     color: #81d4fa;
+}
+
+/* Muted layer (right-click to toggle) */
+.layer-btn.muted {
+    background: linear-gradient(180deg, #1a1010 0%, #0f0808 100%) !important;
+    border-color: #553333 !important;
+    color: #664444 !important;
+    text-decoration: line-through;
+}
+
+.layer-btn.muted::after {
+    content: 'M';
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    font-size: 7px;
+    color: #ff4444;
+    background: #1a0a0a;
+    border: 1px solid #553333;
+    border-radius: 2px;
+    padding: 0 2px;
+    line-height: 1;
 }
 
 /* ============================================
@@ -876,6 +899,45 @@ html, body {
 }
 
 .note-select option {
+    background: #1a1a1a;
+    color: #ccc;
+}
+
+/* ============================================
+   PITCH SELECT DROPDOWN
+   ============================================ */
+
+.pitch-select {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    color: #4fc3f7;
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 3px 20px 3px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%234fc3f7' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    min-width: 50px;
+    text-align: center;
+}
+
+.pitch-select:hover {
+    border-color: #4fc3f7;
+}
+
+.pitch-select:focus {
+    outline: none;
+    border-color: #4fc3f7;
+    box-shadow: 0 0 8px rgba(79, 195, 247, 0.3);
+}
+
+.pitch-select option {
     background: #1a1a1a;
     color: #ccc;
 }

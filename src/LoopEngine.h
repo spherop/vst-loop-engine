@@ -201,18 +201,30 @@ public:
     {
         if (currentLayer > 0)
         {
-            // Clear current layer and go back
-            layers[currentLayer].clear();
+            // Stop the current layer (don't clear - keep data for redo)
+            layers[currentLayer].stop();
             --currentLayer;
 
-            // Update highest layer
-            highestLayer = std::min(highestLayer, currentLayer);
+            // Track highest undone layer for redo
+            // highestLayer stays the same - it tracks max recorded, not current
+            DBG("undo() - moved to layer " + juce::String(currentLayer) +
+                ", highestLayer still " + juce::String(highestLayer));
         }
     }
 
     void redo()
     {
-        // Not implemented in this version - would need to store cleared layers
+        // Can only redo if there are undone layers above current
+        if (currentLayer < highestLayer)
+        {
+            ++currentLayer;
+            // Re-enable the layer by playing it
+            if (layers[currentLayer].hasContent())
+            {
+                layers[currentLayer].play();
+            }
+            DBG("redo() - restored layer " + juce::String(currentLayer));
+        }
     }
 
     void clear()
@@ -233,6 +245,27 @@ public:
         {
             currentLayer = layer;
         }
+    }
+
+    // Per-layer mute (1-indexed for UI)
+    void setLayerMuted(int layer, bool muted)
+    {
+        int idx = layer - 1;  // Convert to 0-indexed
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setMuted(muted);
+            DBG("Layer " + juce::String(layer) + " muted: " + juce::String(muted ? "true" : "false"));
+        }
+    }
+
+    bool getLayerMuted(int layer) const
+    {
+        int idx = layer - 1;  // Convert to 0-indexed
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getMuted();
+        }
+        return false;
     }
 
     // Parameters (apply to all layers)
@@ -307,12 +340,23 @@ public:
         // Clear output
         buffer.clear();
 
-        // Process each layer
+        // Process each layer up to currentLayer (undone layers above currentLayer are skipped)
         bool anyPlaying = false;
-        for (int i = 0; i <= highestLayer; ++i)
+        for (int i = 0; i <= currentLayer; ++i)
         {
             if (!layers[i].hasContent() && layers[i].getState() != LoopBuffer::State::Recording)
                 continue;
+
+            // Skip muted layers (but still advance playhead so they stay in sync)
+            if (layers[i].getMuted())
+            {
+                // Create a dummy buffer just to advance the layer's state
+                juce::AudioBuffer<float> dummyBuffer(numChannels, numSamples);
+                dummyBuffer.clear();
+                layers[i].processBlock(dummyBuffer);
+                // Don't mix muted layer into output
+                continue;
+            }
 
             // Copy input to temp buffer for this layer's processing
             juce::AudioBuffer<float> layerBuffer;

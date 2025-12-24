@@ -67,6 +67,7 @@ public:
         loopEnd = 0;
         state.store(State::Idle);
         isReversed.store(false);
+        isMuted.store(false);
         playbackRateSmoothed.setCurrentAndTargetValue(1.0f);
         pitchRatioSmoothed.setCurrentAndTargetValue(1.0f);
         fadeSmoothed.setCurrentAndTargetValue(1.0f);
@@ -365,6 +366,10 @@ public:
     bool hasContent() const { return loopLength > 0; }
     bool getIsReversed() const { return isReversed.load(); }
 
+    // Mute control
+    void setMuted(bool muted) { isMuted.store(muted); }
+    bool getMuted() const { return isMuted.load(); }
+
     // Get waveform data for UI visualization (downsampled)
     // Works during recording (uses writeHead) and playback (uses loopLength)
     std::vector<float> getWaveformData(int numPoints) const
@@ -445,6 +450,7 @@ private:
     juce::SmoothedValue<float> pitchRatioSmoothed;
     juce::SmoothedValue<float> fadeSmoothed;  // 0.0 = full fade, 1.0 = no fade
     std::atomic<bool> isReversed { false };
+    std::atomic<bool> isMuted { false };
     std::atomic<State> state { State::Idle };
 
     // Preset loop length (0 = free/unlimited)

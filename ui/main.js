@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.3.3";
+const UI_VERSION = "0.3.4";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -688,6 +688,7 @@ class LooperController {
         this.stopFn = getNativeFunction("loopStop");
         this.overdubFn = getNativeFunction("loopOverdub");
         this.undoFn = getNativeFunction("loopUndo");
+        this.redoFn = getNativeFunction("loopRedo");
         this.clearFn = getNativeFunction("loopClear");
         this.getStateFn = getNativeFunction("getLoopState");
         this.jumpToLayerFn = getNativeFunction("loopJumpToLayer");
@@ -765,6 +766,7 @@ class LooperController {
         this.playBtn = document.getElementById('loop-play-btn');
         this.stopBtn = document.getElementById('loop-stop-btn');
         this.undoBtn = document.getElementById('undo-btn');
+        this.redoBtn = document.getElementById('redo-btn');
         this.clearBtn = document.getElementById('clear-btn');
         this.timeDisplay = document.getElementById('loop-time-display');
 
@@ -779,6 +781,9 @@ class LooperController {
         }
         if (this.undoBtn) {
             this.undoBtn.addEventListener('click', () => this.undo());
+        }
+        if (this.redoBtn) {
+            this.redoBtn.addEventListener('click', () => this.redo());
         }
         if (this.clearBtn) {
             this.clearBtn.addEventListener('click', () => this.clear());
@@ -813,10 +818,28 @@ class LooperController {
 
     setupLayers() {
         this.layerBtns = document.querySelectorAll('.layer-btn');
+        this.setLayerMutedFn = getNativeFunction("setLayerMuted");
+
         this.layerBtns.forEach(btn => {
+            // Left click: jump to layer
             btn.addEventListener('click', () => {
                 const layer = parseInt(btn.dataset.layer);
                 this.jumpToLayer(layer);
+            });
+
+            // Right click: toggle mute
+            btn.addEventListener('contextmenu', async (e) => {
+                e.preventDefault();
+                const layer = parseInt(btn.dataset.layer);
+                const isMuted = btn.classList.contains('muted');
+                const newMuted = !isMuted;
+                btn.classList.toggle('muted', newMuted);
+                try {
+                    await this.setLayerMutedFn(layer, newMuted);
+                    console.log(`Layer ${layer} muted: ${newMuted}`);
+                } catch (err) {
+                    console.error('Error toggling layer mute:', err);
+                }
             });
         });
     }
@@ -1257,6 +1280,14 @@ class LooperController {
         }
     }
 
+    async redo() {
+        try {
+            await this.redoFn();
+        } catch (e) {
+            console.error('Error redoing:', e);
+        }
+    }
+
     async clear() {
         try {
             await this.clearFn();
@@ -1655,14 +1686,27 @@ document.addEventListener('DOMContentLoaded', () => {
         stepRange: { start: -12, end: 12 }  // Full range is 24 semitones
     });
 
-    // Add additional debug logging for pitch slider state
+    // Pitch dropdown for direct semitone selection
+    const pitchSelect = document.getElementById('pitch-select');
     const pitchState = getSliderState('loopPitch');
-    pitchState.propertiesChangedEvent.addListener(() => {
-        console.log(`[PITCH] Properties changed:`, pitchState.properties);
-    });
-    pitchState.valueChangedEvent.addListener(() => {
-        console.log(`[PITCH] Value changed: scaledValue=${pitchState.scaledValue}, normalized=${pitchState.getNormalisedValue().toFixed(3)}`);
-    });
+
+    if (pitchSelect) {
+        // When dropdown changes, update the knob and parameter
+        pitchSelect.addEventListener('change', (e) => {
+            const semitones = parseInt(e.target.value);
+            // Convert semitones (-12 to +12) to normalized (0 to 1)
+            const normalized = (semitones + 12) / 24;
+            loopPitchKnob.setValue(normalized);
+            loopPitchKnob.sendToJuce();
+        });
+
+        // When knob/parameter changes, update dropdown to nearest semitone
+        pitchState.valueChangedEvent.addListener(() => {
+            const normalized = pitchState.getNormalisedValue();
+            const semitones = Math.round(normalized * 24 - 12);
+            pitchSelect.value = semitones.toString();
+        });
+    }
 
     // Loop Fade: 0% (play once) to 100% (infinite loop)
     loopFadeKnob = new KnobController('loopFade-knob', 'loopFade', {

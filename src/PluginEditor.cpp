@@ -59,6 +59,11 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       processorRef.getLoopEngine().undo();
                       complete({});
                   })
+                  .withNativeFunction("loopRedo", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().redo();
+                      complete({});
+                  })
                   .withNativeFunction("loopClear", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().clear();
@@ -69,6 +74,26 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       if (args.size() > 0)
                           processorRef.getLoopEngine().jumpToLayer(static_cast<int>(args[0]) - 1);  // 1-indexed from UI
                       complete({});
+                  })
+                  .withNativeFunction("setLayerMuted", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          bool muted = static_cast<bool>(args[1]);
+                          processorRef.getLoopEngine().setLayerMuted(layer, muted);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerMuted", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          result->setProperty("muted", processorRef.getLoopEngine().getLayerMuted(layer));
+                      }
+                      complete(juce::var(result.get()));
                   })
                   .withNativeFunction("setLoopLengthBars", [this](const juce::Array<juce::var>& args, auto complete)
                   {
