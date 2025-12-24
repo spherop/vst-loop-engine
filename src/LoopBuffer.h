@@ -148,6 +148,31 @@ public:
         }
     }
 
+    // Start overdubbing on a fresh layer - sets up the buffer for the master loop length
+    // The new layer starts empty but synced with other layers
+    void startOverdubOnNewLayer(int masterLoopLengthSamples)
+    {
+        // Clear this layer's buffers
+        std::fill(bufferL.begin(), bufferL.end(), 0.0f);
+        std::fill(bufferR.begin(), bufferR.end(), 0.0f);
+
+        // Set up loop parameters to match master loop
+        loopLength = masterLoopLengthSamples;
+        loopStart = 0;
+        loopEnd = loopLength;
+        playHead = 0.0f;  // Will be synced to master playhead
+        writeHead = 0;
+        currentFadeMultiplier = 1.0f;
+        lastPlayheadPosition = 0.0f;
+
+        // Mark as having content immediately so it gets processed
+        // (the loopLength > 0 makes hasContent() true)
+
+        state.store(State::Overdubbing);
+        DBG("LoopBuffer::startOverdubOnNewLayer() loopLength=" + juce::String(loopLength) +
+            " samples (" + juce::String(loopLength / currentSampleRate, 2) + "s)");
+    }
+
     void stopOverdub()
     {
         if (state.load() == State::Overdubbing)
@@ -330,6 +355,12 @@ public:
     }
 
     int getLoopLengthSamples() const { return loopLength; }
+
+    // Get raw playhead position for syncing
+    float getRawPlayhead() const { return playHead; }
+
+    // Set playhead position (for syncing with other layers)
+    void setPlayhead(float position) { playHead = position; }
 
     bool hasContent() const { return loopLength > 0; }
     bool getIsReversed() const { return isReversed.load(); }

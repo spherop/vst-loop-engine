@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.3.2";
+const UI_VERSION = "0.3.3";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -185,10 +185,16 @@ class KnobController {
         // Default value to use when resetting (optional)
         this.defaultValue = options.defaultValue !== undefined ? options.defaultValue : null;
 
+        // Chromatic/stepped mode options (for pitch knob)
+        // When shiftStep is set, Shift+drag will snap to discrete steps
+        this.shiftStep = options.shiftStep || null;  // e.g., 1/24 for semitones
+        this.stepRange = options.stepRange || { start: 0, end: 1 };  // Actual value range
+
         // Flag to ignore JUCE updates temporarily (used during reset)
         this.ignoreJuceUpdates = false;
 
         this.isDragging = false;
+        this.isShiftDrag = false;  // Track if Shift is held during drag
         this.lastY = 0;
 
         this.setupEvents();
@@ -277,6 +283,7 @@ class KnobController {
 
     startDrag(e) {
         this.isDragging = true;
+        this.isShiftDrag = e.shiftKey;  // Track if Shift was held at start
         this.lastY = e.clientY;
         this.element.classList.add('active');
         this.element.classList.add('adjusting');
@@ -288,9 +295,22 @@ class KnobController {
     drag(e) {
         if (!this.isDragging) return;
 
+        // Update shift state in case it changed mid-drag
+        this.isShiftDrag = e.shiftKey;
+
         const deltaY = this.lastY - e.clientY;
         const sensitivity = 0.005;
-        const newValue = Math.max(0, Math.min(1, this.value + deltaY * sensitivity));
+        let newValue = Math.max(0, Math.min(1, this.value + deltaY * sensitivity));
+
+        // Chromatic (stepped) mode when Shift is held and shiftStep is configured
+        if (this.isShiftDrag && this.shiftStep) {
+            // Snap to discrete steps
+            // Convert normalized value to step count, round, then back to normalized
+            const range = this.stepRange.end - this.stepRange.start;
+            const stepSize = this.shiftStep / range;  // Size of one step in normalized space
+            newValue = Math.round(newValue / stepSize) * stepSize;
+            newValue = Math.max(0, Math.min(1, newValue));
+        }
 
         this.setValue(newValue);
         this.sendToJuce();
@@ -1615,6 +1635,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Loop Pitch: -12 to +12 semitones (center = 0)
     // The C++ parameter sends scaled values (-12 to +12)
+    // Shift+drag enables chromatic mode (1 semitone steps)
     loopPitchKnob = new KnobController('loopPitch-knob', 'loopPitch', {
         formatValue: (v) => {
             // v is normalized 0-1, but we need to show the actual semitone value
@@ -1624,10 +1645,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const end = state?.properties?.end ?? 12;
             const semitones = v * (end - start) + start;
             const sign = semitones >= 0 ? '+' : '';
-            console.log(`[PITCH] formatValue: normalized=${v.toFixed(3)}, start=${start}, end=${end}, semitones=${semitones.toFixed(2)}`);
-            return `${sign}${semitones.toFixed(1)} st`;
+            // Show integer when value is close to a whole semitone
+            const isWhole = Math.abs(semitones - Math.round(semitones)) < 0.05;
+            const display = isWhole ? Math.round(semitones) : semitones.toFixed(1);
+            return `${sign}${display} st`;
         },
-        defaultValue: 0.5  // Default to 0 semitones (no pitch shift)
+        defaultValue: 0.5,  // Default to 0 semitones (no pitch shift)
+        shiftStep: 1,       // 1 semitone step when Shift is held
+        stepRange: { start: -12, end: 12 }  // Full range is 24 semitones
     });
 
     // Add additional debug logging for pitch slider state

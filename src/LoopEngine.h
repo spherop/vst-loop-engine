@@ -150,9 +150,24 @@ public:
 
         if (currentState == LoopBuffer::State::Playing)
         {
-            // Start overdubbing on current layer
-            DBG("Starting overdub on layer " + juce::String(currentLayer));
-            layers[currentLayer].startOverdub();
+            // Create a NEW layer for overdub (Blooper-style)
+            // Each overdub creates a separate layer that can be undone
+            if (highestLayer < NUM_LAYERS - 1)
+            {
+                // Get current playhead from layer 0 to sync new layer
+                float masterPlayhead = layers[0].getRawPlayhead();
+
+                currentLayer = highestLayer + 1;
+                highestLayer = currentLayer;
+                DBG("Starting overdub on NEW layer " + juce::String(currentLayer) +
+                    " syncing playhead to " + juce::String(masterPlayhead));
+                layers[currentLayer].startOverdubOnNewLayer(masterLoopLength);
+                layers[currentLayer].setPlayhead(masterPlayhead);
+            }
+            else
+            {
+                DBG("Cannot overdub - max layers reached");
+            }
         }
         else if (currentState == LoopBuffer::State::Overdubbing)
         {
@@ -162,10 +177,19 @@ public:
         }
         else if (currentState == LoopBuffer::State::Idle && highestLayer >= 0 && layers[0].hasContent())
         {
-            // If idle with content, play and immediately overdub
-            DBG("Idle with content - starting play + overdub");
+            // If idle with content, play and immediately overdub on a new layer
+            DBG("Idle with content - starting play + overdub on new layer");
             play();
-            layers[currentLayer].startOverdub();
+            if (highestLayer < NUM_LAYERS - 1)
+            {
+                // Get current playhead from layer 0 (should be 0 since we just started playing)
+                float masterPlayhead = layers[0].getRawPlayhead();
+
+                currentLayer = highestLayer + 1;
+                highestLayer = currentLayer;
+                layers[currentLayer].startOverdubOnNewLayer(masterLoopLength);
+                layers[currentLayer].setPlayhead(masterPlayhead);
+            }
         }
         else
         {
