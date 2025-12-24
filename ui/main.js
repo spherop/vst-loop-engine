@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.3.4";
+const UI_VERSION = "0.3.5";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -678,7 +678,18 @@ class LooperController {
         this.loopStart = 0;
         this.loopEnd = 1;
 
-        // Looper accent color (light blue)
+        // Per-layer colors for waveform visualization
+        // 8 distinct colors: base blue, then variations for each layer
+        this.layerColors = [
+            '#4fc3f7',  // Layer 1: Cyan/Light blue (base)
+            '#ff7043',  // Layer 2: Deep orange
+            '#66bb6a',  // Layer 3: Green
+            '#ab47bc',  // Layer 4: Purple
+            '#ffa726',  // Layer 5: Orange
+            '#26c6da',  // Layer 6: Teal
+            '#ec407a',  // Layer 7: Pink
+            '#9ccc65',  // Layer 8: Light green
+        ];
         this.accentColor = '#4fc3f7';
         this.accentColorDim = '#29b6f6';
 
@@ -1088,8 +1099,16 @@ class LooperController {
         this.ctx.fillText('No loop recorded', width / 2, height / 2 + 4);
     }
 
-    drawWaveform(waveformData) {
-        if (!this.ctx || !waveformData || waveformData.length === 0) {
+    drawWaveform(waveformData, layerWaveforms, layerMutes) {
+        if (!this.ctx) {
+            return;
+        }
+
+        // Check if we have any content to draw
+        const hasLayerData = layerWaveforms && layerWaveforms.length > 0;
+        const hasBasicData = waveformData && waveformData.length > 0;
+
+        if (!hasLayerData && !hasBasicData) {
             this.drawEmptyWaveform();
             return;
         }
@@ -1104,16 +1123,46 @@ class LooperController {
         const zoomedWidth = width * this.zoomLevel;
         const offsetX = this.zoomOffset * (zoomedWidth - width);
 
-        // Draw waveform with zoom
-        this.ctx.fillStyle = this.accentColor;
-        const barWidth = zoomedWidth / waveformData.length;
+        // Draw per-layer waveforms if available (colored, stacked)
+        if (hasLayerData) {
+            for (let layerIdx = 0; layerIdx < layerWaveforms.length; layerIdx++) {
+                const layerData = layerWaveforms[layerIdx];
+                if (!layerData || layerData.length === 0) continue;
 
-        for (let i = 0; i < waveformData.length; i++) {
-            const amplitude = waveformData[i] * (height * 0.4);
-            const x = (i * barWidth) - offsetX;
-            // Only draw visible bars
-            if (x + barWidth > 0 && x < width) {
-                this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
+                // Check if this layer is muted - draw dimmed if so
+                const isMuted = layerMutes && layerMutes[layerIdx];
+                const layerColor = this.layerColors[layerIdx % this.layerColors.length];
+
+                // Set color with alpha for layering effect
+                // Muted layers are drawn very dim
+                if (isMuted) {
+                    this.ctx.fillStyle = layerColor + '30';  // 30% opacity for muted
+                } else {
+                    this.ctx.fillStyle = layerColor + '99';  // 60% opacity for active
+                }
+
+                const barWidth = zoomedWidth / layerData.length;
+
+                for (let i = 0; i < layerData.length; i++) {
+                    const amplitude = layerData[i] * (height * 0.35);
+                    const x = (i * barWidth) - offsetX;
+                    // Only draw visible bars
+                    if (x + barWidth > 0 && x < width && amplitude > 0.5) {
+                        this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
+                    }
+                }
+            }
+        } else if (hasBasicData) {
+            // Fallback to single-color combined waveform
+            this.ctx.fillStyle = this.accentColor;
+            const barWidth = zoomedWidth / waveformData.length;
+
+            for (let i = 0; i < waveformData.length; i++) {
+                const amplitude = waveformData[i] * (height * 0.4);
+                const x = (i * barWidth) - offsetX;
+                if (x + barWidth > 0 && x < width) {
+                    this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
+                }
             }
         }
 
@@ -1362,6 +1411,18 @@ class LooperController {
         });
     }
 
+    // Sync layer mute button UI with backend state
+    syncLayerMuteUI(muteStates) {
+        this.layerBtns.forEach(btn => {
+            const layer = parseInt(btn.dataset.layer);
+            const idx = layer - 1;  // 0-indexed
+            if (idx >= 0 && idx < muteStates.length) {
+                const isMuted = muteStates[idx];
+                btn.classList.toggle('muted', isMuted);
+            }
+        });
+    }
+
     startStatePolling() {
         // Poll loop state every 50ms for smooth playhead updates
         setInterval(async () => {
@@ -1414,9 +1475,14 @@ class LooperController {
                     //     }
                     // }
 
-                    // Update waveform if provided
-                    if (state.waveform) {
-                        this.drawWaveform(state.waveform);
+                    // Update waveform if provided (with per-layer colors if available)
+                    if (state.layerWaveforms || state.waveform) {
+                        this.drawWaveform(state.waveform, state.layerWaveforms, state.layerMutes);
+                    }
+
+                    // Sync layer mute UI states from backend
+                    if (state.layerMutes && state.layerMutes.length > 0) {
+                        this.syncLayerMuteUI(state.layerMutes);
                     }
                 }
             } catch (e) {

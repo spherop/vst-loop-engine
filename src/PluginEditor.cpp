@@ -177,12 +177,31 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("hasContent", loopEngine.hasContent());
                       result->setProperty("isReversed", loopEngine.getIsReversed());
 
-                      // Get waveform data (100 points for visualization)
+                      // Get combined waveform data (100 points for visualization)
                       auto waveformData = loopEngine.getWaveformData(100);
                       juce::Array<juce::var> waveformArray;
                       for (float val : waveformData)
                           waveformArray.add(val);
                       result->setProperty("waveform", waveformArray);
+
+                      // Get per-layer waveform data for colored visualization
+                      auto layerWaveforms = loopEngine.getLayerWaveforms(100);
+                      juce::Array<juce::var> layerWaveformArrays;
+                      for (const auto& layerWf : layerWaveforms)
+                      {
+                          juce::Array<juce::var> layerArray;
+                          for (float val : layerWf)
+                              layerArray.add(val);
+                          layerWaveformArrays.add(layerArray);
+                      }
+                      result->setProperty("layerWaveforms", layerWaveformArrays);
+
+                      // Get mute states for each layer
+                      auto muteStates = loopEngine.getLayerMuteStates();
+                      juce::Array<juce::var> muteArray;
+                      for (bool muted : muteStates)
+                          muteArray.add(muted);
+                      result->setProperty("layerMutes", muteArray);
 
                       complete(juce::var(result.get()));
                   })

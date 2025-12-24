@@ -340,9 +340,10 @@ public:
         // Clear output
         buffer.clear();
 
-        // Process each layer up to currentLayer (undone layers above currentLayer are skipped)
+        // Process ALL layers with content up to highestLayer
+        // Each layer can be independently muted regardless of currentLayer
         bool anyPlaying = false;
-        for (int i = 0; i <= currentLayer; ++i)
+        for (int i = 0; i <= highestLayer; ++i)
         {
             if (!layers[i].hasContent() && layers[i].getState() != LoopBuffer::State::Recording)
                 continue;
@@ -438,10 +439,13 @@ public:
     {
         std::vector<float> combinedWaveform(numPoints, 0.0f);
 
-        // Only include layers up to currentLayer (undone layers are not shown)
-        // This ensures waveform updates correctly after undo/redo
-        for (int i = 0; i <= currentLayer; ++i)
+        // Include all layers up to highestLayer (independent muting)
+        for (int i = 0; i <= highestLayer; ++i)
         {
+            // Skip muted layers in waveform display
+            if (layers[i].getMuted())
+                continue;
+
             bool isRecording = (layers[i].getState() == LoopBuffer::State::Recording);
             if (layers[i].hasContent() || isRecording)
             {
@@ -468,6 +472,55 @@ public:
         }
 
         return combinedWaveform;
+    }
+
+    // Get per-layer waveform data for colored visualization
+    std::vector<std::vector<float>> getLayerWaveforms(int numPoints) const
+    {
+        std::vector<std::vector<float>> layerWaveforms;
+
+        for (int i = 0; i <= highestLayer; ++i)
+        {
+            bool isRecording = (layers[i].getState() == LoopBuffer::State::Recording);
+            if (layers[i].hasContent() || isRecording)
+            {
+                auto waveform = layers[i].getWaveformData(numPoints);
+
+                // Normalize this layer
+                float maxVal = 0.0f;
+                for (float val : waveform)
+                {
+                    maxVal = std::max(maxVal, std::abs(val));
+                }
+                if (maxVal > 0.0f)
+                {
+                    for (float& val : waveform)
+                    {
+                        val /= maxVal;
+                    }
+                }
+
+                layerWaveforms.push_back(waveform);
+            }
+            else
+            {
+                // Empty placeholder for this layer
+                layerWaveforms.push_back(std::vector<float>(numPoints, 0.0f));
+            }
+        }
+
+        return layerWaveforms;
+    }
+
+    // Check if a specific layer is muted (for UI sync)
+    std::vector<bool> getLayerMuteStates() const
+    {
+        std::vector<bool> states;
+        for (int i = 0; i <= highestLayer; ++i)
+        {
+            states.push_back(layers[i].getMuted());
+        }
+        return states;
     }
 
     // Set preset loop length (in bars, 0 = free/unlimited)
