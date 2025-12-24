@@ -19,6 +19,17 @@ LoopEngineProcessor::LoopEngineProcessor()
     modRateParam = apvts.getRawParameterValue("modRate");
     modDepthParam = apvts.getRawParameterValue("modDepth");
     warmthParam = apvts.getRawParameterValue("warmth");
+
+    // Degrade parameters
+    degradeHPParam = apvts.getRawParameterValue("degradeHP");
+    degradeHPQParam = apvts.getRawParameterValue("degradeHPQ");
+    degradeLPParam = apvts.getRawParameterValue("degradeLP");
+    degradeLPQParam = apvts.getRawParameterValue("degradeLPQ");
+    degradeBitParam = apvts.getRawParameterValue("degradeBit");
+    degradeSRParam = apvts.getRawParameterValue("degradeSR");
+    degradeWobbleParam = apvts.getRawParameterValue("degradeWobble");
+    degradeScrambleAmtParam = apvts.getRawParameterValue("degradeScrambleAmt");
+    degradeMixParam = apvts.getRawParameterValue("degradeMix");
 }
 
 LoopEngineProcessor::~LoopEngineProcessor()
@@ -133,6 +144,78 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         100.0f,  // Default to 100% (no fade - infinite loop)
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
+    // =========== DEGRADE PARAMETERS ===========
+
+    // High-pass filter frequency
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeHP", 1},
+        "Degrade HP",
+        juce::NormalisableRange<float>(20.0f, 2000.0f, 1.0f, 0.3f),
+        20.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+
+    // High-pass filter resonance (Q)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeHPQ", 1},
+        "Degrade HP Q",
+        juce::NormalisableRange<float>(0.5f, 10.0f, 0.1f, 0.5f),
+        0.707f));
+
+    // Low-pass filter frequency
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeLP", 1},
+        "Degrade LP",
+        juce::NormalisableRange<float>(200.0f, 20000.0f, 1.0f, 0.3f),
+        20000.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+
+    // Low-pass filter resonance (Q)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeLPQ", 1},
+        "Degrade LP Q",
+        juce::NormalisableRange<float>(0.5f, 10.0f, 0.1f, 0.5f),
+        0.707f));
+
+    // Bit crusher depth
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeBit", 1},
+        "Bit Depth",
+        juce::NormalisableRange<float>(1.0f, 16.0f, 0.1f),
+        16.0f,
+        juce::AudioParameterFloatAttributes().withLabel("bit")));
+
+    // Sample rate reduction
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeSR", 1},
+        "Sample Rate",
+        juce::NormalisableRange<float>(1000.0f, 48000.0f, 1.0f, 0.4f),
+        48000.0f,
+        juce::AudioParameterFloatAttributes().withLabel("Hz")));
+
+    // Wobble amount
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeWobble", 1},
+        "Wobble",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Scrambler amount
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeScrambleAmt", 1},
+        "Scramble Amount",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Degrade mix (dry/wet)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeMix", 1},
+        "Degrade Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        100.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
     return { params.begin(), params.end() };
 }
 
@@ -195,6 +278,9 @@ void LoopEngineProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // Prepare loop engine
     loopEngine.prepare(sampleRate, samplesPerBlock);
+
+    // Prepare degrade processor
+    degradeProcessor.prepare(sampleRate, samplesPerBlock);
 
     // Prepare sample loader (primary) and synth generator (fallback)
     testSoundLoader.prepare(sampleRate, samplesPerBlock);
@@ -295,6 +381,22 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
 
     // Process through loop engine
     loopEngine.processBlock(buffer);
+
+    // Update degrade processor parameters
+    degradeProcessor.setHighPassFreq(degradeHPParam->load());
+    degradeProcessor.setHighPassQ(degradeHPQParam->load());
+    degradeProcessor.setLowPassFreq(degradeLPParam->load());
+    degradeProcessor.setLowPassQ(degradeLPQParam->load());
+    degradeProcessor.setBitDepth(degradeBitParam->load());
+    degradeProcessor.setSampleRateReduction(degradeSRParam->load());
+    degradeProcessor.setWobble(degradeWobbleParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setScramblerAmount(degradeScrambleAmtParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setMix(degradeMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setTempo(lastHostBpm.load());
+    degradeProcessor.setLoopLengthSamples(loopEngine.getLoopLengthSamples());
+
+    // Process through degrade processor
+    degradeProcessor.processBlock(buffer);
 
     // Get delay time - either from parameter or tempo sync
     const float delayTime = tempoSyncEnabled.load()
@@ -515,6 +617,11 @@ void LoopEngineProcessor::setDelayEnabled(bool enabled)
 bool LoopEngineProcessor::getDelayEnabled() const
 {
     return delayEnabled.load();
+}
+
+void LoopEngineProcessor::setDegradeScrambleSubdiv(int subdiv)
+{
+    degradeProcessor.setScramblerSubdiv(subdiv);
 }
 
 void LoopEngineProcessor::setHostTransportSync(bool enabled)

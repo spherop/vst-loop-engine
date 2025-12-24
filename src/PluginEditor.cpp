@@ -34,6 +34,15 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(loopSpeedRelay)
                   .withOptionsFrom(loopPitchRelay)
                   .withOptionsFrom(loopFadeRelay)
+                  .withOptionsFrom(degradeHPRelay)
+                  .withOptionsFrom(degradeHPQRelay)
+                  .withOptionsFrom(degradeLPRelay)
+                  .withOptionsFrom(degradeLPQRelay)
+                  .withOptionsFrom(degradeBitRelay)
+                  .withOptionsFrom(degradeSRRelay)
+                  .withOptionsFrom(degradeWobbleRelay)
+                  .withOptionsFrom(degradeScrambleAmtRelay)
+                  .withOptionsFrom(degradeMixRelay)
                   .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().record();
@@ -258,6 +267,12 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.setDelayEnabled(static_cast<bool>(args[0]));
                       complete({});
                   })
+                  .withNativeFunction("setDegradeScrambleSubdiv", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setDegradeScrambleSubdiv(static_cast<int>(args[0]));
+                      complete({});
+                  })
                   .withNativeFunction("getTestSounds", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       juce::DynamicObject::Ptr result = new juce::DynamicObject();
@@ -370,7 +385,34 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.getAPVTS().undoManager),
       loopFadeAttachment(*processorRef.getAPVTS().getParameter("loopFade"),
                          loopFadeRelay,
-                         processorRef.getAPVTS().undoManager)
+                         processorRef.getAPVTS().undoManager),
+      degradeHPAttachment(*processorRef.getAPVTS().getParameter("degradeHP"),
+                          degradeHPRelay,
+                          processorRef.getAPVTS().undoManager),
+      degradeHPQAttachment(*processorRef.getAPVTS().getParameter("degradeHPQ"),
+                           degradeHPQRelay,
+                           processorRef.getAPVTS().undoManager),
+      degradeLPAttachment(*processorRef.getAPVTS().getParameter("degradeLP"),
+                          degradeLPRelay,
+                          processorRef.getAPVTS().undoManager),
+      degradeLPQAttachment(*processorRef.getAPVTS().getParameter("degradeLPQ"),
+                           degradeLPQRelay,
+                           processorRef.getAPVTS().undoManager),
+      degradeBitAttachment(*processorRef.getAPVTS().getParameter("degradeBit"),
+                           degradeBitRelay,
+                           processorRef.getAPVTS().undoManager),
+      degradeSRAttachment(*processorRef.getAPVTS().getParameter("degradeSR"),
+                          degradeSRRelay,
+                          processorRef.getAPVTS().undoManager),
+      degradeWobbleAttachment(*processorRef.getAPVTS().getParameter("degradeWobble"),
+                              degradeWobbleRelay,
+                              processorRef.getAPVTS().undoManager),
+      degradeScrambleAmtAttachment(*processorRef.getAPVTS().getParameter("degradeScrambleAmt"),
+                                   degradeScrambleAmtRelay,
+                                   processorRef.getAPVTS().undoManager),
+      degradeMixAttachment(*processorRef.getAPVTS().getParameter("degradeMix"),
+                           degradeMixRelay,
+                           processorRef.getAPVTS().undoManager)
 {
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

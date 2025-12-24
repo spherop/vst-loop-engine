@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include "DelayLine.h"
 #include "LoopEngine.h"
+#include "DegradeProcessor.h"
 #include "TestToneGenerator.h"
 #include "TestSoundLoader.h"
 
@@ -69,6 +70,10 @@ public:
     void setDelayEnabled(bool enabled);
     bool getDelayEnabled() const;
 
+    // Degrade processor access
+    DegradeProcessor& getDegradeProcessor() { return degradeProcessor; }
+    void setDegradeScrambleSubdiv(int subdiv);
+
     // Host transport sync
     void setHostTransportSync(bool enabled);
     bool getHostTransportSync() const;
@@ -86,6 +91,7 @@ private:
     DelayLine delayLineL;
     DelayLine delayLineR;
     LoopEngine loopEngine;
+    DegradeProcessor degradeProcessor;
 
     // Test sounds - sample loader (primary) and synth generator (fallback)
     TestSoundLoader testSoundLoader;
@@ -102,6 +108,17 @@ private:
     std::atomic<float>* modRateParam = nullptr;
     std::atomic<float>* modDepthParam = nullptr;
     std::atomic<float>* warmthParam = nullptr;
+
+    // Degrade parameters
+    std::atomic<float>* degradeHPParam = nullptr;
+    std::atomic<float>* degradeHPQParam = nullptr;
+    std::atomic<float>* degradeLPParam = nullptr;
+    std::atomic<float>* degradeLPQParam = nullptr;
+    std::atomic<float>* degradeBitParam = nullptr;
+    std::atomic<float>* degradeSRParam = nullptr;
+    std::atomic<float>* degradeWobbleParam = nullptr;
+    std::atomic<float>* degradeScrambleAmtParam = nullptr;
+    std::atomic<float>* degradeMixParam = nullptr;
 
     // Tempo sync state
     std::atomic<bool> tempoSyncEnabled { false };

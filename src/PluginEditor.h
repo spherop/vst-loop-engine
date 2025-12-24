@@ -37,6 +37,17 @@ private:
     juce::WebSliderRelay loopPitchRelay { "loopPitch" };
     juce::WebSliderRelay loopFadeRelay { "loopFade" };
 
+    // Degrade parameter relays
+    juce::WebSliderRelay degradeHPRelay { "degradeHP" };
+    juce::WebSliderRelay degradeHPQRelay { "degradeHPQ" };
+    juce::WebSliderRelay degradeLPRelay { "degradeLP" };
+    juce::WebSliderRelay degradeLPQRelay { "degradeLPQ" };
+    juce::WebSliderRelay degradeBitRelay { "degradeBit" };
+    juce::WebSliderRelay degradeSRRelay { "degradeSR" };
+    juce::WebSliderRelay degradeWobbleRelay { "degradeWobble" };
+    juce::WebSliderRelay degradeScrambleAmtRelay { "degradeScrambleAmt" };
+    juce::WebSliderRelay degradeMixRelay { "degradeMix" };
+
     juce::WebBrowserComponent webView;
 
     // Parameter attachments
@@ -57,6 +68,17 @@ private:
     juce::WebSliderParameterAttachment loopSpeedAttachment;
     juce::WebSliderParameterAttachment loopPitchAttachment;
     juce::WebSliderParameterAttachment loopFadeAttachment;
+
+    // Degrade parameter attachments
+    juce::WebSliderParameterAttachment degradeHPAttachment;
+    juce::WebSliderParameterAttachment degradeHPQAttachment;
+    juce::WebSliderParameterAttachment degradeLPAttachment;
+    juce::WebSliderParameterAttachment degradeLPQAttachment;
+    juce::WebSliderParameterAttachment degradeBitAttachment;
+    juce::WebSliderParameterAttachment degradeSRAttachment;
+    juce::WebSliderParameterAttachment degradeWobbleAttachment;
+    juce::WebSliderParameterAttachment degradeScrambleAmtAttachment;
+    juce::WebSliderParameterAttachment degradeMixAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
 

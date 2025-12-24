@@ -554,7 +554,17 @@ private:
         {
             // Apply fade decay when loop wraps around
             // fadeTarget of 1.0 = no decay, 0.0 = instant silence
-            currentFadeMultiplier *= fadeTarget;
+            if (fadeTarget < currentFadeMultiplier)
+            {
+                // Decay: multiply by fadeTarget to reduce
+                currentFadeMultiplier *= fadeTarget;
+            }
+            else
+            {
+                // Recovery: lerp towards fadeTarget when knob is raised
+                // This allows the fade to recover if user increases the knob
+                currentFadeMultiplier += (fadeTarget - currentFadeMultiplier) * 0.3f;
+            }
         }
 
         // Read existing content (with fade applied)

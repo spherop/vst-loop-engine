@@ -439,6 +439,11 @@ public:
         return static_cast<float>(masterLoopLength) / static_cast<float>(currentSampleRate);
     }
 
+    int getLoopLengthSamples() const
+    {
+        return masterLoopLength;
+    }
+
     bool hasContent() const
     {
         return layers[0].hasContent();

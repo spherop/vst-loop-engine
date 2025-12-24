@@ -1852,6 +1852,75 @@ document.addEventListener('DOMContentLoaded', () => {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
+    // ============================================
+    // DEGRADE TAB CONTROLLERS
+    // ============================================
+
+    // High-pass frequency: 20Hz - 2000Hz (logarithmic)
+    new KnobController('degradeHP-knob', 'degradeHP', {
+        formatValue: (v) => {
+            const hz = 20 + Math.pow(v, 0.3) * 1980;
+            return hz < 1000 ? `${Math.round(hz)}Hz` : `${(hz/1000).toFixed(1)}kHz`;
+        }
+    });
+
+    // High-pass Q: 0.5 - 10
+    new KnobController('degradeHPQ-knob', 'degradeHPQ', {
+        formatValue: (v) => (0.5 + v * 9.5).toFixed(1)
+    });
+
+    // Low-pass frequency: 200Hz - 20kHz (logarithmic)
+    new KnobController('degradeLP-knob', 'degradeLP', {
+        formatValue: (v) => {
+            const hz = 200 + Math.pow(v, 0.3) * 19800;
+            return hz < 1000 ? `${Math.round(hz)}Hz` : `${(hz/1000).toFixed(1)}kHz`;
+        }
+    });
+
+    // Low-pass Q: 0.5 - 10
+    new KnobController('degradeLPQ-knob', 'degradeLPQ', {
+        formatValue: (v) => (0.5 + v * 9.5).toFixed(1)
+    });
+
+    // Bit depth: 1 - 16 bits
+    new KnobController('degradeBit-knob', 'degradeBit', {
+        formatValue: (v) => `${Math.round(1 + v * 15)}-bit`
+    });
+
+    // Sample rate: 1kHz - 48kHz (logarithmic)
+    new KnobController('degradeSR-knob', 'degradeSR', {
+        formatValue: (v) => {
+            const khz = 1 + Math.pow(v, 0.4) * 47;
+            return `${khz.toFixed(1)}kHz`;
+        }
+    });
+
+    // Wobble: 0% - 100%
+    new KnobController('degradeWobble-knob', 'degradeWobble', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Scramble amount: 0% - 100%
+    new KnobController('degradeScrambleAmt-knob', 'degradeScrambleAmt', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Degrade mix: 0% - 100%
+    new KnobController('degradeMix-knob', 'degradeMix', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Subdivision selector for scrambler
+    const subdivSelect = document.getElementById('scramble-subdiv');
+    if (subdivSelect) {
+        const setScrambleSubdivFn = getNativeFunction('setDegradeScrambleSubdiv');
+        subdivSelect.addEventListener('change', async (e) => {
+            const subdiv = parseInt(e.target.value);
+            console.log(`[DEGRADE] Setting scramble subdiv: ${subdiv}`);
+            await setScrambleSubdivFn(subdiv);
+        });
+    }
+
     // Test sounds
     new TestSoundController();
 
