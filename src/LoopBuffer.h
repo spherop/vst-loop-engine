@@ -501,29 +501,12 @@ private:
             return;
         }
 
-        // Get current pitch ratio and fade
+        // Get current pitch ratio (consume smoothed value even if not using fade)
         const float pitchRatio = pitchRatioSmoothed.getNextValue();
-        const float fadeTarget = fadeSmoothed.getNextValue();
+        fadeSmoothed.getNextValue();  // Consume but don't use - fade only applies in overdub
 
-        // Detect loop boundary crossing for fade decay
-        const float currentPos = getPlayheadPosition();
-        const bool loopWrapped = detectLoopWrap(lastPlayheadPosition, currentPos);
-        lastPlayheadPosition = currentPos;
-
-        if (loopWrapped)
-        {
-            // Apply fade decay when loop wraps around
-            // fadeTarget of 1.0 = no decay, 0.0 = instant silence
-            currentFadeMultiplier *= fadeTarget;
-        }
-
-        // If completely faded, stop the loop
-        if (currentFadeMultiplier < 0.001f)
-        {
-            outputL = inputL;
-            outputR = inputR;
-            return;
-        }
+        // Track position for UI (no fade decay in playback mode)
+        lastPlayheadPosition = getPlayheadPosition();
 
         float loopL, loopR;
 
@@ -540,10 +523,7 @@ private:
         pitchReadPos2 = playHead;
         wasPitchShifting = (std::abs(pitchRatio - 1.0f) >= 0.001f);
 
-        // Apply fade multiplier
-        loopL *= currentFadeMultiplier;
-        loopR *= currentFadeMultiplier;
-
+        // No fade in playback mode - fade only applies during overdub
         // Mix loop playback with input passthrough for seamless monitoring
         // This allows hearing the instrument while the loop plays
         outputL = loopL + inputL;
@@ -562,22 +542,40 @@ private:
             return;
         }
 
-        // Read existing content
-        outputL = readWithInterpolation(bufferL, playHead);
-        outputR = readWithInterpolation(bufferR, playHead);
+        // Get fade amount for this sample
+        const float fadeTarget = fadeSmoothed.getNextValue();
 
-        // Add input to buffer (overdub)
+        // Detect loop boundary crossing for fade decay
+        const float currentPos = getPlayheadPosition();
+        const bool loopWrapped = detectLoopWrap(lastPlayheadPosition, currentPos);
+        lastPlayheadPosition = currentPos;
+
+        if (loopWrapped)
+        {
+            // Apply fade decay when loop wraps around
+            // fadeTarget of 1.0 = no decay, 0.0 = instant silence
+            currentFadeMultiplier *= fadeTarget;
+        }
+
+        // Read existing content (with fade applied)
+        float existingL = readWithInterpolation(bufferL, playHead) * currentFadeMultiplier;
+        float existingR = readWithInterpolation(bufferR, playHead) * currentFadeMultiplier;
+
+        // Write position
         int writePos = static_cast<int>(playHead) % loopLength;
-        bufferL[writePos] += inputL;
-        bufferR[writePos] += inputR;
 
-        // Soft clip to prevent runaway
+        // Apply fade to existing buffer content, then add new input
+        // This way existing content decays while new content is added at full volume
+        bufferL[writePos] = bufferL[writePos] * currentFadeMultiplier + inputL;
+        bufferR[writePos] = bufferR[writePos] * currentFadeMultiplier + inputR;
+
+        // Soft clip to prevent runaway (gentler curve)
         bufferL[writePos] = softClip(bufferL[writePos]);
         bufferR[writePos] = softClip(bufferR[writePos]);
 
-        // Mix input with output for monitoring
-        outputL += inputL;
-        outputR += inputR;
+        // Output: existing content (faded) + input for monitoring
+        outputL = existingL + inputL;
+        outputR = existingR + inputR;
 
         // Advance playhead WITHOUT pitch ratio (recording must happen at normal speed)
         advancePlayhead(false);

@@ -438,8 +438,9 @@ public:
     {
         std::vector<float> combinedWaveform(numPoints, 0.0f);
 
-        // Include layers with content OR currently recording
-        for (int i = 0; i <= std::max(highestLayer, currentLayer); ++i)
+        // Only include layers up to currentLayer (undone layers are not shown)
+        // This ensures waveform updates correctly after undo/redo
+        for (int i = 0; i <= currentLayer; ++i)
         {
             bool isRecording = (layers[i].getState() == LoopBuffer::State::Recording);
             if (layers[i].hasContent() || isRecording)

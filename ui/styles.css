@@ -537,6 +537,12 @@ html, body {
    LAYER INDICATORS
    ============================================ */
 
+.layer-indicators {
+    overflow: visible;
+    padding: 5px;  /* Room for M badge */
+    margin: -5px;  /* Compensate for padding */
+}
+
 .layer-btn {
     position: relative;
     width: 24px;
@@ -550,6 +556,7 @@ html, body {
     font-weight: 700;
     cursor: pointer;
     transition: all 0.12s ease;
+    overflow: visible;
 }
 
 .layer-btn:hover {
