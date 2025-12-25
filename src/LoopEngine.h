@@ -253,8 +253,22 @@ public:
             " highestLayer=" + juce::String(highestLayer) +
             " hasContent=" + juce::String(layers[0].hasContent() ? "true" : "false"));
 
+        // Ensure masterLoopLength is set if layer 0 has content
+        // This handles the case where fixed-length recording auto-stopped
+        // (auto-stop bypasses LoopEngine::stopRecording so masterLoopLength wasn't set)
+        if (masterLoopLength == 0 && layers[0].hasContent())
+        {
+            masterLoopLength = layers[0].getLoopLengthSamples();
+            highestLayer = std::max(highestLayer, 0);
+            DBG("overdub() - Fixed masterLoopLength from layer 0: " + juce::String(masterLoopLength));
+        }
+
         if (currentState == LoopBuffer::State::Playing)
         {
+            // Blooper behavior: Recording after undo clears all undone layers
+            // This "commits" the undo - you can no longer redo after recording new content
+            clearUndoneLayers();
+
             // Create a NEW layer for overdub (Blooper-style)
             // Each overdub creates a separate layer that can be undone
             if (highestLayer < NUM_LAYERS - 1)
@@ -282,6 +296,9 @@ public:
         }
         else if (currentState == LoopBuffer::State::Idle && highestLayer >= 0 && layers[0].hasContent())
         {
+            // Blooper behavior: Recording after undo clears all undone layers
+            clearUndoneLayers();
+
             // If idle with content, play and immediately overdub on a new layer
             DBG("Idle with content - starting play + overdub on new layer");
             play();
@@ -306,13 +323,15 @@ public:
     {
         if (currentLayer > 0)
         {
-            // Stop the current layer (don't clear - keep data for redo)
-            layers[currentLayer].stop();
+            // Mute the current layer instead of stopping it completely
+            // This keeps the layer content but makes it silent and visually "undone"
+            layers[currentLayer].setMuted(true);
             --currentLayer;
 
             // Track highest undone layer for redo
             // highestLayer stays the same - it tracks max recorded, not current
-            DBG("undo() - moved to layer " + juce::String(currentLayer) +
+            DBG("undo() - muted layer " + juce::String(currentLayer + 1) +
+                ", now on layer " + juce::String(currentLayer) +
                 ", highestLayer still " + juce::String(highestLayer));
         }
     }
@@ -323,24 +342,66 @@ public:
         if (currentLayer < highestLayer)
         {
             ++currentLayer;
-            // Re-enable the layer by playing it
-            if (layers[currentLayer].hasContent())
+            // Unmute the layer to restore it
+            layers[currentLayer].setMuted(false);
+            // Make sure it's playing if it was playing before undo
+            if (layers[currentLayer].hasContent() && layers[currentLayer].getState() == LoopBuffer::State::Idle)
             {
                 layers[currentLayer].play();
             }
-            DBG("redo() - restored layer " + juce::String(currentLayer));
+            DBG("redo() - unmuted and restored layer " + juce::String(currentLayer));
         }
+    }
+
+    // Blooper behavior: Clear all undone layers when recording new content
+    // This "commits" the undo - recording after undo permanently removes undone layers
+    void clearUndoneLayers()
+    {
+        // Any layers above currentLayer that are muted are "undone" layers
+        for (int i = currentLayer + 1; i <= highestLayer; ++i)
+        {
+            if (layers[i].getMuted())
+            {
+                DBG("clearUndoneLayers() - permanently clearing undone layer " + juce::String(i));
+                layers[i].clear();
+            }
+        }
+        // Update highestLayer to current since undone layers are gone
+        highestLayer = currentLayer;
     }
 
     void clear()
     {
+        // Blooper-style clear behavior depends on current state:
+        // - If STOPPED (Idle): Full reset, clear loop length so it can be recreated
+        // - If ACTIVE (Recording/Playing/Overdubbing): Keep loop length and continue in DUB mode
+        LoopBuffer::State currentState = getCurrentState();
+        bool wasActive = (currentState != LoopBuffer::State::Idle);
+        int preservedLength = masterLoopLength;
+
         for (int i = 0; i < NUM_LAYERS; ++i)
         {
             layers[i].clear();
         }
         currentLayer = 0;
         highestLayer = 0;
-        masterLoopLength = 0;
+
+        // If we were actively playing/recording, preserve the length and start overdubbing
+        if (wasActive && preservedLength > 0)
+        {
+            masterLoopLength = preservedLength;
+            // Start overdubbing on layer 0 with the preserved loop length
+            // startOverdubOnNewLayer sets up buffer and puts layer in Overdubbing state
+            layers[0].startOverdubOnNewLayer(masterLoopLength);
+            DBG("clear() - Active state: preserved loop length " + juce::String(masterLoopLength) +
+                " and started DUB on layer 0");
+        }
+        else
+        {
+            // Stopped/idle: full reset including loop length so user can create fresh loop
+            masterLoopLength = 0;
+            DBG("clear() - Idle state: full reset, loop length cleared");
+        }
     }
 
     // Layer navigation

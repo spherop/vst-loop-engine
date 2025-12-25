@@ -1114,26 +1114,53 @@ class LooperController {
                 const layerData = layerWaveforms[layerIdx];
                 if (!layerData || layerData.length === 0) continue;
 
-                // Check if this layer is muted - draw dimmed if so
+                // Check if this layer is muted (undone) - draw as outline if so
                 const isMuted = layerMutes && layerMutes[layerIdx];
                 const layerColor = this.layerColors[layerIdx % this.layerColors.length];
 
-                // Set color with alpha for layering effect
-                // Muted layers are drawn very dim
-                if (isMuted) {
-                    this.ctx.fillStyle = layerColor + '30';  // 30% opacity for muted
-                } else {
-                    this.ctx.fillStyle = layerColor + '99';  // 60% opacity for active
-                }
-
                 const barWidth = zoomedWidth / layerData.length;
 
-                for (let i = 0; i < layerData.length; i++) {
-                    const amplitude = layerData[i] * (height * 0.35);
-                    const x = (i * barWidth) - offsetX;
-                    // Only draw visible bars
-                    if (x + barWidth > 0 && x < width && amplitude > 0.5) {
-                        this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
+                if (isMuted) {
+                    // Muted/undone layers: draw as colored outline (ghost effect)
+                    this.ctx.strokeStyle = layerColor + '60';  // 40% opacity outline
+                    this.ctx.lineWidth = 1;
+                    this.ctx.beginPath();
+
+                    // Draw outline path for the waveform shape
+                    let started = false;
+                    for (let i = 0; i < layerData.length; i++) {
+                        const amplitude = layerData[i] * (height * 0.35);
+                        const x = (i * barWidth) - offsetX;
+                        if (x + barWidth > 0 && x < width && amplitude > 0.5) {
+                            if (!started) {
+                                this.ctx.moveTo(x, centerY - amplitude);
+                                started = true;
+                            } else {
+                                this.ctx.lineTo(x, centerY - amplitude);
+                            }
+                        }
+                    }
+                    // Draw back along the bottom
+                    for (let i = layerData.length - 1; i >= 0; i--) {
+                        const amplitude = layerData[i] * (height * 0.35);
+                        const x = (i * barWidth) - offsetX;
+                        if (x + barWidth > 0 && x < width && amplitude > 0.5) {
+                            this.ctx.lineTo(x, centerY + amplitude);
+                        }
+                    }
+                    this.ctx.closePath();
+                    this.ctx.stroke();
+                } else {
+                    // Active layers: draw as filled bars
+                    this.ctx.fillStyle = layerColor + '99';  // 60% opacity for active
+
+                    for (let i = 0; i < layerData.length; i++) {
+                        const amplitude = layerData[i] * (height * 0.35);
+                        const x = (i * barWidth) - offsetX;
+                        // Only draw visible bars
+                        if (x + barWidth > 0 && x < width && amplitude > 0.5) {
+                            this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
+                        }
                     }
                 }
             }
@@ -1442,13 +1469,20 @@ class LooperController {
     }
 
     // Sync layer mute button UI with backend state
-    syncLayerMuteUI(muteStates) {
+    // Also distinguishes between undone layers (from undo) and explicitly muted layers
+    syncLayerMuteUI(muteStates, currentLayer, highestLayer) {
         this.layerBtns.forEach(btn => {
             const layer = parseInt(btn.dataset.layer);
             const idx = layer - 1;  // 0-indexed
             if (idx >= 0 && idx < muteStates.length) {
                 const isMuted = muteStates[idx];
-                btn.classList.toggle('muted', isMuted);
+                // An "undone" layer is one that is muted AND is above currentLayer
+                // (layers that were muted via undo rather than explicit user mute)
+                const isUndone = isMuted && layer > currentLayer && layer <= highestLayer;
+                btn.classList.toggle('muted', isMuted && !isUndone);  // Explicit mute
+                btn.classList.toggle('undone', isUndone);  // Undo state
+            } else {
+                btn.classList.remove('muted', 'undone');
             }
         });
     }
@@ -1518,7 +1552,7 @@ class LooperController {
 
                     // Sync layer mute UI states from backend
                     if (state.layerMutes && state.layerMutes.length > 0) {
-                        this.syncLayerMuteUI(state.layerMutes);
+                        this.syncLayerMuteUI(state.layerMutes, state.layer || 1, state.highestLayer || 1);
                     }
                 }
             } catch (e) {

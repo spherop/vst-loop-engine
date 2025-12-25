@@ -757,6 +757,29 @@ html, body {
     line-height: 1;
 }
 
+/* Undone layer (from undo - hollow/ghost appearance) */
+.layer-btn.undone {
+    background: transparent !important;
+    border-style: dashed !important;
+    border-width: 1px !important;
+    color: #555555 !important;
+    opacity: 0.6;
+}
+
+.layer-btn.undone::after {
+    content: 'U';
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    font-size: 7px;
+    color: #888888;
+    background: #1a1a1a;
+    border: 1px solid #444444;
+    border-radius: 2px;
+    padding: 0 2px;
+    line-height: 1;
+}
+
 /* ============================================
    SPEED PRESET DROPDOWN
    ============================================ */

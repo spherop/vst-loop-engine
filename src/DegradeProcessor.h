@@ -45,11 +45,13 @@ public:
         lofiBypassGain.reset(sampleRate, 0.003);
         scramblerBypassGain.reset(sampleRate, 0.003);
 
-        // Set initial bypass states - all off by default for clean audio
+        // Set initial bypass states - most off by default for clean audio
+        // EXCEPTION: filterBypassGain and HP/LP start ON because the UI expects them enabled
+        // and there's no master toggle for filter section (only individual HP/LP toggles)
         masterBypassGain.setCurrentAndTargetValue(0.0f);
-        filterBypassGain.setCurrentAndTargetValue(0.0f);
-        hpBypassGain.setCurrentAndTargetValue(0.0f);
-        lpBypassGain.setCurrentAndTargetValue(0.0f);
+        filterBypassGain.setCurrentAndTargetValue(1.0f);  // Filter section ON by default
+        hpBypassGain.setCurrentAndTargetValue(1.0f);      // HP filter ON by default
+        lpBypassGain.setCurrentAndTargetValue(1.0f);      // LP filter ON by default
         lofiBypassGain.setCurrentAndTargetValue(0.0f);
         scramblerBypassGain.setCurrentAndTargetValue(0.0f);
 
@@ -223,8 +225,9 @@ public:
 
             // ==== SMEAR SECTION ====
             // Granular smear effect for atmospheric texture
+            // Only process if scrambler/granular section is enabled
             const float smearAmt = smearAmountSmooth.getNextValue();
-            if (smearAmt > 0.001f)
+            if ((scramblerGain > 0.001f || scramblerEnabled.load()) && smearAmt > 0.001f)
             {
                 processSmear(wetL, wetR, smearAmt);
             }
@@ -387,13 +390,16 @@ private:
     std::atomic<bool> masterEnabled { false };
 
     // Section bypass states - default to OFF so audio isn't affected until user enables
-    std::atomic<bool> filterEnabled { false };
+    // EXCEPTION: filterEnabled defaults to ON because there's no UI toggle for filter section
+    // (HP and LP have individual toggles that control the actual filter bypass)
+    std::atomic<bool> filterEnabled { true };
     std::atomic<bool> lofiEnabled { false };
     std::atomic<bool> scramblerEnabled { false };
 
     // Individual filter bypass states
-    std::atomic<bool> hpEnabled { false };
-    std::atomic<bool> lpEnabled { false };
+    // Default to ON so filters work immediately when user adjusts HP/LP knobs
+    std::atomic<bool> hpEnabled { true };
+    std::atomic<bool> lpEnabled { true };
 
     // Smoothed bypass gains for click-free toggling (0 = bypassed, 1 = active)
     juce::SmoothedValue<float> masterBypassGain;
