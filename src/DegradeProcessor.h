@@ -14,16 +14,16 @@ public:
     {
         currentSampleRate = sampleRate;
 
-        // Initialize smoothed values
-        hpFreqSmooth.reset(sampleRate, 0.02);
-        hpQSmooth.reset(sampleRate, 0.02);
-        lpFreqSmooth.reset(sampleRate, 0.02);
-        lpQSmooth.reset(sampleRate, 0.02);
-        bitDepthSmooth.reset(sampleRate, 0.02);
-        srReductionSmooth.reset(sampleRate, 0.02);
-        wobbleAmountSmooth.reset(sampleRate, 0.05);
-        scramblerAmountSmooth.reset(sampleRate, 0.02);
-        mixSmooth.reset(sampleRate, 0.02);
+        // Initialize smoothed values - use short smoothing for snappy response
+        hpFreqSmooth.reset(sampleRate, 0.005);
+        hpQSmooth.reset(sampleRate, 0.005);
+        lpFreqSmooth.reset(sampleRate, 0.005);
+        lpQSmooth.reset(sampleRate, 0.005);
+        bitDepthSmooth.reset(sampleRate, 0.005);
+        srReductionSmooth.reset(sampleRate, 0.005);
+        wobbleAmountSmooth.reset(sampleRate, 0.01);
+        scramblerAmountSmooth.reset(sampleRate, 0.005);
+        mixSmooth.reset(sampleRate, 0.005);
 
         // Set initial values
         hpFreqSmooth.setCurrentAndTargetValue(20.0f);
@@ -37,21 +37,21 @@ public:
         mixSmooth.setCurrentAndTargetValue(1.0f);
 
         // Initialize bypass gain smoothers for click-free toggling
-        // Use a short ramp time (~10ms) for quick but smooth transitions
-        masterBypassGain.reset(sampleRate, 0.01);
-        filterBypassGain.reset(sampleRate, 0.01);
-        hpBypassGain.reset(sampleRate, 0.01);
-        lpBypassGain.reset(sampleRate, 0.01);
-        lofiBypassGain.reset(sampleRate, 0.01);
-        scramblerBypassGain.reset(sampleRate, 0.01);
+        // Use a very short ramp time (~3ms) for peppy/immediate response
+        masterBypassGain.reset(sampleRate, 0.003);
+        filterBypassGain.reset(sampleRate, 0.003);
+        hpBypassGain.reset(sampleRate, 0.003);
+        lpBypassGain.reset(sampleRate, 0.003);
+        lofiBypassGain.reset(sampleRate, 0.003);
+        scramblerBypassGain.reset(sampleRate, 0.003);
 
-        // Set initial bypass states
-        masterBypassGain.setCurrentAndTargetValue(masterEnabled.load() ? 1.0f : 0.0f);
-        filterBypassGain.setCurrentAndTargetValue(filterEnabled.load() ? 1.0f : 0.0f);
-        hpBypassGain.setCurrentAndTargetValue(hpEnabled.load() ? 1.0f : 0.0f);
-        lpBypassGain.setCurrentAndTargetValue(lpEnabled.load() ? 1.0f : 0.0f);
-        lofiBypassGain.setCurrentAndTargetValue(lofiEnabled.load() ? 1.0f : 0.0f);
-        scramblerBypassGain.setCurrentAndTargetValue(scramblerEnabled.load() ? 1.0f : 0.0f);
+        // Set initial bypass states - all off by default for clean audio
+        masterBypassGain.setCurrentAndTargetValue(0.0f);
+        filterBypassGain.setCurrentAndTargetValue(0.0f);
+        hpBypassGain.setCurrentAndTargetValue(0.0f);
+        lpBypassGain.setCurrentAndTargetValue(0.0f);
+        lofiBypassGain.setCurrentAndTargetValue(0.0f);
+        scramblerBypassGain.setCurrentAndTargetValue(0.0f);
 
         // Reset filter states
         resetFilters();
@@ -111,16 +111,39 @@ public:
             float dryL = inputL;
             float dryR = inputR;
 
-            float wetL = inputL;
-            float wetR = inputR;
-
             // Get smoothed bypass gains for click-free transitions
             const float masterGain = masterBypassGain.getNextValue();
+
+            // Early exit if master is fully bypassed (gain near zero)
+            if (masterGain < 0.0001f)
+            {
+                // Still consume the other smoothed values to keep them in sync
+                filterBypassGain.getNextValue();
+                hpBypassGain.getNextValue();
+                lpBypassGain.getNextValue();
+                lofiBypassGain.getNextValue();
+                scramblerBypassGain.getNextValue();
+                mixSmooth.getNextValue();
+                hpFreqSmooth.getNextValue();
+                hpQSmooth.getNextValue();
+                lpFreqSmooth.getNextValue();
+                lpQSmooth.getNextValue();
+                bitDepthSmooth.getNextValue();
+                srReductionSmooth.getNextValue();
+                wobbleAmountSmooth.getNextValue();
+                smearAmountSmooth.getNextValue();
+                // Output is unchanged (dry signal)
+                continue;
+            }
+
             const float filterGain = filterBypassGain.getNextValue();
             const float hpGain = hpBypassGain.getNextValue();
             const float lpGain = lpBypassGain.getNextValue();
             const float lofiGain = lofiBypassGain.getNextValue();
             const float scramblerGain = scramblerBypassGain.getNextValue();
+
+            float wetL = inputL;
+            float wetR = inputR;
 
             // Get smoothed parameter values
             const float hpFreq = hpFreqSmooth.getNextValue();
@@ -166,9 +189,9 @@ public:
                 float preLofiL = wetL;
                 float preLofiR = wetR;
 
-                // Bit crusher
-                float lofiL = processBitCrush(wetL, bitDepth);
-                float lofiR = processBitCrush(wetR, bitDepth);
+                // Bit crusher (with per-channel noise shaping)
+                float lofiL = processBitCrush(wetL, bitDepth, true);
+                float lofiR = processBitCrush(wetR, bitDepth, false);
 
                 // Sample rate reduction
                 processSampleRateReduction(lofiL, lofiR, srTarget);
@@ -361,16 +384,16 @@ private:
     double currentSampleRate = 44100.0;
 
     // Master bypass
-    std::atomic<bool> masterEnabled { true };
+    std::atomic<bool> masterEnabled { false };
 
-    // Section bypass states
-    std::atomic<bool> filterEnabled { true };
-    std::atomic<bool> lofiEnabled { true };
-    std::atomic<bool> scramblerEnabled { true };
+    // Section bypass states - default to OFF so audio isn't affected until user enables
+    std::atomic<bool> filterEnabled { false };
+    std::atomic<bool> lofiEnabled { false };
+    std::atomic<bool> scramblerEnabled { false };
 
     // Individual filter bypass states
-    std::atomic<bool> hpEnabled { true };
-    std::atomic<bool> lpEnabled { true };
+    std::atomic<bool> hpEnabled { false };
+    std::atomic<bool> lpEnabled { false };
 
     // Smoothed bypass gains for click-free toggling (0 = bypassed, 1 = active)
     juce::SmoothedValue<float> masterBypassGain;
@@ -397,7 +420,8 @@ private:
     // Bit crusher with dithering
     juce::SmoothedValue<float> bitDepthSmooth;
     juce::Random ditherRandom;
-    float noiseShapeError = 0.0f;  // For first-order noise shaping
+    float noiseShapeErrorL = 0.0f;  // For first-order noise shaping (left)
+    float noiseShapeErrorR = 0.0f;  // For first-order noise shaping (right)
 
     // Sample rate reducer with anti-aliasing
     float srHoldL = 0.0f, srHoldR = 0.0f;
@@ -533,7 +557,7 @@ private:
         return output;
     }
 
-    float processBitCrush(float input, float bits)
+    float processBitCrush(float input, float bits, bool isLeft = true)
     {
         if (bits >= 15.9f)
             return input;  // No crushing
@@ -546,9 +570,11 @@ private:
         // Sum of two uniform random numbers creates triangular distribution
         // This eliminates quantization distortion and replaces it with
         // less objectionable white noise
+        // Scale dithering for low bit depths to avoid overwhelming the signal
+        const float ditherScale = bits < 8.0f ? 0.5f : 1.0f;
         const float dither1 = ditherRandom.nextFloat() - 0.5f;
         const float dither2 = ditherRandom.nextFloat() - 0.5f;
-        const float dither = (dither1 + dither2) * stepSize;
+        const float dither = (dither1 + dither2) * stepSize * ditherScale;
 
         // Apply dither before quantization
         float dithered = input + dither;
@@ -558,8 +584,11 @@ private:
 
         // Simple first-order noise shaping (error feedback)
         // Pushes quantization noise to higher frequencies
+        // Use reduced feedback for low bit depths to prevent instability
+        float& noiseShapeError = isLeft ? noiseShapeErrorL : noiseShapeErrorR;
         float error = input - quantized;
-        float shaped = quantized + noiseShapeError * 0.5f;
+        float noiseShapeFactor = bits < 8.0f ? 0.25f : 0.5f;
+        float shaped = quantized + noiseShapeError * noiseShapeFactor;
         noiseShapeError = error;
 
         // Soft clamp to avoid overflow from dither
@@ -588,6 +617,10 @@ private:
         if (srCounter >= step)
         {
             srCounter -= step;
+            // Store previous value before capturing new one
+            srPrevHoldL = srHoldL;
+            srPrevHoldR = srHoldR;
+            // Capture new sample
             srHoldL = left;
             srHoldR = right;
         }
@@ -597,13 +630,6 @@ private:
         const float t = srCounter / step;  // 0-1 interpolation factor
         left = srPrevHoldL * (1.0f - t) + srHoldL * t;
         right = srPrevHoldR * (1.0f - t) + srHoldR * t;
-
-        // Store previous hold values when we capture new ones
-        if (srCounter < 1.0f)
-        {
-            srPrevHoldL = srHoldL;
-            srPrevHoldR = srHoldR;
-        }
     }
 
     void updateSRAntiAliasCoeffs(float freq)

@@ -26,6 +26,7 @@ public:
         inputBuffer.setSize(2, samplesPerBlock);
         layerBuffer.setSize(2, samplesPerBlock);
         dummyBuffer.setSize(2, samplesPerBlock);
+        loopOnlyBuffer.setSize(2, samplesPerBlock);
 
         // Reset state
         currentLayer = 0;
@@ -79,21 +80,42 @@ public:
         }
         else if (currentState == LoopBuffer::State::Recording)
         {
-            // Stop recording -> starts playback
-            DBG("record() - Stopping recording");
-            stopRecording();
+            // Stop initial recording -> start overdub on NEW layer
+            // Each REC tap always creates a new layer
+            DBG("record() - Stopping recording, starting overdub on new layer");
+            stopRecording(false);  // false = go to Playing first
+
+            // Set master loop length from first recording if not already set
+            if (masterLoopLength == 0)
+            {
+                masterLoopLength = layers[currentLayer].getLoopLengthSamples();
+            }
+
+            // Immediately start overdubbing on a new layer
+            overdub();
         }
         else if (currentState == LoopBuffer::State::Playing)
         {
-            // Blooper-style: REC while playing starts overdubbing
-            DBG("record() - Playing state, calling overdub()");
+            // REC while playing starts overdubbing on a NEW layer
+            DBG("record() - Playing state, calling overdub() for new layer");
             overdub();
         }
         else if (currentState == LoopBuffer::State::Overdubbing)
         {
-            // REC while overdubbing stops overdub, continues playback
-            DBG("record() - Overdubbing state, stopping overdub");
+            // REC while overdubbing: stop current layer, start NEW layer immediately
+            // Each REC tap always creates a new layer (no toggle off)
+            DBG("record() - Overdubbing state, stopping layer " + juce::String(currentLayer) + " and starting new layer");
             layers[currentLayer].stopOverdub();
+
+            // Immediately start overdubbing on next layer if available
+            if (highestLayer < NUM_LAYERS - 1)
+            {
+                overdub();  // This will create a new layer
+            }
+            else
+            {
+                DBG("record() - Max layers reached, continuing playback");
+            }
         }
     }
 
@@ -233,31 +255,23 @@ public:
 
         if (currentState == LoopBuffer::State::Playing)
         {
-            // Find first available layer for overdub
-            int availableLayer = findFirstAvailableLayer();
-            if (availableLayer >= 0)
+            // Create a NEW layer for overdub (Blooper-style)
+            // Each overdub creates a separate layer that can be undone
+            if (highestLayer < NUM_LAYERS - 1)
             {
-                // Get current playhead from a playing layer to sync new layer
-                float masterPlayhead = 0.0f;
-                for (int i = 0; i < NUM_LAYERS; ++i)
-                {
-                    if (layers[i].hasContent() && layers[i].getState() == LoopBuffer::State::Playing)
-                    {
-                        masterPlayhead = layers[i].getRawPlayhead();
-                        break;
-                    }
-                }
+                // Get current playhead from layer 0 to sync new layer
+                float masterPlayhead = layers[0].getRawPlayhead();
 
-                currentLayer = availableLayer;
-                highestLayer = std::max(highestLayer, currentLayer);
-                DBG("Starting overdub on layer " + juce::String(currentLayer) +
+                currentLayer = highestLayer + 1;
+                highestLayer = currentLayer;
+                DBG("Starting overdub on NEW layer " + juce::String(currentLayer) +
                     " syncing playhead to " + juce::String(masterPlayhead));
                 layers[currentLayer].startOverdubOnNewLayer(masterLoopLength);
                 layers[currentLayer].setPlayhead(masterPlayhead);
             }
             else
             {
-                DBG("Cannot overdub - all layers full");
+                DBG("Cannot overdub - max layers reached");
             }
         }
         else if (currentState == LoopBuffer::State::Overdubbing)
@@ -266,27 +280,18 @@ public:
             DBG("Stopping overdub on layer " + juce::String(currentLayer));
             layers[currentLayer].stopOverdub();
         }
-        else if (currentState == LoopBuffer::State::Idle && hasContent())
+        else if (currentState == LoopBuffer::State::Idle && highestLayer >= 0 && layers[0].hasContent())
         {
             // If idle with content, play and immediately overdub on a new layer
             DBG("Idle with content - starting play + overdub on new layer");
             play();
-            int availableLayer = findFirstAvailableLayer();
-            if (availableLayer >= 0)
+            if (highestLayer < NUM_LAYERS - 1)
             {
-                // Get current playhead from a playing layer
-                float masterPlayhead = 0.0f;
-                for (int i = 0; i < NUM_LAYERS; ++i)
-                {
-                    if (layers[i].hasContent() && layers[i].getState() == LoopBuffer::State::Playing)
-                    {
-                        masterPlayhead = layers[i].getRawPlayhead();
-                        break;
-                    }
-                }
+                // Get current playhead from layer 0 (should be 0 since we just started playing)
+                float masterPlayhead = layers[0].getRawPlayhead();
 
-                currentLayer = availableLayer;
-                highestLayer = std::max(highestLayer, currentLayer);
+                currentLayer = highestLayer + 1;
+                highestLayer = currentLayer;
                 layers[currentLayer].startOverdubOnNewLayer(masterLoopLength);
                 layers[currentLayer].setPlayhead(masterPlayhead);
             }
@@ -423,8 +428,11 @@ public:
         }
     }
 
-    // Process audio
-    void processBlock(juce::AudioBuffer<float>& buffer)
+    // Process audio - returns separate loop playback and input buffers for Blooper-style processing
+    // Effects like degrade should only be applied to loopPlaybackBuffer, not inputBuffer
+    void processBlock(juce::AudioBuffer<float>& buffer,
+                      juce::AudioBuffer<float>* loopPlaybackBuffer = nullptr,
+                      juce::AudioBuffer<float>* inputPassthroughBuffer = nullptr)
     {
         const int numSamples = buffer.getNumSamples();
         const int numChannels = buffer.getNumChannels();
@@ -453,6 +461,8 @@ public:
             layerBuffer.setSize(numChannels, numSamples, false, false, true);
         if (dummyBuffer.getNumSamples() < numSamples || dummyBuffer.getNumChannels() < numChannels)
             dummyBuffer.setSize(numChannels, numSamples, false, false, true);
+        if (loopOnlyBuffer.getNumSamples() < numSamples || loopOnlyBuffer.getNumChannels() < numChannels)
+            loopOnlyBuffer.setSize(numChannels, numSamples, false, false, true);
 
         // Copy input to our pre-allocated buffer
         for (int ch = 0; ch < numChannels; ++ch)
@@ -464,36 +474,17 @@ public:
             inputBuffer.clear();
         }
 
-        // Clear output - we'll add layers to it
+        // Clear output buffers - we'll add layers to them
         buffer.clear();
+        loopOnlyBuffer.clear();
 
         // Process ALL layers with content up to highestLayer
         // Each layer can be independently muted regardless of currentLayer
         bool anyPlaying = false;
         bool inputAddedToOutput = false;  // Track if we've added input for monitoring
 
-        // Check if ANY layer is recording or overdubbing
-        // If so, fade should apply to ALL layers (not just the one being recorded)
-        bool anyRecordingOrOverdubbing = false;
-        for (int i = 0; i <= highestLayer; ++i)
-        {
-            LoopBuffer::State layerState = layers[i].getState();
-            if (layerState == LoopBuffer::State::Recording || layerState == LoopBuffer::State::Overdubbing)
-            {
-                anyRecordingOrOverdubbing = true;
-                break;
-            }
-        }
-
-        // Set fadeActive on all layers
-        for (int i = 0; i < NUM_LAYERS; ++i)
-        {
-            layers[i].setFadeActive(anyRecordingOrOverdubbing);
-        }
-
-        // Debug: log layer processing once per second
-        static int debugCounter = 0;
-        bool shouldLog = (++debugCounter % 1000 == 0);
+        // Each layer manages its own fade independently based on when it was created
+        // No need to set fadeActive globally - fade decay happens per-layer on loop wrap
 
         for (int i = 0; i <= highestLayer; ++i)
         {
@@ -504,13 +495,6 @@ public:
 
             if (!hasContent && !isRecording)
                 continue;
-
-            if (shouldLog)
-            {
-                DBG("Layer " + juce::String(i) + ": hasContent=" + juce::String(hasContent ? 1 : 0) +
-                    " state=" + juce::String(static_cast<int>(layers[i].getState())) +
-                    " muted=" + juce::String(isMuted ? 1 : 0));
-            }
 
             // Skip muted layers (but still advance playhead so they stay in sync)
             if (isMuted)
@@ -539,10 +523,45 @@ public:
 
             layers[i].processBlock(layerBuffer);
 
-            // Mix into output
+            // Mix into main output (loop + input combined)
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 buffer.addFrom(ch, 0, layerBuffer, ch, 0, numSamples);
+            }
+
+            // Also accumulate JUST the loop playback portion (without input) for separate processing
+            // This allows effects like degrade to only affect loop playback, not input
+            if (!isRecording && !isOverdubbing)
+            {
+                // Pure playback layer - add to loop-only buffer
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    loopOnlyBuffer.addFrom(ch, 0, layerBuffer, ch, 0, numSamples);
+                }
+            }
+            else
+            {
+                // Recording/overdubbing: the layer buffer contains input + loop playback mixed
+                // We need to subtract input to get just the loop portion for degrading
+                // Actually, during recording the loop portion IS the input being written
+                // During overdubbing, the layer outputs existing loop + input
+                // For Blooper-style: we want to degrade existing loop content, not new input
+                // So we read the existing content BEFORE it's mixed with input
+
+                // For overdubbing, processBlock already outputs existingLoop + input
+                // We need the existing loop part only. Let's get it by subtracting input.
+                // Note: This is approximate since layerBuffer = existingLoop + input
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    const float* layerData = layerBuffer.getReadPointer(ch);
+                    const float* inputData = inputBuffer.getReadPointer(ch);
+                    float* loopOnlyData = loopOnlyBuffer.getWritePointer(ch);
+                    for (int s = 0; s < numSamples; ++s)
+                    {
+                        // Subtract input to get just the loop portion
+                        loopOnlyData[s] += layerData[s] - inputData[s];
+                    }
+                }
             }
 
             if (layers[i].getState() != LoopBuffer::State::Idle)
@@ -556,6 +575,7 @@ public:
         if (!anyPlaying && highestLayer == 0 && !layers[0].hasContent())
         {
             buffer.makeCopyOf(inputBuffer);
+            // No loop content, so loopOnlyBuffer stays empty (just input passthrough)
         }
         else if (anyPlaying && !inputAddedToOutput)
         {
@@ -573,6 +593,28 @@ public:
             for (int i = 0; i < numSamples; ++i)
             {
                 channelData[i] = softClip(channelData[i]);
+            }
+        }
+
+        // Copy separated buffers to output parameters if provided
+        // This allows PluginProcessor to apply degrade only to loop playback
+        if (loopPlaybackBuffer != nullptr)
+        {
+            if (loopPlaybackBuffer->getNumSamples() < numSamples || loopPlaybackBuffer->getNumChannels() < numChannels)
+                loopPlaybackBuffer->setSize(numChannels, numSamples, false, false, true);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                loopPlaybackBuffer->copyFrom(ch, 0, loopOnlyBuffer, ch, 0, numSamples);
+            }
+        }
+
+        if (inputPassthroughBuffer != nullptr)
+        {
+            if (inputPassthroughBuffer->getNumSamples() < numSamples || inputPassthroughBuffer->getNumChannels() < numChannels)
+                inputPassthroughBuffer->setSize(numChannels, numSamples, false, false, true);
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                inputPassthroughBuffer->copyFrom(ch, 0, inputBuffer, ch, 0, numSamples);
             }
         }
     }
@@ -663,9 +705,14 @@ public:
     }
 
     // Get per-layer waveform data for colored visualization
+    // NOTE: Does NOT normalize waveforms so fade effect is visible
     std::vector<std::vector<float>> getLayerWaveforms(int numPoints) const
     {
         std::vector<std::vector<float>> layerWaveforms;
+
+        // First pass: collect all waveforms and find global max for consistent scaling
+        float globalMax = 0.0f;
+        std::vector<std::vector<float>> rawWaveforms;
 
         for (int i = 0; i <= highestLayer; ++i)
         {
@@ -674,27 +721,33 @@ public:
             {
                 auto waveform = layers[i].getWaveformData(numPoints);
 
-                // Normalize this layer
-                float maxVal = 0.0f;
+                // Track global max across all layers (before fade was applied in getWaveformData)
+                // But waveform already has fade applied, so this gives us the faded max
                 for (float val : waveform)
                 {
-                    maxVal = std::max(maxVal, std::abs(val));
-                }
-                if (maxVal > 0.0f)
-                {
-                    for (float& val : waveform)
-                    {
-                        val /= maxVal;
-                    }
+                    globalMax = std::max(globalMax, std::abs(val));
                 }
 
-                layerWaveforms.push_back(waveform);
+                rawWaveforms.push_back(waveform);
             }
             else
             {
-                // Empty placeholder for this layer
-                layerWaveforms.push_back(std::vector<float>(numPoints, 0.0f));
+                rawWaveforms.push_back(std::vector<float>(numPoints, 0.0f));
             }
+        }
+
+        // Second pass: normalize ALL layers by the same global max
+        // This preserves relative fade levels between layers
+        for (auto& waveform : rawWaveforms)
+        {
+            if (globalMax > 0.0f)
+            {
+                for (float& val : waveform)
+                {
+                    val /= globalMax;
+                }
+            }
+            layerWaveforms.push_back(waveform);
         }
 
         return layerWaveforms;
@@ -782,6 +835,7 @@ private:
     juce::AudioBuffer<float> inputBuffer;
     juce::AudioBuffer<float> layerBuffer;
     juce::AudioBuffer<float> dummyBuffer;
+    juce::AudioBuffer<float> loopOnlyBuffer;  // Loop playback only, no input (for Blooper-style effects)
 
     LoopBuffer::State getCurrentState() const
     {

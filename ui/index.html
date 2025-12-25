@@ -39,12 +39,6 @@
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #ff6b35; }
 
-        /* Decorative line */
-        .accent-line {
-            height: 2px;
-            background: linear-gradient(90deg, transparent, #ff6b35, transparent);
-        }
-
         /* Section glow on hover */
         .section-card {
             transition: all 0.2s ease;
@@ -53,13 +47,64 @@
             border-color: #333;
             box-shadow: 0 0 20px rgba(255, 107, 53, 0.05);
         }
+
+        /* Loading screen */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0a0a0a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+        #loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .loading-logo {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 0.3em;
+            color: #ff6b35;
+            text-shadow: 0 0 30px rgba(255, 107, 53, 0.6);
+            animation: pulse-glow 1.5s ease-in-out infinite;
+        }
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #2a2a2a;
+            border-top-color: #ff6b35;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-top: 24px;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes pulse-glow {
+            0%, 100% { text-shadow: 0 0 30px rgba(255, 107, 53, 0.6); }
+            50% { text-shadow: 0 0 50px rgba(255, 107, 53, 0.9); }
+        }
     </style>
 </head>
 <body class="bg-fd-bg text-white font-sans h-screen overflow-hidden select-none">
-    <div class="flex flex-col h-full max-w-2xl mx-auto">
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loading-logo">LOOP</div>
+        <div class="text-fd-text-dim font-display text-xs tracking-[0.4em] mt-2">ENGINE</div>
+        <div class="loading-spinner"></div>
+    </div>
 
+    <div id="main-content" class="flex flex-col h-full" style="opacity: 0; transition: opacity 0.3s ease;">
         <!-- Header with Logo and Tabs -->
-        <header class="flex items-center justify-between px-4 py-3 border-b border-fd-border">
+        <header class="flex items-center justify-between px-4 py-2 border-b border-fd-border">
             <!-- Logo (left) -->
             <div class="flex items-baseline gap-1">
                 <h1 class="font-display text-lg font-black tracking-[0.3em] text-fd-accent uppercase"
@@ -71,7 +116,7 @@
                 </span>
             </div>
 
-            <!-- Tabs (right) - Degrade now integrated into main panel -->
+            <!-- Tabs (right) -->
             <nav class="tab-bar flex gap-1">
                 <button class="tab active" data-tab="looper">
                     <span class="tab-label">LOOPER</span>
@@ -83,52 +128,20 @@
             </nav>
         </header>
 
-        <!-- Main Content -->
-        <main class="flex-1 flex flex-col gap-4 px-4 pb-3 overflow-y-auto">
+        <!-- Main Content - Two Column Layout -->
+        <main class="flex-1 flex gap-3 px-3 py-3 overflow-hidden">
 
             <!-- LOOPER Tab Content -->
-            <div id="looper-tab" class="tab-content active flex flex-col gap-4">
-                <!-- Transport Controls -->
-                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/30 to-transparent"></div>
-                    <div class="p-4">
-                        <!-- Loop Length Selector - Bars + Beats -->
-                        <div class="flex justify-center items-center gap-3 mb-3">
-                            <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">LENGTH</span>
-                            <div class="loop-length-selector flex items-center gap-2">
-                                <select class="bars-select" id="bars-select" title="Bars (0 = free mode)">
-                                    <option value="0">FREE</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                    <option value="4">4</option>
-                                    <option value="5">5</option>
-                                    <option value="6">6</option>
-                                    <option value="7">7</option>
-                                    <option value="8">8</option>
-                                    <option value="12">12</option>
-                                    <option value="16">16</option>
-                                </select>
-                                <span class="font-display text-[9px] font-bold tracking-[1px] text-fd-text-dim uppercase">BARS</span>
-                                <span class="text-fd-text-dim">+</span>
-                                <select class="beats-select" id="beats-select" title="Additional beats">
-                                    <option value="0">0</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                    <option value="4">4</option>
-                                    <option value="5">5</option>
-                                    <option value="6">6</option>
-                                    <option value="7">7</option>
-                                </select>
-                                <span class="font-display text-[9px] font-bold tracking-[1px] text-fd-text-dim uppercase">BEATS</span>
-                            </div>
-                        </div>
-                        <!-- Transport Buttons -->
-                        <!-- Blooper-style: REC toggles between record/play/overdub -->
-                        <div class="flex justify-center items-center gap-4">
+            <div id="looper-tab" class="tab-content active flex gap-3 w-full">
+
+                <!-- LEFT COLUMN: Looper Controls -->
+                <div class="flex-1 flex flex-col gap-3 min-w-0">
+
+                    <!-- Transport Controls -->
+                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3">
+                        <div class="flex justify-center items-center gap-3">
                             <!-- Input Level Meter and Mute (vertical) -->
-                            <div class="input-monitor-v flex flex-col items-center gap-1 mr-4">
+                            <div class="input-monitor-v flex flex-col items-center gap-1 mr-2">
                                 <div class="input-meter-v-container" title="Input Level (L/R)">
                                     <div class="input-meter-v-track">
                                         <div id="input-meter-bar-l" class="input-meter-v-bar left"></div>
@@ -163,17 +176,14 @@
                             </button>
                             <button id="clear-btn" class="transport-btn clear" title="Clear all layers">
                                 <span class="transport-icon">&#10005;</span>
-                                <span class="transport-label">CLEAR</span>
+                                <span class="transport-label">CLR</span>
                             </button>
                         </div>
-                    </div>
-                </section>
+                    </section>
 
-                <!-- Waveform Display -->
-                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
-                    <div class="p-4">
-                        <div class="waveform-container" id="waveform-container">
+                    <!-- Waveform Display & Layers -->
+                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-1 flex flex-col">
+                        <div class="waveform-container flex-1" id="waveform-container">
                             <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
                             <!-- Loop region shading -->
                             <div id="loop-region-shade" class="loop-region-shade"></div>
@@ -195,17 +205,15 @@
                             </div>
                         </div>
                         <!-- Controls row -->
-                        <div class="flex justify-between items-center mt-3">
-                            <!-- Reverse button (moved from loop controls) -->
-                            <div class="flex items-center gap-2">
-                                <button class="toggle-btn" id="reverse-btn">
-                                    <span class="toggle-icon">&#8634;</span>
-                                    <span class="toggle-label font-display">REV</span>
-                                </button>
-                            </div>
+                        <div class="flex justify-between items-center mt-2">
+                            <!-- Reverse button -->
+                            <button class="toggle-btn" id="reverse-btn">
+                                <span class="toggle-icon">&#8634;</span>
+                                <span class="toggle-label font-display">REV</span>
+                            </button>
                             <!-- Layer Indicators -->
                             <div class="flex items-center gap-2">
-                                <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
                                 <div class="layer-indicators flex gap-1">
                                     <button class="layer-btn active" data-layer="1">1</button>
                                     <button class="layer-btn" data-layer="2">2</button>
@@ -218,326 +226,347 @@
                                 </div>
                             </div>
                             <!-- Time display -->
-                            <span id="loop-time-display" class="font-mono text-xs text-fd-text">0.0s / 60.0s</span>
+                            <span id="loop-time-display" class="font-mono text-[10px] text-fd-text">0.0s</span>
                         </div>
-                    </div>
-                </section>
+                    </section>
 
-                <!-- Loop Controls -->
-                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
-                    <div class="p-4">
-                        <div class="flex justify-center items-end gap-8">
+                    <!-- Loop Controls -->
+                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <!-- Loop Length Selector -->
+                            <div class="flex items-center gap-2">
+                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">LENGTH</span>
+                                <select class="bars-select" id="bars-select" title="Bars (0 = free mode)">
+                                    <option value="0">FREE</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="4">4</option>
+                                    <option value="8">8</option>
+                                    <option value="16">16</option>
+                                </select>
+                                <span class="font-display text-[7px] text-fd-text-dim">BARS</span>
+                                <span class="text-fd-text-dim text-xs">+</span>
+                                <select class="beats-select" id="beats-select" title="Additional beats">
+                                    <option value="0">0</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                </select>
+                                <span class="font-display text-[7px] text-fd-text-dim">BEATS</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-center items-end gap-6">
                             <!-- START -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-medium" id="loopStart-knob">
+                            <div class="flex flex-col items-center gap-1">
+                                <div class="knob knob-small" id="loopStart-knob">
                                     <div class="knob-indicator"></div>
                                 </div>
-                                <span class="font-mono text-xs font-medium text-white" id="loopStart-value">0%</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">START</span>
+                                <span class="font-mono text-[9px] text-white" id="loopStart-value">0%</span>
+                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">START</span>
                             </div>
 
                             <!-- END -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-medium" id="loopEnd-knob">
+                            <div class="flex flex-col items-center gap-1">
+                                <div class="knob knob-small" id="loopEnd-knob">
                                     <div class="knob-indicator"></div>
                                 </div>
-                                <span class="font-mono text-xs font-medium text-white" id="loopEnd-value">100%</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">END</span>
+                                <span class="font-mono text-[9px] text-white" id="loopEnd-value">100%</span>
+                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">END</span>
                             </div>
 
-                            <!-- SPEED with preset dropdown -->
-                            <div class="flex flex-col items-center gap-2" id="loopSpeed-group">
-                                <div class="knob knob-medium" id="loopSpeed-knob">
+                            <!-- SPEED -->
+                            <div class="flex flex-col items-center gap-1">
+                                <div class="knob knob-small" id="loopSpeed-knob">
                                     <div class="knob-indicator"></div>
                                 </div>
-                                <span class="font-mono text-xs font-medium text-white" id="loopSpeed-value">1.0x</span>
-                                <div class="flex items-center gap-1">
-                                    <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">SPEED</span>
-                                    <select id="speed-preset-select" class="speed-preset-select" title="Speed Presets (musical intervals)">
-                                        <option value="">--</option>
-                                        <option value="0.5">½ (-12st)</option>
-                                        <option value="0.5946">-9st</option>
-                                        <option value="0.6674">-7st</option>
-                                        <option value="0.7071">-6st</option>
-                                        <option value="0.7937">-4st</option>
-                                        <option value="0.8409">-3st</option>
-                                        <option value="0.8909">-2st</option>
-                                        <option value="0.9439">-1st</option>
-                                        <option value="1.0" selected>1x (0st)</option>
-                                        <option value="1.0595">+1st</option>
-                                        <option value="1.1225">+2st</option>
-                                        <option value="1.1892">+3st</option>
-                                        <option value="1.2599">+4st</option>
-                                        <option value="1.3348">+5st</option>
-                                        <option value="1.4142">+6st</option>
-                                        <option value="1.4983">+7st</option>
-                                        <option value="1.6818">+9st</option>
-                                        <option value="2.0">2x (+12st)</option>
-                                    </select>
-                                </div>
+                                <select class="speed-select" id="speed-preset-select">
+                                    <option value="0.5">-12st (½x)</option>
+                                    <option value="0.5297">-11st</option>
+                                    <option value="0.5612">-10st</option>
+                                    <option value="0.5946">-9st</option>
+                                    <option value="0.6300">-8st</option>
+                                    <option value="0.6674">-7st</option>
+                                    <option value="0.7071">-6st</option>
+                                    <option value="0.7492">-5st</option>
+                                    <option value="0.7937">-4st</option>
+                                    <option value="0.8409">-3st</option>
+                                    <option value="0.8909">-2st</option>
+                                    <option value="0.9439">-1st</option>
+                                    <option value="1.0" selected>0st (1x)</option>
+                                    <option value="1.0595">+1st</option>
+                                    <option value="1.1225">+2st</option>
+                                    <option value="1.1892">+3st</option>
+                                    <option value="1.2599">+4st</option>
+                                    <option value="1.3348">+5st</option>
+                                    <option value="1.4142">+6st</option>
+                                    <option value="1.4983">+7st</option>
+                                    <option value="1.5874">+8st</option>
+                                    <option value="1.6818">+9st</option>
+                                    <option value="1.7818">+10st</option>
+                                    <option value="1.8877">+11st</option>
+                                    <option value="2.0">+12st (2x)</option>
+                                </select>
+                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">SPEED</span>
                             </div>
 
                             <!-- PITCH -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-medium" id="loopPitch-knob">
+                            <div class="flex flex-col items-center gap-1">
+                                <div class="knob knob-small" id="loopPitch-knob">
                                     <div class="knob-indicator"></div>
                                 </div>
                                 <select class="pitch-select" id="pitch-select">
-                                    <option value="-12">-12</option>
-                                    <option value="-11">-11</option>
-                                    <option value="-10">-10</option>
-                                    <option value="-9">-9</option>
-                                    <option value="-8">-8</option>
-                                    <option value="-7">-7</option>
-                                    <option value="-6">-6</option>
-                                    <option value="-5">-5</option>
-                                    <option value="-4">-4</option>
-                                    <option value="-3">-3</option>
-                                    <option value="-2">-2</option>
-                                    <option value="-1">-1</option>
-                                    <option value="0" selected>0</option>
-                                    <option value="1">+1</option>
-                                    <option value="2">+2</option>
-                                    <option value="3">+3</option>
-                                    <option value="4">+4</option>
-                                    <option value="5">+5</option>
-                                    <option value="6">+6</option>
-                                    <option value="7">+7</option>
-                                    <option value="8">+8</option>
-                                    <option value="9">+9</option>
-                                    <option value="10">+10</option>
-                                    <option value="11">+11</option>
-                                    <option value="12">+12</option>
+                                    <option value="-12">-12st</option>
+                                    <option value="-11">-11st</option>
+                                    <option value="-10">-10st</option>
+                                    <option value="-9">-9st</option>
+                                    <option value="-8">-8st</option>
+                                    <option value="-7">-7st</option>
+                                    <option value="-6">-6st</option>
+                                    <option value="-5">-5st</option>
+                                    <option value="-4">-4st</option>
+                                    <option value="-3">-3st</option>
+                                    <option value="-2">-2st</option>
+                                    <option value="-1">-1st</option>
+                                    <option value="0" selected>0st</option>
+                                    <option value="1">+1st</option>
+                                    <option value="2">+2st</option>
+                                    <option value="3">+3st</option>
+                                    <option value="4">+4st</option>
+                                    <option value="5">+5st</option>
+                                    <option value="6">+6st</option>
+                                    <option value="7">+7st</option>
+                                    <option value="8">+8st</option>
+                                    <option value="9">+9st</option>
+                                    <option value="10">+10st</option>
+                                    <option value="11">+11st</option>
+                                    <option value="12">+12st</option>
                                 </select>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">PITCH</span>
+                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">PITCH</span>
                             </div>
 
                             <!-- FADE -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-medium" id="loopFade-knob">
+                            <div class="flex flex-col items-center gap-1">
+                                <div class="knob knob-small" id="loopFade-knob">
                                     <div class="knob-indicator"></div>
                                 </div>
-                                <span class="font-mono text-xs font-medium text-white" id="loopFade-value">100%</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">FADE</span>
+                                <span class="font-mono text-[9px] text-white" id="loopFade-value">100%</span>
+                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">FADE</span>
                             </div>
                         </div>
-                    </div>
-                </section>
+                    </section>
+                </div>
 
-                <!-- DEGRADE Section (integrated into main panel) -->
-                <section class="section-card degrade-section bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-degrade-accent/20 to-transparent"></div>
-                    <div class="p-3">
-                        <div class="flex items-center justify-between mb-3">
-                            <div class="flex items-center gap-3">
+                <!-- RIGHT COLUMN: Degrade Module -->
+                <div class="w-56 flex flex-col">
+                    <section class="section-card degrade-section bg-fd-card rounded-lg border border-fd-border flex-1 flex flex-col">
+                        <!-- Header -->
+                        <div class="flex items-center justify-between p-3 border-b border-fd-border">
+                            <div class="flex items-center gap-2">
                                 <div class="section-led degrade-led active" id="degrade-master-led"></div>
-                                <h2 class="font-display text-[9px] font-bold tracking-[3px] text-fd-text-dim uppercase">// DEGRADE</h2>
+                                <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">DEGRADE</span>
                             </div>
-                        </div>
-                        <div class="flex justify-center items-start gap-6">
-                            <!-- FILTER Section (compact) -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="flex items-center gap-1 mb-1">
-                                    <button class="filter-toggle-btn-sm active" id="hp-toggle-btn" title="Toggle High-Pass">HP</button>
-                                    <button class="filter-toggle-btn-sm active" id="lp-toggle-btn" title="Toggle Low-Pass">LP</button>
-                                </div>
-                                <div class="flex gap-3">
-                                    <div class="flex flex-col items-center gap-1">
-                                        <div class="knob knob-small degrade-knob" id="degradeHP-knob">
-                                            <div class="knob-indicator"></div>
-                                        </div>
-                                        <span class="font-mono text-[9px] text-white" id="degradeHP-value">20Hz</span>
-                                    </div>
-                                    <div class="flex flex-col items-center gap-1">
-                                        <div class="knob knob-small degrade-knob" id="degradeLP-knob">
-                                            <div class="knob-indicator"></div>
-                                        </div>
-                                        <span class="font-mono text-[9px] text-white" id="degradeLP-value">20kHz</span>
-                                    </div>
-                                </div>
-                                <span class="font-display text-[7px] font-bold tracking-[2px] text-fd-text-dim uppercase">FILTER</span>
-                            </div>
-
-                            <!-- Divider -->
-                            <div class="degrade-divider"></div>
-
-                            <!-- LO-FI Section (compact) -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="section-led-sm degrade-led active" id="lofi-led"></div>
-                                <div class="flex gap-3">
-                                    <div class="flex flex-col items-center gap-1">
-                                        <div class="knob knob-small degrade-knob" id="degradeBit-knob">
-                                            <div class="knob-indicator"></div>
-                                        </div>
-                                        <span class="font-mono text-[9px] text-white" id="degradeBit-value">16</span>
-                                    </div>
-                                    <div class="flex flex-col items-center gap-1">
-                                        <div class="knob knob-small degrade-knob" id="degradeSR-knob">
-                                            <div class="knob-indicator"></div>
-                                        </div>
-                                        <span class="font-mono text-[9px] text-white" id="degradeSR-value">48k</span>
-                                    </div>
-                                    <div class="flex flex-col items-center gap-1">
-                                        <div class="knob knob-small degrade-knob" id="degradeWobble-knob">
-                                            <div class="knob-indicator"></div>
-                                        </div>
-                                        <span class="font-mono text-[9px] text-white" id="degradeWobble-value">0%</span>
-                                    </div>
-                                </div>
-                                <span class="font-display text-[7px] font-bold tracking-[2px] text-fd-text-dim uppercase">LO-FI</span>
-                            </div>
-
-                            <!-- Divider -->
-                            <div class="degrade-divider"></div>
-
-                            <!-- GRANULAR/SCRAMBLER Section (expanded) -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="section-led-sm degrade-led active" id="scrambler-led"></div>
-                                <div class="flex gap-3">
-                                    <div class="flex flex-col items-center gap-1">
-                                        <select class="subdiv-select-sm" id="scramble-subdiv">
-                                            <option value="0">OFF</option>
-                                            <option value="1">1/4</option>
-                                            <option value="2">1/8</option>
-                                            <option value="3">1/16</option>
-                                            <option value="4">1/32</option>
-                                        </select>
-                                        <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">DIV</span>
-                                    </div>
-                                    <div class="flex flex-col items-center gap-1">
-                                        <div class="knob knob-small degrade-knob" id="degradeScrambleAmt-knob">
-                                            <div class="knob-indicator"></div>
-                                        </div>
-                                        <span class="font-mono text-[9px] text-white" id="degradeScrambleAmt-value">50%</span>
-                                    </div>
-                                    <div class="flex flex-col items-center gap-1">
-                                        <div class="knob knob-small degrade-knob" id="degradeSmear-knob">
-                                            <div class="knob-indicator"></div>
-                                        </div>
-                                        <span class="font-mono text-[9px] text-white" id="degradeSmear-value">0%</span>
-                                    </div>
-                                    <div class="flex flex-col items-center gap-1">
-                                        <div class="knob knob-small degrade-knob" id="degradeGrainSize-knob">
-                                            <div class="knob-indicator"></div>
-                                        </div>
-                                        <span class="font-mono text-[9px] text-white" id="degradeGrainSize-value">50ms</span>
-                                    </div>
-                                </div>
-                                <span class="font-display text-[7px] font-bold tracking-[2px] text-fd-text-dim uppercase">GRANULAR</span>
-                            </div>
-
-                            <!-- Divider -->
-                            <div class="degrade-divider"></div>
-
-                            <!-- MIX -->
-                            <div class="flex flex-col items-center gap-1">
+                            <div class="flex items-center gap-2">
                                 <div class="knob knob-small degrade-knob" id="degradeMix-knob">
                                     <div class="knob-indicator"></div>
                                 </div>
                                 <span class="font-mono text-[9px] text-white" id="degradeMix-value">100%</span>
-                                <span class="font-display text-[7px] font-bold tracking-[2px] text-fd-text-dim uppercase">MIX</span>
                             </div>
                         </div>
-                    </div>
-                </section>
+
+                        <!-- LO-FI Section -->
+                        <div class="p-3 border-b border-fd-border">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="section-led degrade-led active" id="lofi-led"></div>
+                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">LO-FI</span>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3">
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="degradeBit-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="degradeBit-value">16</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">BIT</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="degradeSR-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="degradeSR-value">48k</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">SR</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="degradeWobble-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="degradeWobble-value">0%</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">WOB</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- GRANULAR Section -->
+                        <div class="p-3 border-b border-fd-border">
+                            <div class="flex items-center justify-between mb-3">
+                                <div class="flex items-center gap-2">
+                                    <div class="section-led degrade-led active" id="scrambler-led"></div>
+                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">GRANULAR</span>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 mb-3">
+                                <div class="flex flex-col items-center gap-1">
+                                    <select class="subdiv-select" id="scramble-subdiv">
+                                        <option value="0">OFF</option>
+                                        <option value="1">1/4</option>
+                                        <option value="2">1/8</option>
+                                        <option value="3">1/16</option>
+                                        <option value="4">1/32</option>
+                                    </select>
+                                    <span class="font-display text-[7px] text-fd-text-dim">DIV</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="degradeScrambleAmt-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="degradeScrambleAmt-value">50%</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">AMT</span>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="degradeSmear-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="degradeSmear-value">0%</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">SMEAR</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="degradeGrainSize-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="degradeGrainSize-value">50ms</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">GRAIN</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- FILTER Section -->
+                        <div class="p-3 flex-1">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">FILTER</span>
+                                <div class="flex items-center gap-2">
+                                    <button class="filter-toggle-btn active" id="hp-toggle-btn" title="Toggle High-Pass">HP</button>
+                                    <button class="filter-toggle-btn active" id="lp-toggle-btn" title="Toggle Low-Pass">LP</button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="degradeHP-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="degradeHP-value">20Hz</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">HP</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="degradeLP-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="degradeLP-value">20kHz</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">LP</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
             </div>
 
             <!-- DELAY Tab Content -->
-            <div id="delay-tab" class="tab-content hidden flex flex-col gap-4">
+            <div id="delay-tab" class="tab-content hidden flex flex-col gap-3 w-full">
                 <!-- DELAY Section -->
-                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                    <!-- Section accent -->
-                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/30 to-transparent"></div>
-
-                    <div class="p-4">
-                        <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
-                            // DELAY
-                        </h2>
-                        <div class="flex justify-center gap-10">
-                            <!-- TIME -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-large" id="delayTime-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-sm font-medium text-white" id="delayTime-value">300 ms</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TIME</span>
+                <section class="section-card bg-fd-card rounded-lg border border-fd-border p-4">
+                    <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
+                        // DELAY
+                    </h2>
+                    <div class="flex justify-center gap-10">
+                        <!-- TIME -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-large" id="delayTime-knob">
+                                <div class="knob-indicator"></div>
                             </div>
+                            <span class="font-mono text-sm font-medium text-white" id="delayTime-value">300 ms</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TIME</span>
+                        </div>
 
-                            <!-- FEEDBACK -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-large" id="feedback-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-sm font-medium text-white" id="feedback-value">40%</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">FEEDBACK</span>
+                        <!-- FEEDBACK -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-large" id="feedback-knob">
+                                <div class="knob-indicator"></div>
                             </div>
+                            <span class="font-mono text-sm font-medium text-white" id="feedback-value">40%</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">FEEDBACK</span>
+                        </div>
 
-                            <!-- TONE -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-large" id="tone-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-sm font-medium text-white" id="tone-value">4.0 kHz</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TONE</span>
+                        <!-- TONE -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-large" id="tone-knob">
+                                <div class="knob-indicator"></div>
                             </div>
+                            <span class="font-mono text-sm font-medium text-white" id="tone-value">4.0 kHz</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TONE</span>
+                        </div>
 
-                            <!-- MIX -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-large" id="mix-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-sm font-medium text-white" id="mix-value">50%</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">MIX</span>
+                        <!-- MIX -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-large" id="mix-knob">
+                                <div class="knob-indicator"></div>
                             </div>
+                            <span class="font-mono text-sm font-medium text-white" id="mix-value">50%</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">MIX</span>
                         </div>
                     </div>
                 </section>
 
                 <!-- CHARACTER Section -->
-                <section class="section-card bg-fd-card rounded-lg border border-fd-border relative overflow-hidden">
-                    <div class="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-fd-accent/20 to-transparent"></div>
-
-                    <div class="p-4">
-                        <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
-                            // CHARACTER
-                        </h2>
-                        <div class="flex justify-center gap-10">
-                            <!-- AGE -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-medium" id="age-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-xs font-medium text-white" id="age-value">25%</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">AGE</span>
+                <section class="section-card bg-fd-card rounded-lg border border-fd-border p-4">
+                    <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
+                        // CHARACTER
+                    </h2>
+                    <div class="flex justify-center gap-10">
+                        <!-- AGE -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-medium" id="age-knob">
+                                <div class="knob-indicator"></div>
                             </div>
+                            <span class="font-mono text-xs font-medium text-white" id="age-value">25%</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">AGE</span>
+                        </div>
 
-                            <!-- RATE -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-medium" id="modRate-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-xs font-medium text-white" id="modRate-value">0.5 Hz</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">RATE</span>
+                        <!-- RATE -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-medium" id="modRate-knob">
+                                <div class="knob-indicator"></div>
                             </div>
+                            <span class="font-mono text-xs font-medium text-white" id="modRate-value">0.5 Hz</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">RATE</span>
+                        </div>
 
-                            <!-- DEPTH -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-medium" id="modDepth-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-xs font-medium text-white" id="modDepth-value">3 ms</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">DEPTH</span>
+                        <!-- DEPTH -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-medium" id="modDepth-knob">
+                                <div class="knob-indicator"></div>
                             </div>
+                            <span class="font-mono text-xs font-medium text-white" id="modDepth-value">3 ms</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">DEPTH</span>
+                        </div>
 
-                            <!-- WARMTH -->
-                            <div class="flex flex-col items-center gap-2">
-                                <div class="knob knob-medium" id="warmth-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-xs font-medium text-white" id="warmth-value">30%</span>
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">WARMTH</span>
+                        <!-- WARMTH -->
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob knob-medium" id="warmth-knob">
+                                <div class="knob-indicator"></div>
                             </div>
+                            <span class="font-mono text-xs font-medium text-white" id="warmth-value">30%</span>
+                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">WARMTH</span>
                         </div>
                     </div>
                 </section>
@@ -546,26 +575,24 @@
         </main>
 
         <!-- Footer - Tempo Sync -->
-        <footer class="py-3 px-4 border-t border-fd-border bg-fd-surface/50">
+        <footer class="py-2 px-4 border-t border-fd-border bg-fd-surface/50">
             <div class="flex items-center justify-between">
                 <!-- Version ticker -->
-                <div class="flex items-center gap-1">
-                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v0.6.0</span>
-                </div>
+                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v0.9.1</span>
                 <!-- Tempo controls -->
-                <div class="flex items-center gap-6">
+                <div class="flex items-center gap-4">
                     <!-- Host Transport Sync LED -->
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-1">
                         <span class="host-sync-led" id="host-sync-led" title="Sync looper to host transport"></span>
-                        <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">HOST</span>
+                        <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">HOST</span>
                     </div>
-                    <div class="w-[1px] h-4 bg-fd-border"></div>
-                    <div class="flex items-center gap-2">
-                        <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">BPM</span>
-                        <span class="font-mono text-base font-bold text-fd-accent" id="bpm-display"
+                    <div class="w-[1px] h-3 bg-fd-border"></div>
+                    <div class="flex items-center gap-1">
+                        <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">BPM</span>
+                        <span class="font-mono text-sm font-bold text-fd-accent" id="bpm-display"
                               style="text-shadow: 0 0 10px rgba(255, 107, 53, 0.3);">120.0</span>
                     </div>
-                    <div class="w-[1px] h-4 bg-fd-border"></div>
+                    <div class="w-[1px] h-3 bg-fd-border"></div>
                     <button class="toggle-btn-small" id="tempo-sync-toggle">
                         <span class="toggle-label font-display">SYNC</span>
                     </button>
@@ -578,7 +605,7 @@
                         <option value="5">1/32</option>
                     </select>
                 </div>
-                <!-- Spacer to balance layout -->
+                <!-- Spacer -->
                 <div class="w-12"></div>
             </div>
         </footer>

@@ -314,6 +314,11 @@ public:
         return fadeActive.load();
     }
 
+    float getCurrentFadeMultiplier() const
+    {
+        return currentFadeMultiplier;
+    }
+
     // Process audio
     void processBlock(juce::AudioBuffer<float>& buffer)
     {
@@ -399,6 +404,7 @@ public:
 
     // Get waveform data for UI visualization (downsampled)
     // Works during recording (uses writeHead) and playback (uses loopLength)
+    // ALWAYS applies current fade multiplier so waveform visually reflects faded audio
     std::vector<float> getWaveformData(int numPoints) const
     {
         std::vector<float> waveform(numPoints, 0.0f);
@@ -429,6 +435,10 @@ public:
         // For recording with target length, only show samples up to writeHead
         const int maxSampleToShow = (state.load() == State::Recording) ? writeHead : visualLength;
 
+        // ALWAYS apply fade multiplier to waveform display so it visually reflects faded audio
+        // This ensures the waveform shrinks/grows with the audio level even after overdubbing stops
+        const float fadeMultiplier = currentFadeMultiplier;
+
         for (int i = 0; i < numPoints; ++i)
         {
             float maxVal = 0.0f;
@@ -444,7 +454,8 @@ public:
                     maxVal = std::max(maxVal, val * 0.5f);
                 }
             }
-            waveform[i] = std::min(maxVal, 1.0f);
+            // Apply fade multiplier to visual representation
+            waveform[i] = std::min(maxVal * fadeMultiplier, 1.0f);
         }
 
         return waveform;
@@ -550,28 +561,124 @@ private:
         const bool loopWrapped = detectLoopWrap(lastPlayheadPosition, currentPos);
         lastPlayheadPosition = currentPos;
 
-        // Apply fade when fadeActive is true (another layer is recording/overdubbing)
-        // This makes fade affect ALL layers, not just the one being overdubbed
-        if (fadeActive.load() && loopWrapped)
+        // Apply fade decay when loop wraps - ALWAYS applies to ALL playing layers
+        // This is Blooper-style behavior: each layer fades independently based on fade knob
+        // fadeActive is no longer needed for this - fade ALWAYS works on playing layers
+        if (loopWrapped)
         {
-            if (fadeTarget < currentFadeMultiplier)
+            // Convert fade knob (0-1) to a per-loop decay multiplier
+            // At 100% (1.0): no decay (multiplier = 1.0)
+            // At 50% (0.5): gentle decay over ~8 loops
+            // At 0% (0.0): fast decay over ~2 loops
+            //
+            // Formula: decayMultiplier = 1 - (1 - fadeTarget)^2 * 0.3
+            // This creates a gentler curve where 50% takes many loops to fade
+            float decayStrength = (1.0f - fadeTarget) * (1.0f - fadeTarget);  // Quadratic curve
+            float decayMultiplier = 1.0f - (decayStrength * 0.3f);  // Max 30% reduction per loop at 0%
+
+            // Apply decay based on current knob position
+            currentFadeMultiplier *= decayMultiplier;
+            // Clamp to minimum to prevent complete silence
+            currentFadeMultiplier = std::max(currentFadeMultiplier, 0.001f);
+
+            // Recovery: if knob is raised above 90%, gradually restore volume
+            // This allows "rescuing" a faded loop by turning fade back up
+            if (fadeTarget > 0.9f && currentFadeMultiplier < 1.0f)
             {
-                // Decay: multiply by fadeTarget to reduce
-                currentFadeMultiplier *= fadeTarget;
-            }
-            else
-            {
-                // Recovery: lerp towards fadeTarget when knob is raised
-                currentFadeMultiplier += (fadeTarget - currentFadeMultiplier) * 0.3f;
+                // Lerp back towards 1.0 - faster recovery when knob is at 100%
+                float recoveryRate = (fadeTarget - 0.9f) * 2.0f;  // 0 to 0.2 based on knob
+                currentFadeMultiplier += (1.0f - currentFadeMultiplier) * recoveryRate;
             }
         }
 
-        // Determine the fade multiplier to apply
-        float fadeToApply = fadeActive.load() ? currentFadeMultiplier : 1.0f;
+        // ALWAYS apply fade multiplier - once audio has faded, it stays faded
+        // The fadeActive flag only controls whether decay CONTINUES, not whether it's audible
+        float fadeToApply = currentFadeMultiplier;
 
-        // Read from loop buffer at current playhead (with fade applied)
-        float rawL = readWithInterpolation(bufferL, playHead) * fadeToApply;
-        float rawR = readWithInterpolation(bufferR, playHead) * fadeToApply;
+        // Calculate loop boundary crossfade to prevent pops
+        const int effectiveStart = loopStart;
+        const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
+        const int effectiveLength = effectiveEnd - effectiveStart;
+
+        float crossfadeGain = 1.0f;
+        if (effectiveLength > CROSSFADE_SAMPLES * 2)
+        {
+            const float posInLoop = playHead - effectiveStart;
+            const bool reversed = isReversed.load();
+
+            if (!reversed)
+            {
+                // Near end of loop: fade out
+                const float distToEnd = effectiveEnd - playHead;
+                if (distToEnd < CROSSFADE_SAMPLES && distToEnd > 0)
+                {
+                    crossfadeGain = distToEnd / static_cast<float>(CROSSFADE_SAMPLES);
+                }
+                // Near start of loop: fade in
+                else if (posInLoop < CROSSFADE_SAMPLES && posInLoop >= 0)
+                {
+                    crossfadeGain = posInLoop / static_cast<float>(CROSSFADE_SAMPLES);
+                }
+            }
+            else
+            {
+                // Reversed: near start = fade out, near end = fade in
+                if (posInLoop < CROSSFADE_SAMPLES && posInLoop >= 0)
+                {
+                    crossfadeGain = posInLoop / static_cast<float>(CROSSFADE_SAMPLES);
+                }
+                const float distToEnd = effectiveEnd - playHead;
+                if (distToEnd < CROSSFADE_SAMPLES && distToEnd > 0)
+                {
+                    crossfadeGain = distToEnd / static_cast<float>(CROSSFADE_SAMPLES);
+                }
+            }
+        }
+
+        // Read from loop buffer at current playhead (with fade and crossfade applied)
+        float rawL = readWithInterpolation(bufferL, playHead) * fadeToApply * crossfadeGain;
+        float rawR = readWithInterpolation(bufferR, playHead) * fadeToApply * crossfadeGain;
+
+        // Read wrapped position for crossfade blend (from the other end of the loop)
+        if (crossfadeGain < 1.0f && effectiveLength > CROSSFADE_SAMPLES * 2)
+        {
+            float wrappedPos;
+            const float posInLoop = playHead - effectiveStart;
+            const bool reversed = isReversed.load();
+
+            if (!reversed)
+            {
+                // If near end, blend with start; if near start, blend with end
+                const float distToEnd = effectiveEnd - playHead;
+                if (distToEnd < CROSSFADE_SAMPLES)
+                {
+                    // Near end: blend with start
+                    wrappedPos = effectiveStart + (CROSSFADE_SAMPLES - distToEnd);
+                }
+                else
+                {
+                    // Near start: blend with end
+                    wrappedPos = effectiveEnd - (CROSSFADE_SAMPLES - posInLoop);
+                }
+            }
+            else
+            {
+                if (posInLoop < CROSSFADE_SAMPLES)
+                {
+                    wrappedPos = effectiveEnd - (CROSSFADE_SAMPLES - posInLoop);
+                }
+                else
+                {
+                    const float distToEnd = effectiveEnd - playHead;
+                    wrappedPos = effectiveStart + (CROSSFADE_SAMPLES - distToEnd);
+                }
+            }
+
+            float wrapL = readWithInterpolation(bufferL, wrappedPos) * fadeToApply * (1.0f - crossfadeGain);
+            float wrapR = readWithInterpolation(bufferR, wrappedPos) * fadeToApply * (1.0f - crossfadeGain);
+            rawL += wrapL;
+            rawR += wrapR;
+        }
 
         float loopL, loopR;
 
@@ -620,18 +727,22 @@ private:
 
         if (loopWrapped)
         {
-            // Apply fade decay when loop wraps around
-            // fadeTarget of 1.0 = no decay, 0.0 = instant silence
-            if (fadeTarget < currentFadeMultiplier)
+            // Apply same fade decay formula as processPlaying for consistency
+            // Convert fade knob (0-1) to a per-loop decay multiplier
+            // At 100% (1.0): no decay (multiplier = 1.0)
+            // At 50% (0.5): gentle decay over ~8 loops
+            // At 0% (0.0): fast decay over ~2 loops
+            float decayStrength = (1.0f - fadeTarget) * (1.0f - fadeTarget);  // Quadratic curve
+            float decayMultiplier = 1.0f - (decayStrength * 0.3f);  // Max 30% reduction per loop at 0%
+
+            currentFadeMultiplier *= decayMultiplier;
+            currentFadeMultiplier = std::max(currentFadeMultiplier, 0.001f);
+
+            // Recovery: if knob is raised above 90%, gradually restore volume
+            if (fadeTarget > 0.9f && currentFadeMultiplier < 1.0f)
             {
-                // Decay: multiply by fadeTarget to reduce
-                currentFadeMultiplier *= fadeTarget;
-            }
-            else
-            {
-                // Recovery: lerp towards fadeTarget when knob is raised
-                // This allows the fade to recover if user increases the knob
-                currentFadeMultiplier += (fadeTarget - currentFadeMultiplier) * 0.3f;
+                float recoveryRate = (fadeTarget - 0.9f) * 2.0f;
+                currentFadeMultiplier += (1.0f - currentFadeMultiplier) * recoveryRate;
             }
         }
 

@@ -114,6 +114,8 @@ private:
     std::atomic<float>* degradeSRParam = nullptr;
     std::atomic<float>* degradeWobbleParam = nullptr;
     std::atomic<float>* degradeScrambleAmtParam = nullptr;
+    std::atomic<float>* degradeSmearParam = nullptr;
+    std::atomic<float>* degradeGrainSizeParam = nullptr;
     std::atomic<float>* degradeMixParam = nullptr;
 
     // Tempo sync state
@@ -127,6 +129,10 @@ private:
     // Host transport sync (on by default)
     std::atomic<bool> hostTransportSyncEnabled { true };
     std::atomic<bool> lastHostPlaying { false };
+
+    // Blooper-style processing buffers (degrade only affects loop playback, not input)
+    juce::AudioBuffer<float> loopPlaybackBuffer;    // Loop audio only (for degrade processing)
+    juce::AudioBuffer<float> inputPassthroughBuffer; // Clean input (bypasses degrade)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoopEngineProcessor)
 };

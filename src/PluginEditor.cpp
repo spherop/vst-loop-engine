@@ -42,6 +42,8 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(degradeSRRelay)
                   .withOptionsFrom(degradeWobbleRelay)
                   .withOptionsFrom(degradeScrambleAmtRelay)
+                  .withOptionsFrom(degradeSmearRelay)
+                  .withOptionsFrom(degradeGrainSizeRelay)
                   .withOptionsFrom(degradeMixRelay)
                   .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
                   {
@@ -414,6 +416,12 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
       degradeScrambleAmtAttachment(*processorRef.getAPVTS().getParameter("degradeScrambleAmt"),
                                    degradeScrambleAmtRelay,
                                    processorRef.getAPVTS().undoManager),
+      degradeSmearAttachment(*processorRef.getAPVTS().getParameter("degradeSmear"),
+                             degradeSmearRelay,
+                             processorRef.getAPVTS().undoManager),
+      degradeGrainSizeAttachment(*processorRef.getAPVTS().getParameter("degradeGrainSize"),
+                                 degradeGrainSizeRelay,
+                                 processorRef.getAPVTS().undoManager),
       degradeMixAttachment(*processorRef.getAPVTS().getParameter("degradeMix"),
                            degradeMixRelay,
                            processorRef.getAPVTS().undoManager)
@@ -422,10 +430,10 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
     // Set default size to fit the full UI without scrolling
-    // The UI has: header, tabs, looper controls, waveform, knobs, sample section, footer
-    setSize(600, 700);
+    // Two-column layout: looper left, degrade right (larger degrade panel)
+    setSize(750, 580);
     setResizable(true, true);
-    setResizeLimits(550, 600, 1000, 1000);
+    setResizeLimits(700, 500, 1100, 900);
 
     // Start timer for BPM polling (100ms interval)
     startTimerHz(10);

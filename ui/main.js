@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.6.0";
+const UI_VERSION = "0.8.5";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -1701,35 +1701,36 @@ class BpmDisplayController {
 // Degrade section controller with LEDs and filter visualization
 class DegradeController {
     constructor() {
+        // Master LED for entire degrade section
+        this.masterLed = document.getElementById('degrade-master-led');
+        console.log('[DEGRADE] Master LED element:', this.masterLed);
+
         // Section LEDs
-        this.filterLed = document.getElementById('filter-led');
         this.lofiLed = document.getElementById('lofi-led');
         this.scramblerLed = document.getElementById('scrambler-led');
+        console.log('[DEGRADE] Lofi LED:', this.lofiLed, 'Scrambler LED:', this.scramblerLed);
 
         // Individual filter toggle buttons
         this.hpToggleBtn = document.getElementById('hp-toggle-btn');
         this.lpToggleBtn = document.getElementById('lp-toggle-btn');
-        this.hpGroup = this.hpToggleBtn?.closest('.filter-group');
-        this.lpGroup = this.lpToggleBtn?.closest('.filter-group');
+        console.log('[DEGRADE] HP btn:', this.hpToggleBtn, 'LP btn:', this.lpToggleBtn);
 
-        // Section containers (for dimming when disabled)
-        this.filterSection = this.filterLed?.closest('.degrade-section');
-        this.lofiSection = this.lofiLed?.closest('.degrade-section');
-        this.scramblerSection = this.scramblerLed?.closest('.degrade-section');
+        // Degrade section container (for dimming when master disabled)
+        this.degradeSection = document.querySelector('.degrade-section');
 
         // Filter visualization canvas
         this.filterCanvas = document.getElementById('filter-viz-canvas');
         this.filterCtx = this.filterCanvas?.getContext('2d');
 
         // State
-        this.filterEnabled = true;
+        this.masterEnabled = true;
         this.lofiEnabled = true;
         this.scramblerEnabled = true;
         this.hpEnabled = true;
         this.lpEnabled = true;
 
         // Native functions
-        this.setFilterEnabledFn = getNativeFunction('setDegradeFilterEnabled');
+        this.setMasterEnabledFn = getNativeFunction('setDegradeEnabled');
         this.setLofiEnabledFn = getNativeFunction('setDegradeLofiEnabled');
         this.setScramblerEnabledFn = getNativeFunction('setDegradeScramblerEnabled');
         this.setHPEnabledFn = getNativeFunction('setDegradeHPEnabled');
@@ -1745,13 +1746,15 @@ class DegradeController {
         this.setupEvents();
         this.fetchInitialState();
         this.startPolling();
+        console.log('[DEGRADE] Controller initialized');
     }
 
     setupEvents() {
-        if (this.filterLed) {
-            this.filterLed.addEventListener('click', (e) => {
+        // Master LED toggle
+        if (this.masterLed) {
+            this.masterLed.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.toggleFilter();
+                this.toggleMaster();
             });
         }
         if (this.lofiLed) {
@@ -1779,7 +1782,8 @@ class DegradeController {
         try {
             const state = await this.getDegradeStateFn();
             if (state) {
-                this.filterEnabled = state.filterEnabled !== false;
+                // C++ returns 'enabled', we use 'masterEnabled' internally
+                this.masterEnabled = state.enabled !== false;
                 this.lofiEnabled = state.lofiEnabled !== false;
                 this.scramblerEnabled = state.scramblerEnabled !== false;
                 this.hpEnabled = state.hpEnabled !== false;
@@ -1788,6 +1792,19 @@ class DegradeController {
             }
         } catch (e) {
             console.log('Could not fetch initial degrade state');
+        }
+    }
+
+    async toggleMaster() {
+        this.masterEnabled = !this.masterEnabled;
+        this.updateUI();
+        try {
+            await this.setMasterEnabledFn(this.masterEnabled);
+            console.log(`[DEGRADE] Master ${this.masterEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling degrade master:', e);
+            this.masterEnabled = !this.masterEnabled;
+            this.updateUI();
         }
     }
 
@@ -1832,18 +1849,6 @@ class DegradeController {
         }
     }
 
-    async toggleFilter() {
-        this.filterEnabled = !this.filterEnabled;
-        this.updateUI();
-        try {
-            await this.setFilterEnabledFn(this.filterEnabled);
-            console.log(`[DEGRADE] Filter ${this.filterEnabled ? 'enabled' : 'disabled'}`);
-        } catch (e) {
-            console.error('Error toggling filter:', e);
-            this.filterEnabled = !this.filterEnabled;
-            this.updateUI();
-        }
-    }
 
     async toggleLofi() {
         this.lofiEnabled = !this.lofiEnabled;
@@ -1872,10 +1877,12 @@ class DegradeController {
     }
 
     updateUI() {
-        // Update LEDs
-        if (this.filterLed) {
-            this.filterLed.classList.toggle('active', this.filterEnabled);
+        // Update Master LED
+        if (this.masterLed) {
+            this.masterLed.classList.toggle('active', this.masterEnabled);
         }
+
+        // Update section LEDs
         if (this.lofiLed) {
             this.lofiLed.classList.toggle('active', this.lofiEnabled);
         }
@@ -1883,15 +1890,14 @@ class DegradeController {
             this.scramblerLed.classList.toggle('active', this.scramblerEnabled);
         }
 
-        // Update section opacity (but keep clickable)
-        if (this.filterSection) {
-            this.filterSection.style.opacity = this.filterEnabled ? '1' : '0.5';
-        }
-        if (this.lofiSection) {
-            this.lofiSection.style.opacity = this.lofiEnabled ? '1' : '0.5';
-        }
-        if (this.scramblerSection) {
-            this.scramblerSection.style.opacity = this.scramblerEnabled ? '1' : '0.5';
+        // Update entire degrade section opacity when master is disabled
+        if (this.degradeSection) {
+            // Apply dim to everything except the header with master LED
+            const sections = this.degradeSection.querySelectorAll('.p-2');
+            sections.forEach(section => {
+                section.style.opacity = this.masterEnabled ? '1' : '0.4';
+                section.style.pointerEvents = this.masterEnabled ? 'auto' : 'none';
+            });
         }
 
         // Update individual filter toggles
@@ -2059,6 +2065,19 @@ window.updateBpmDisplay = function(bpm) {
 document.addEventListener('selectstart', (e) => e.preventDefault());
 document.addEventListener('dragstart', (e) => e.preventDefault());
 
+// Hide loading screen and show main content
+function hideLoadingScreen() {
+    const loadingScreen = document.getElementById('loading-screen');
+    const mainContent = document.getElementById('main-content');
+
+    if (loadingScreen) {
+        loadingScreen.classList.add('hidden');
+    }
+    if (mainContent) {
+        mainContent.style.opacity = '1';
+    }
+}
+
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
     console.log(`Initializing Loop Engine UI v${UI_VERSION}...`);
@@ -2072,6 +2091,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (versionEl) {
         versionEl.textContent = `v${UI_VERSION}`;
     }
+
+    // Hide loading screen after a short delay to allow fonts to load
+    setTimeout(hideLoadingScreen, 500);
 
     // Tab Controller
     new TabController();
@@ -2300,6 +2322,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // Scramble amount: 0% - 100%
     new KnobController('degradeScrambleAmt-knob', 'degradeScrambleAmt', {
         formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Granular smear: 0% - 100%
+    new KnobController('degradeSmear-knob', 'degradeSmear', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Grain size: 10ms - 500ms (exponential)
+    new KnobController('degradeGrainSize-knob', 'degradeGrainSize', {
+        formatValue: (v) => {
+            // v is normalized 0-1, maps to 10-500ms with skew
+            const ms = Math.round(10 + Math.pow(v, 0.5) * (500 - 10));
+            return `${ms}ms`;
+        }
     });
 
     // Degrade mix: 0% - 100%

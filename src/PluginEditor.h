@@ -46,6 +46,8 @@ private:
     juce::WebSliderRelay degradeSRRelay { "degradeSR" };
     juce::WebSliderRelay degradeWobbleRelay { "degradeWobble" };
     juce::WebSliderRelay degradeScrambleAmtRelay { "degradeScrambleAmt" };
+    juce::WebSliderRelay degradeSmearRelay { "degradeSmear" };
+    juce::WebSliderRelay degradeGrainSizeRelay { "degradeGrainSize" };
     juce::WebSliderRelay degradeMixRelay { "degradeMix" };
 
     juce::WebBrowserComponent webView;
@@ -78,6 +80,8 @@ private:
     juce::WebSliderParameterAttachment degradeSRAttachment;
     juce::WebSliderParameterAttachment degradeWobbleAttachment;
     juce::WebSliderParameterAttachment degradeScrambleAmtAttachment;
+    juce::WebSliderParameterAttachment degradeSmearAttachment;
+    juce::WebSliderParameterAttachment degradeGrainSizeAttachment;
     juce::WebSliderParameterAttachment degradeMixAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);

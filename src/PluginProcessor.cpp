@@ -29,6 +29,8 @@ LoopEngineProcessor::LoopEngineProcessor()
     degradeSRParam = apvts.getRawParameterValue("degradeSR");
     degradeWobbleParam = apvts.getRawParameterValue("degradeWobble");
     degradeScrambleAmtParam = apvts.getRawParameterValue("degradeScrambleAmt");
+    degradeSmearParam = apvts.getRawParameterValue("degradeSmear");
+    degradeGrainSizeParam = apvts.getRawParameterValue("degradeGrainSize");
     degradeMixParam = apvts.getRawParameterValue("degradeMix");
 }
 
@@ -208,6 +210,22 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         50.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
+    // Granular smear amount
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeSmear", 1},
+        "Smear",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Grain size (10-500ms)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeGrainSize", 1},
+        "Grain Size",
+        juce::NormalisableRange<float>(10.0f, 500.0f, 1.0f, 0.5f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("ms")));
+
     // Degrade mix (dry/wet)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"degradeMix", 1},
@@ -368,8 +386,10 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     if (auto* loopFadeParam = apvts.getRawParameterValue("loopFade"))
         loopEngine.setFade(loopFadeParam->load() / 100.0f);  // Convert 0-100% to 0-1
 
-    // Process through loop engine
-    loopEngine.processBlock(buffer);
+    // Process through loop engine with separate buffers for Blooper-style degrade
+    // loopPlaybackBuffer contains ONLY the loop playback (for degrade processing)
+    // inputPassthroughBuffer contains ONLY the clean input (bypasses degrade)
+    loopEngine.processBlock(buffer, &loopPlaybackBuffer, &inputPassthroughBuffer);
 
     // Update degrade processor parameters
     degradeProcessor.setHighPassFreq(degradeHPParam->load());
@@ -380,12 +400,32 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     degradeProcessor.setSampleRateReduction(degradeSRParam->load());
     degradeProcessor.setWobble(degradeWobbleParam->load() / 100.0f);  // Convert 0-100% to 0-1
     degradeProcessor.setScramblerAmount(degradeScrambleAmtParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setSmear(degradeSmearParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setGrainSize(degradeGrainSizeParam->load());  // Already in ms
     degradeProcessor.setMix(degradeMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
     degradeProcessor.setTempo(lastHostBpm.load());
     degradeProcessor.setLoopLengthSamples(loopEngine.getLoopLengthSamples());
 
-    // Process through degrade processor
-    degradeProcessor.processBlock(buffer);
+    // Blooper-style degrade: only affects loop playback, not input
+    // Apply degrade ONLY to the loop playback buffer
+    if (degradeProcessor.isEnabled())
+    {
+        degradeProcessor.processBlock(loopPlaybackBuffer);
+
+        // Reconstruct output: degraded loop + clean input
+        const int numChannels = buffer.getNumChannels();
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* outputData = buffer.getWritePointer(ch);
+            const float* degradedLoopData = loopPlaybackBuffer.getReadPointer(ch);
+            const float* cleanInputData = inputPassthroughBuffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                outputData[i] = degradedLoopData[i] + cleanInputData[i];
+            }
+        }
+    }
+    // If degrade is disabled, buffer already contains the correct mixed output from loopEngine
 
     // Get delay time - either from parameter or tempo sync
     const float delayTime = tempoSyncEnabled.load()
