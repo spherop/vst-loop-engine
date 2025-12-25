@@ -36,6 +36,23 @@ public:
         scramblerAmountSmooth.setCurrentAndTargetValue(0.5f);
         mixSmooth.setCurrentAndTargetValue(1.0f);
 
+        // Initialize bypass gain smoothers for click-free toggling
+        // Use a short ramp time (~10ms) for quick but smooth transitions
+        masterBypassGain.reset(sampleRate, 0.01);
+        filterBypassGain.reset(sampleRate, 0.01);
+        hpBypassGain.reset(sampleRate, 0.01);
+        lpBypassGain.reset(sampleRate, 0.01);
+        lofiBypassGain.reset(sampleRate, 0.01);
+        scramblerBypassGain.reset(sampleRate, 0.01);
+
+        // Set initial bypass states
+        masterBypassGain.setCurrentAndTargetValue(masterEnabled.load() ? 1.0f : 0.0f);
+        filterBypassGain.setCurrentAndTargetValue(filterEnabled.load() ? 1.0f : 0.0f);
+        hpBypassGain.setCurrentAndTargetValue(hpEnabled.load() ? 1.0f : 0.0f);
+        lpBypassGain.setCurrentAndTargetValue(lpEnabled.load() ? 1.0f : 0.0f);
+        lofiBypassGain.setCurrentAndTargetValue(lofiEnabled.load() ? 1.0f : 0.0f);
+        scramblerBypassGain.setCurrentAndTargetValue(scramblerEnabled.load() ? 1.0f : 0.0f);
+
         // Reset filter states
         resetFilters();
 
@@ -51,6 +68,7 @@ public:
         wobbleDelayBufferR.resize(wobbleBufferSize, 0.0f);
         wobbleWritePos = 0;
         wobbleLfoPhase = 0.0f;
+        wobbleDelaySmoothed = static_cast<float>(sampleRate) * 0.015f; // Start at base delay
 
         // Initialize scrambler buffer (store up to 4 bars worth at 60bpm = 16 seconds max)
         int maxScrambleSize = static_cast<int>(sampleRate * 8.0);
@@ -65,14 +83,21 @@ public:
         // Initialize segment order
         for (int i = 0; i < MAX_SCRAMBLE_SEGMENTS; ++i)
             segmentOrder[i] = i;
+
+        // Initialize smear buffer (500ms max grain size)
+        int smearBufferSize = static_cast<int>(sampleRate * 0.5);
+        smearBufferL.resize(smearBufferSize, 0.0f);
+        smearBufferR.resize(smearBufferSize, 0.0f);
+        smearWritePos = 0;
+        smearReadPos = 0.0f;
+        smearPhase = 0.0f;
+        smearAmountSmooth.reset(sampleRate, 0.05);
+        smearAmountSmooth.setCurrentAndTargetValue(0.0f);
+        updateGrainSize();
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer)
     {
-        // Master bypass - skip all processing if disabled
-        if (!masterEnabled.load())
-            return;
-
         const int numSamples = buffer.getNumSamples();
         float* leftChannel = buffer.getWritePointer(0);
         float* rightChannel = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
@@ -89,7 +114,15 @@ public:
             float wetL = inputL;
             float wetR = inputR;
 
-            // Get smoothed values
+            // Get smoothed bypass gains for click-free transitions
+            const float masterGain = masterBypassGain.getNextValue();
+            const float filterGain = filterBypassGain.getNextValue();
+            const float hpGain = hpBypassGain.getNextValue();
+            const float lpGain = lpBypassGain.getNextValue();
+            const float lofiGain = lofiBypassGain.getNextValue();
+            const float scramblerGain = scramblerBypassGain.getNextValue();
+
+            // Get smoothed parameter values
             const float hpFreq = hpFreqSmooth.getNextValue();
             const float hpQ = hpQSmooth.getNextValue();
             const float lpFreq = lpFreqSmooth.getNextValue();
@@ -100,48 +133,87 @@ public:
             const float mix = mixSmooth.getNextValue();
 
             // ==== FILTER SECTION ====
-            if (filterEnabled.load())
+            // Always process filters to keep state continuous, then crossfade
             {
-                // Update filter coefficients if needed
+                float preFilterL = wetL;
+                float preFilterR = wetR;
+
+                // High-pass filter (biquad) - always process, crossfade based on gain
                 updateHighPassCoeffs(hpFreq, hpQ);
+                float hpOutL = processHighPass(wetL, true);
+                float hpOutR = processHighPass(wetR, false);
+                // Crossfade between unfiltered and filtered based on HP gain
+                float effectiveHpGain = hpGain * filterGain;
+                wetL = preFilterL * (1.0f - effectiveHpGain) + hpOutL * effectiveHpGain;
+                wetR = preFilterR * (1.0f - effectiveHpGain) + hpOutR * effectiveHpGain;
+
+                // Low-pass filter (biquad) - always process, crossfade based on gain
+                preFilterL = wetL;
+                preFilterR = wetR;
                 updateLowPassCoeffs(lpFreq, lpQ);
-
-                // High-pass filter (biquad)
-                wetL = processHighPass(wetL, true);
-                wetR = processHighPass(wetR, false);
-
-                // Low-pass filter (biquad)
-                wetL = processLowPass(wetL, true);
-                wetR = processLowPass(wetR, false);
+                float lpOutL = processLowPass(wetL, true);
+                float lpOutR = processLowPass(wetR, false);
+                // Crossfade between unfiltered and filtered based on LP gain
+                float effectiveLpGain = lpGain * filterGain;
+                wetL = preFilterL * (1.0f - effectiveLpGain) + lpOutL * effectiveLpGain;
+                wetR = preFilterR * (1.0f - effectiveLpGain) + lpOutR * effectiveLpGain;
             }
 
             // ==== LO-FI SECTION ====
-            if (lofiEnabled.load())
+            // Process and crossfade based on lofi gain
+            if (lofiGain > 0.001f || lofiEnabled.load())
             {
+                float preLofiL = wetL;
+                float preLofiR = wetR;
+
                 // Bit crusher
-                wetL = processBitCrush(wetL, bitDepth);
-                wetR = processBitCrush(wetR, bitDepth);
+                float lofiL = processBitCrush(wetL, bitDepth);
+                float lofiR = processBitCrush(wetR, bitDepth);
 
                 // Sample rate reduction
-                processSampleRateReduction(wetL, wetR, srTarget);
+                processSampleRateReduction(lofiL, lofiR, srTarget);
 
                 // Wobble (tape flutter - pitch instability)
                 if (wobbleAmt > 0.001f)
                 {
-                    processWobble(wetL, wetR, wobbleAmt);
+                    processWobble(lofiL, lofiR, wobbleAmt);
                 }
+
+                // Crossfade between dry and lo-fi processed
+                wetL = preLofiL * (1.0f - lofiGain) + lofiL * lofiGain;
+                wetR = preLofiR * (1.0f - lofiGain) + lofiR * lofiGain;
             }
 
             // ==== SCRAMBLER SECTION ====
-            if (scramblerEnabled.load() && scramblerSubdiv > 0)
+            // Process and crossfade based on scrambler gain
+            if ((scramblerGain > 0.001f || scramblerEnabled.load()) && scramblerSubdiv > 0)
             {
+                float preScramblerL = wetL;
+                float preScramblerR = wetR;
+
                 processScrambler(wetL, wetR);
+
+                // Crossfade between unscrambled and scrambled
+                wetL = preScramblerL * (1.0f - scramblerGain) + wetL * scramblerGain;
+                wetR = preScramblerR * (1.0f - scramblerGain) + wetR * scramblerGain;
             }
 
-            // Apply dry/wet mix
-            leftChannel[i] = dryL * (1.0f - mix) + wetL * mix;
+            // ==== SMEAR SECTION ====
+            // Granular smear effect for atmospheric texture
+            const float smearAmt = smearAmountSmooth.getNextValue();
+            if (smearAmt > 0.001f)
+            {
+                processSmear(wetL, wetR, smearAmt);
+            }
+
+            // Apply dry/wet mix, then master bypass crossfade
+            float processedL = dryL * (1.0f - mix) + wetL * mix;
+            float processedR = dryR * (1.0f - mix) + wetR * mix;
+
+            // Master bypass crossfade
+            leftChannel[i] = dryL * (1.0f - masterGain) + processedL * masterGain;
             if (rightChannel)
-                rightChannel[i] = dryR * (1.0f - mix) + wetR * mix;
+                rightChannel[i] = dryR * (1.0f - masterGain) + processedR * masterGain;
         }
     }
 
@@ -196,6 +268,21 @@ public:
         scramblerAmountSmooth.setTargetValue(std::clamp(amt, 0.0f, 1.0f));
     }
 
+    // Granular smear: stretches/blurs audio grains for atmospheric texture
+    void setSmear(float amount)
+    {
+        smearAmountSmooth.setTargetValue(std::clamp(amount, 0.0f, 1.0f));
+    }
+
+    // Grain size in milliseconds (10-500ms)
+    void setGrainSize(float ms)
+    {
+        grainSizeMs = std::clamp(ms, 10.0f, 500.0f);
+        updateGrainSize();
+    }
+
+    float getGrainSize() const { return grainSizeMs; }
+
     void setTempo(float bpm)
     {
         if (std::abs(bpm - currentBpm) > 0.1f)
@@ -222,17 +309,47 @@ public:
     }
 
     // Master bypass control
-    void setEnabled(bool on) { masterEnabled.store(on); }
+    void setEnabled(bool on)
+    {
+        masterEnabled.store(on);
+        masterBypassGain.setTargetValue(on ? 1.0f : 0.0f);
+    }
     bool isEnabled() const { return masterEnabled.load(); }
 
     // Section bypass controls
-    void setFilterEnabled(bool on) { filterEnabled.store(on); }
-    void setLofiEnabled(bool on) { lofiEnabled.store(on); }
-    void setScramblerEnabled(bool on) { scramblerEnabled.store(on); }
+    void setFilterEnabled(bool on)
+    {
+        filterEnabled.store(on);
+        filterBypassGain.setTargetValue(on ? 1.0f : 0.0f);
+    }
+    void setLofiEnabled(bool on)
+    {
+        lofiEnabled.store(on);
+        lofiBypassGain.setTargetValue(on ? 1.0f : 0.0f);
+    }
+    void setScramblerEnabled(bool on)
+    {
+        scramblerEnabled.store(on);
+        scramblerBypassGain.setTargetValue(on ? 1.0f : 0.0f);
+    }
+
+    // Individual filter bypass controls
+    void setHPEnabled(bool on)
+    {
+        hpEnabled.store(on);
+        hpBypassGain.setTargetValue(on ? 1.0f : 0.0f);
+    }
+    void setLPEnabled(bool on)
+    {
+        lpEnabled.store(on);
+        lpBypassGain.setTargetValue(on ? 1.0f : 0.0f);
+    }
 
     bool getFilterEnabled() const { return filterEnabled.load(); }
     bool getLofiEnabled() const { return lofiEnabled.load(); }
     bool getScramblerEnabled() const { return scramblerEnabled.load(); }
+    bool getHPEnabled() const { return hpEnabled.load(); }
+    bool getLPEnabled() const { return lpEnabled.load(); }
 
     // Get current filter frequencies for visualization
     float getCurrentHPFreq() const { return lastHpFreq; }
@@ -250,6 +367,18 @@ private:
     std::atomic<bool> filterEnabled { true };
     std::atomic<bool> lofiEnabled { true };
     std::atomic<bool> scramblerEnabled { true };
+
+    // Individual filter bypass states
+    std::atomic<bool> hpEnabled { true };
+    std::atomic<bool> lpEnabled { true };
+
+    // Smoothed bypass gains for click-free toggling (0 = bypassed, 1 = active)
+    juce::SmoothedValue<float> masterBypassGain;
+    juce::SmoothedValue<float> filterBypassGain;
+    juce::SmoothedValue<float> hpBypassGain;
+    juce::SmoothedValue<float> lpBypassGain;
+    juce::SmoothedValue<float> lofiBypassGain;
+    juce::SmoothedValue<float> scramblerBypassGain;
 
     // Biquad HP filter coefficients and state
     float hpB0 = 1.0f, hpB1 = 0.0f, hpB2 = 0.0f, hpA1 = 0.0f, hpA2 = 0.0f;
@@ -287,6 +416,7 @@ private:
     std::vector<float> wobbleDelayBufferR;
     int wobbleWritePos = 0;
     float wobbleLfoPhase = 0.0f;
+    float wobbleDelaySmoothed = 0.0f;  // Smoothed delay time to prevent crackling
     juce::SmoothedValue<float> wobbleAmountSmooth;
 
     // Scrambler
@@ -304,6 +434,15 @@ private:
     bool scrambleBufferFilled = false;
     juce::SmoothedValue<float> scramblerAmountSmooth;
     juce::Random scrambleRandom;
+
+    // Granular smear effect
+    juce::SmoothedValue<float> smearAmountSmooth;
+    float grainSizeMs = 50.0f;
+    int grainSizeSamples = 2400;  // 50ms at 48kHz
+    std::vector<float> smearBufferL, smearBufferR;
+    int smearWritePos = 0;
+    float smearReadPos = 0.0f;
+    float smearPhase = 0.0f;
 
     // Mix
     juce::SmoothedValue<float> mixSmooth;
@@ -520,11 +659,10 @@ private:
         wobbleDelayBufferL[wobbleWritePos] = left;
         wobbleDelayBufferR[wobbleWritePos] = right;
 
-        // LFO for flutter effect
+        // LFO for flutter effect - slower rates for smoother tape-like wobble
         // Use multiple LFOs at different rates for more organic sound
-        // Primary: ~4Hz (wow), Secondary: ~0.5Hz (flutter)
-        const float primaryRate = 4.0f / static_cast<float>(currentSampleRate);
-        const float secondaryRate = 0.5f / static_cast<float>(currentSampleRate);
+        // Primary: ~2Hz (slow wow), Secondary: ~0.3Hz (very slow drift)
+        const float primaryRate = 2.0f / static_cast<float>(currentSampleRate);
 
         wobbleLfoPhase += primaryRate;
         if (wobbleLfoPhase >= 1.0f)
@@ -532,33 +670,114 @@ private:
 
         // Combine two sine waves for more complex motion
         const float primaryLfo = std::sin(wobbleLfoPhase * 2.0f * juce::MathConstants<float>::pi);
-        const float secondaryLfo = std::sin(wobbleLfoPhase * 0.125f * 2.0f * juce::MathConstants<float>::pi);
+        const float secondaryLfo = std::sin(wobbleLfoPhase * 0.15f * 2.0f * juce::MathConstants<float>::pi);
 
         // Combined modulation (primary contributes more)
         const float lfoValue = primaryLfo * 0.7f + secondaryLfo * 0.3f;
 
-        // Base delay is ~10ms, modulation adds +/- 5ms based on amount
-        // At 48kHz: 10ms = 480 samples, 5ms = 240 samples
-        const float baseDelaySamples = static_cast<float>(currentSampleRate) * 0.010f; // 10ms
-        const float modulationDepth = static_cast<float>(currentSampleRate) * 0.005f * amount; // 0-5ms
+        // Base delay is ~15ms for more latency but smoother result
+        // Modulation adds +/- up to 3ms based on amount (reduced for less crackling)
+        const float baseDelaySamples = static_cast<float>(currentSampleRate) * 0.015f; // 15ms
+        const float modulationDepth = static_cast<float>(currentSampleRate) * 0.003f * amount; // 0-3ms
 
-        const float delaySamples = baseDelaySamples + lfoValue * modulationDepth;
+        // Smooth the delay time to avoid sudden jumps that cause crackling
+        const float targetDelay = baseDelaySamples + lfoValue * modulationDepth;
+        wobbleDelaySmoothed = wobbleDelaySmoothed * 0.999f + targetDelay * 0.001f;
 
         // Calculate read position with fractional delay
-        float readPos = static_cast<float>(wobbleWritePos) - delaySamples;
+        float readPos = static_cast<float>(wobbleWritePos) - wobbleDelaySmoothed;
         while (readPos < 0.0f)
             readPos += static_cast<float>(bufferSize);
 
-        // Linear interpolation for smooth delay changes
+        // Hermite interpolation for smoother delay changes (reduces crackling)
         const int idx0 = static_cast<int>(readPos) % bufferSize;
         const int idx1 = (idx0 + 1) % bufferSize;
+        const int idxM1 = (idx0 - 1 + bufferSize) % bufferSize;
+        const int idx2 = (idx0 + 2) % bufferSize;
         const float frac = readPos - std::floor(readPos);
 
-        left = wobbleDelayBufferL[idx0] * (1.0f - frac) + wobbleDelayBufferL[idx1] * frac;
-        right = wobbleDelayBufferR[idx0] * (1.0f - frac) + wobbleDelayBufferR[idx1] * frac;
+        // Hermite interpolation for left channel
+        left = hermiteInterpolate(
+            wobbleDelayBufferL[idxM1], wobbleDelayBufferL[idx0],
+            wobbleDelayBufferL[idx1], wobbleDelayBufferL[idx2], frac);
+        // Hermite interpolation for right channel
+        right = hermiteInterpolate(
+            wobbleDelayBufferR[idxM1], wobbleDelayBufferR[idx0],
+            wobbleDelayBufferR[idx1], wobbleDelayBufferR[idx2], frac);
 
         // Advance write position
         wobbleWritePos = (wobbleWritePos + 1) % bufferSize;
+    }
+
+    // Hermite (cubic) interpolation for smooth delay line reading
+    float hermiteInterpolate(float y0, float y1, float y2, float y3, float frac)
+    {
+        const float c0 = y1;
+        const float c1 = 0.5f * (y2 - y0);
+        const float c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
+        const float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+        return ((c3 * frac + c2) * frac + c1) * frac + c0;
+    }
+
+    void updateGrainSize()
+    {
+        grainSizeSamples = static_cast<int>(grainSizeMs * currentSampleRate / 1000.0f);
+        grainSizeSamples = std::max(grainSizeSamples, 100);  // Minimum 100 samples
+    }
+
+    // Granular smear effect - creates a stretched, blurry texture
+    void processSmear(float& left, float& right, float amount)
+    {
+        if (smearBufferL.empty() || amount < 0.001f)
+            return;
+
+        const int bufferSize = static_cast<int>(smearBufferL.size());
+
+        // Write to circular buffer
+        smearBufferL[smearWritePos] = left;
+        smearBufferR[smearWritePos] = right;
+
+        // Grain-based reading with overlap
+        // Smear slows down the read position relative to write, causing stretching
+        // Amount controls how much slower we read (0 = normal, 1 = very slow/smeared)
+        const float stretchFactor = 1.0f - (amount * 0.95f);  // 1.0 to 0.05
+        smearReadPos += stretchFactor;
+
+        // Wrap read position
+        if (smearReadPos >= static_cast<float>(grainSizeSamples))
+        {
+            smearReadPos -= static_cast<float>(grainSizeSamples);
+            smearPhase = 0.0f;
+        }
+
+        // Calculate actual read position in buffer
+        float readPosInBuffer = static_cast<float>(smearWritePos) - static_cast<float>(grainSizeSamples) + smearReadPos;
+        while (readPosInBuffer < 0.0f)
+            readPosInBuffer += static_cast<float>(bufferSize);
+
+        // Grain window (Hann window for smooth overlap)
+        const float grainProgress = smearReadPos / static_cast<float>(grainSizeSamples);
+        const float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * grainProgress));
+
+        // Read with interpolation
+        const int idx0 = static_cast<int>(readPosInBuffer) % bufferSize;
+        const int idx1 = (idx0 + 1) % bufferSize;
+        const float frac = readPosInBuffer - std::floor(readPosInBuffer);
+
+        float grainL = smearBufferL[idx0] * (1.0f - frac) + smearBufferL[idx1] * frac;
+        float grainR = smearBufferR[idx0] * (1.0f - frac) + smearBufferR[idx1] * frac;
+
+        // Apply window
+        grainL *= window;
+        grainR *= window;
+
+        // Crossfade between dry and smeared based on amount
+        left = left * (1.0f - amount) + grainL * amount;
+        right = right * (1.0f - amount) + grainR * amount;
+
+        // Advance write position
+        smearWritePos = (smearWritePos + 1) % bufferSize;
+        smearPhase += 1.0f;
     }
 
     void calculateSegmentSize()

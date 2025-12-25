@@ -222,7 +222,18 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           muteArray.add(muted);
                       result->setProperty("layerMutes", muteArray);
 
+                      // Input monitoring data
+                      result->setProperty("inputLevelL", loopEngine.getInputLevelL());
+                      result->setProperty("inputLevelR", loopEngine.getInputLevelR());
+                      result->setProperty("inputMuted", loopEngine.getInputMuted());
+
                       complete(juce::var(result.get()));
+                  })
+                  .withNativeFunction("setInputMuted", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getLoopEngine().setInputMuted(static_cast<bool>(args[0]));
+                      complete({});
                   })
                   .withNativeFunction("setTempoSync", [this](const juce::Array<juce::var>& args, auto complete)
                   {
@@ -289,6 +300,18 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.setDegradeScramblerEnabled(static_cast<bool>(args[0]));
                       complete({});
                   })
+                  .withNativeFunction("setDegradeHPEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setDegradeHPEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setDegradeLPEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setDegradeLPEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
                   .withNativeFunction("getDegradeState", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       juce::DynamicObject::Ptr result = new juce::DynamicObject();
@@ -296,6 +319,8 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("filterEnabled", processorRef.getDegradeFilterEnabled());
                       result->setProperty("lofiEnabled", processorRef.getDegradeLofiEnabled());
                       result->setProperty("scramblerEnabled", processorRef.getDegradeScramblerEnabled());
+                      result->setProperty("hpEnabled", processorRef.getDegradeHPEnabled());
+                      result->setProperty("lpEnabled", processorRef.getDegradeLPEnabled());
                       // Filter visualization data
                       auto& degrade = processorRef.getDegradeProcessor();
                       result->setProperty("hpFreq", degrade.getCurrentHPFreq());
@@ -303,6 +328,25 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("hpQ", degrade.getCurrentHPQ());
                       result->setProperty("lpQ", degrade.getCurrentLPQ());
                       complete(juce::var(result.get()));
+                  })
+                  .withNativeFunction("clearLayer", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          processorRef.getLoopEngine().clearLayer(layer);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerContentStates", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      const auto& loopEngine = processorRef.getLoopEngine();
+                      juce::Array<juce::var> contentArray;
+                      for (int i = 1; i <= 8; ++i)  // 1-indexed
+                      {
+                          contentArray.add(loopEngine.layerHasContent(i));
+                      }
+                      complete(contentArray);
                   })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },

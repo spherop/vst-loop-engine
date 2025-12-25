@@ -20,9 +20,10 @@ class SignalsmithPitchShifter
 public:
     SignalsmithPitchShifter() = default;
 
-    void prepare(double sampleRate)
+    void prepare(double newSampleRate)
     {
-        this->sampleRate = sampleRate;
+        sampleRate = newSampleRate;
+        prepared = true;
 
         // Configure for mono (we'll use two instances for stereo)
         // Use the default preset which balances quality and latency
@@ -48,6 +49,10 @@ public:
 
     void reset()
     {
+        // Only reset if we've been prepared
+        if (!prepared)
+            return;
+
         stretch.reset();
         ringWritePos = 0;
         ringReadPos = 0;
@@ -58,12 +63,19 @@ public:
 
     void setPitchRatio(float ratio)
     {
+        if (!prepared)
+            return;
+
         pitchRatio = std::clamp(ratio, 0.25f, 4.0f);
         stretch.setTransposeFactor(pitchRatio);
     }
 
     float processSample(float input)
     {
+        // Safety check - return input unchanged if not prepared
+        if (!prepared)
+            return input;
+
         // Write input to ring buffer
         ringBufferIn[ringWritePos] = input;
         ringWritePos = (ringWritePos + 1) % RING_BUFFER_SIZE;
@@ -85,6 +97,8 @@ public:
 
     int getLatencySamples() const
     {
+        if (!prepared)
+            return 0;
         return totalLatency + PROCESS_BLOCK_SIZE;
     }
 
@@ -95,6 +109,7 @@ private:
 
     double sampleRate = 44100.0;
     float pitchRatio = 1.0f;
+    bool prepared = false;  // Track if prepare() has been called
 
     signalsmith::stretch::SignalsmithStretch<float> stretch;
 

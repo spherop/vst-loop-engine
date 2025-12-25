@@ -99,6 +99,16 @@ html, body {
     height: 52px;
 }
 
+.knob-small {
+    width: 38px;
+    height: 38px;
+}
+
+.knob-small .knob-indicator {
+    height: 12px;
+    width: 2px;
+}
+
 .knob:hover {
     box-shadow:
         inset 0 2px 4px rgba(255, 255, 255, 0.05),
@@ -463,13 +473,112 @@ html, body {
 }
 
 /* ============================================
+   INPUT MONITOR (Vertical Level Meter + Mute)
+   ============================================ */
+
+.input-monitor-v {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.input-meter-v-container {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 3px;
+    height: 48px;
+}
+
+.input-meter-v-track {
+    width: 6px;
+    height: 100%;
+    background: #1a1a1a;
+    border-radius: 1px;
+    position: relative;
+    overflow: hidden;
+}
+
+.input-meter-v-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(0deg,
+        #4fc3f7 0%,
+        #4fc3f7 50%,
+        #ffeb3b 70%,
+        #ff5722 85%,
+        #f44336 100%);
+    border-radius: 1px;
+    height: 0%;
+    transition: height 0.05s ease-out;
+}
+
+.input-meter-v-bar.clipping {
+    animation: clip-flash 0.1s ease-out;
+}
+
+@keyframes clip-flash {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.5); }
+}
+
+/* Vertical mute button */
+.input-mute-btn-v {
+    width: 22px;
+    height: 16px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #2a4a2a 0%, #1a3a1a 100%);
+    border: 1px solid #4a7a4a;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.input-mute-btn-v .mute-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    color: #8fbc8f;
+    letter-spacing: 0.5px;
+}
+
+.input-mute-btn-v:hover {
+    border-color: #6aba6a;
+    background: linear-gradient(180deg, #3a5a3a 0%, #2a4a2a 100%);
+}
+
+/* Muted state - red/off appearance */
+.input-mute-btn-v.muted {
+    background: linear-gradient(180deg, #4a2a2a 0%, #3a1a1a 100%);
+    border-color: #7a4a4a;
+}
+
+.input-mute-btn-v.muted .mute-label {
+    color: #aa6666;
+    text-decoration: line-through;
+}
+
+/* Muted state dims the meter */
+.input-monitor-v.muted .input-meter-v-container {
+    opacity: 0.3;
+}
+
+/* ============================================
    WAVEFORM DISPLAY
    ============================================ */
 
 .waveform-container {
     position: relative;
     width: 100%;
-    height: 80px;
+    height: 100px;
     background: linear-gradient(180deg, #0a0a0a 0%, #080808 100%);
     border: 1px solid #2a2a2a;
     border-radius: 4px;
@@ -589,16 +698,25 @@ html, body {
     box-shadow: 0 0 8px var(--looper-accent-glow);
 }
 
+/* Layer button with content - filled with accent color, inverted number */
 .layer-btn.has-content {
-    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
-    border-color: #444;
-    color: #888;
+    background: var(--looper-accent);
+    border-color: var(--looper-accent);
+    color: #0a0a0a;  /* Dark/inverted number */
+    font-weight: 800;
+}
+
+.layer-btn.has-content:hover {
+    background: var(--looper-accent-dim);
+    border-color: #81d4fa;
+    color: #0a0a0a;
 }
 
 .layer-btn.has-content.active {
-    background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
-    border-color: var(--looper-accent);
-    color: #81d4fa;
+    background: #81d4fa;  /* Brighter when active */
+    border-color: #81d4fa;
+    color: #0a0a0a;
+    box-shadow: 0 0 12px var(--looper-accent-glow);
 }
 
 /* Muted layer (right-click to toggle) */
@@ -621,6 +739,44 @@ html, body {
     border-radius: 2px;
     padding: 0 2px;
     line-height: 1;
+}
+
+/* ============================================
+   SPEED PRESET DROPDOWN
+   ============================================ */
+
+.speed-preset-select {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--looper-accent);
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 2px 14px 2px 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 10 10'%3E%3Cpath fill='%234fc3f7' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 2px center;
+    min-width: 48px;
+}
+
+.speed-preset-select:hover {
+    border-color: var(--looper-accent);
+}
+
+.speed-preset-select:focus {
+    outline: none;
+    border-color: var(--looper-accent);
+    box-shadow: 0 0 6px var(--looper-accent-glow);
+}
+
+.speed-preset-select option {
+    background: #1a1a1a;
+    color: #ccc;
 }
 
 /* ============================================
@@ -1271,6 +1427,62 @@ html, body {
     display: block;
 }
 
+/* Filter toggle buttons and groups */
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.filter-toggle-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: #666;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 4px 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.filter-toggle-btn:hover {
+    border-color: #555;
+    color: #888;
+}
+
+.filter-toggle-btn.active {
+    background: linear-gradient(180deg, var(--degrade-accent-dim) 0%, #3a7a3a 100%);
+    border-color: var(--degrade-accent);
+    color: #0a0a0a;
+    box-shadow: 0 0 8px var(--degrade-accent-glow);
+}
+
+.filter-toggle-btn.active:hover {
+    background: linear-gradient(180deg, var(--degrade-accent) 0%, var(--degrade-accent-dim) 100%);
+}
+
+.filter-group.disabled .knob {
+    opacity: 0.4;
+    pointer-events: none;
+}
+
+.filter-group.disabled span {
+    opacity: 0.4;
+}
+
+.filter-divider {
+    width: 1px;
+    height: 100px;
+    background: linear-gradient(180deg, transparent 0%, #333 20%, #333 80%, transparent 100%);
+    margin: 0 8px;
+    align-self: center;
+}
+
 /* Degrade knobs use green accent */
 .degrade-knob:hover {
     box-shadow:
@@ -1328,6 +1540,99 @@ html, body {
 .subdiv-select option {
     background: #1a1a1a;
     color: #ccc;
+}
+
+/* Small subdivision select for compact layout */
+.subdiv-select-sm {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--degrade-accent);
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 4px 16px 4px 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 10 10'%3E%3Cpath fill='%2366bb6a' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    min-width: 48px;
+    text-align: center;
+}
+
+.subdiv-select-sm:hover {
+    border-color: var(--degrade-accent);
+}
+
+.subdiv-select-sm:focus {
+    outline: none;
+    border-color: var(--degrade-accent);
+    box-shadow: 0 0 6px var(--degrade-accent-glow);
+}
+
+.subdiv-select-sm option {
+    background: #1a1a1a;
+    color: #ccc;
+}
+
+/* Compact filter toggle buttons */
+.filter-toggle-btn-sm {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    color: #555;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.filter-toggle-btn-sm:hover {
+    border-color: #555;
+    color: #888;
+}
+
+.filter-toggle-btn-sm.active {
+    background: linear-gradient(180deg, var(--degrade-accent-dim) 0%, #3a7a3a 100%);
+    border-color: var(--degrade-accent);
+    color: #0a0a0a;
+    box-shadow: 0 0 6px var(--degrade-accent-glow);
+}
+
+/* Small section LED */
+.section-led-sm {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.section-led-sm.degrade-led.active {
+    background: var(--degrade-accent);
+    border-color: var(--degrade-accent);
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,0.3),
+        0 0 6px var(--degrade-accent-glow);
+}
+
+/* Compact degrade section divider */
+.degrade-divider {
+    width: 1px;
+    height: 60px;
+    background: linear-gradient(180deg, transparent 0%, #333 20%, #333 80%, transparent 100%);
+    margin: 0 4px;
+    align-self: center;
 }
 
 /* ============================================

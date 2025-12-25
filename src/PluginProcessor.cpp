@@ -553,6 +553,26 @@ bool LoopEngineProcessor::getDegradeScramblerEnabled() const
     return degradeProcessor.getScramblerEnabled();
 }
 
+void LoopEngineProcessor::setDegradeHPEnabled(bool enabled)
+{
+    degradeProcessor.setHPEnabled(enabled);
+}
+
+void LoopEngineProcessor::setDegradeLPEnabled(bool enabled)
+{
+    degradeProcessor.setLPEnabled(enabled);
+}
+
+bool LoopEngineProcessor::getDegradeHPEnabled() const
+{
+    return degradeProcessor.getHPEnabled();
+}
+
+bool LoopEngineProcessor::getDegradeLPEnabled() const
+{
+    return degradeProcessor.getLPEnabled();
+}
+
 void LoopEngineProcessor::setHostTransportSync(bool enabled)
 {
     hostTransportSyncEnabled.store(enabled);

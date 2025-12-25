@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.3.8";
+const UI_VERSION = "0.6.0";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -570,9 +570,18 @@ class LooperController {
         this.undoFn = getNativeFunction("loopUndo");
         this.redoFn = getNativeFunction("loopRedo");
         this.clearFn = getNativeFunction("loopClear");
+        this.clearLayerFn = getNativeFunction("clearLayer");
         this.getStateFn = getNativeFunction("getLoopState");
+        this.getLayerContentFn = getNativeFunction("getLayerContentStates");
         this.jumpToLayerFn = getNativeFunction("loopJumpToLayer");
         this.resetParamsFn = getNativeFunction("resetLoopParams");
+        this.setInputMutedFn = getNativeFunction("setInputMuted");
+
+        // Input monitoring state
+        this.inputMuted = false;
+
+        // Track layer content states
+        this.layerContentStates = [false, false, false, false, false, false, false, false];
 
         // Loop length setting (bars + beats)
         this.loopLengthBars = 0;
@@ -581,6 +590,7 @@ class LooperController {
         this.setLoopLengthBeatsFn = getNativeFunction("setLoopLengthBeats");
 
         this.setupTransport();
+        this.setupInputMonitor();
         this.setupLoopLengthSelector();
         this.setupLayers();
         this.setupWaveform();
@@ -636,6 +646,10 @@ class LooperController {
             await setReverseFn(false);
             this.setReversed(false);
 
+            // Fetch initial layer content states
+            console.log('[SYNC] Fetching layer content states...');
+            await this.updateLayerContentStates();
+
             console.log('%c[SYNC] UI state reset complete', 'color: #4caf50; font-weight: bold;');
         } catch (e) {
             console.error('[SYNC] Error syncing UI with backend:', e);
@@ -669,6 +683,73 @@ class LooperController {
         }
         if (this.clearBtn) {
             this.clearBtn.addEventListener('click', () => this.clear());
+        }
+    }
+
+    setupInputMonitor() {
+        this.inputMuteBtn = document.getElementById('input-mute-btn');
+        this.inputMeterBarL = document.getElementById('input-meter-bar-l');
+        this.inputMeterBarR = document.getElementById('input-meter-bar-r');
+        this.inputMonitor = document.querySelector('.input-monitor-v');
+
+        if (this.inputMuteBtn) {
+            this.inputMuteBtn.addEventListener('click', () => this.toggleInputMute());
+        }
+    }
+
+    async toggleInputMute() {
+        this.inputMuted = !this.inputMuted;
+        console.log(`[INPUT] Input ${this.inputMuted ? 'muted' : 'unmuted'}`);
+
+        // Update UI
+        if (this.inputMuteBtn) {
+            this.inputMuteBtn.classList.toggle('muted', this.inputMuted);
+        }
+        if (this.inputMonitor) {
+            this.inputMonitor.classList.toggle('muted', this.inputMuted);
+        }
+
+        // Send to backend
+        try {
+            await this.setInputMutedFn(this.inputMuted);
+        } catch (e) {
+            console.error('Error setting input mute:', e);
+        }
+    }
+
+    updateInputMeter(levelL, levelR) {
+        if (this.inputMeterBarL) {
+            // Convert to dB-like scale (more visible at lower levels)
+            // Use height % for vertical meter
+            const heightL = Math.pow(Math.min(levelL, 1.0), 0.5) * 100;
+            this.inputMeterBarL.style.height = `${heightL}%`;
+
+            // Add clipping indicator
+            if (levelL >= 0.95) {
+                this.inputMeterBarL.classList.add('clipping');
+                setTimeout(() => this.inputMeterBarL.classList.remove('clipping'), 100);
+            }
+        }
+        if (this.inputMeterBarR) {
+            const heightR = Math.pow(Math.min(levelR, 1.0), 0.5) * 100;
+            this.inputMeterBarR.style.height = `${heightR}%`;
+
+            if (levelR >= 0.95) {
+                this.inputMeterBarR.classList.add('clipping');
+                setTimeout(() => this.inputMeterBarR.classList.remove('clipping'), 100);
+            }
+        }
+    }
+
+    // Clear a specific layer (1-indexed)
+    async clearLayer(layer) {
+        console.log(`[LOOPER] Clearing layer ${layer}`);
+        try {
+            await this.clearLayerFn(layer);
+            // Refresh layer content states after clear
+            this.updateLayerContentStates();
+        } catch (e) {
+            console.error('Error clearing layer:', e);
         }
     }
 
@@ -720,10 +801,16 @@ class LooperController {
         this.setLayerMutedFn = getNativeFunction("setLayerMuted");
 
         this.layerBtns.forEach(btn => {
-            // Left click: jump to layer
-            btn.addEventListener('click', () => {
+            // Left click: jump to layer (Shift+click: clear layer)
+            btn.addEventListener('click', (e) => {
                 const layer = parseInt(btn.dataset.layer);
-                this.jumpToLayer(layer);
+                if (e.shiftKey) {
+                    // Shift+click: clear this layer
+                    this.clearLayer(layer);
+                } else {
+                    // Normal click: jump to layer
+                    this.jumpToLayer(layer);
+                }
             });
 
             // Right click: toggle mute
@@ -1241,6 +1328,18 @@ class LooperController {
             this.drawEmptyWaveform();
             this.updateTransportUI('idle');
             this.updateLayerUI(1, 0);
+
+            // Reset loop start/end to defaults
+            this.loopStart = 0;
+            this.loopEnd = 1;
+            this.updateLoopRegionShade();
+
+            // Reset the knobs to defaults
+            if (loopStartKnob) loopStartKnob.resetToDefault();
+            if (loopEndKnob) loopEndKnob.resetToDefault();
+
+            // Also reset layer content states
+            this.layerContentStates = [false, false, false, false, false, false, false, false];
         } catch (e) {
             console.error('Error clearing:', e);
         }
@@ -1298,15 +1397,48 @@ class LooperController {
 
         this.layerBtns.forEach(btn => {
             const layer = parseInt(btn.dataset.layer);
+            const idx = layer - 1;  // 0-indexed
             btn.classList.remove('active', 'has-content');
+
+            // Reset inline styles
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.style.color = '';
+            btn.style.boxShadow = '';
 
             if (layer === currentLayer) {
                 btn.classList.add('active');
             }
-            if (layer <= highestLayer) {
+
+            // Use actual content state instead of just highestLayer
+            if (this.layerContentStates[idx]) {
                 btn.classList.add('has-content');
+                // Apply the layer-specific color from layerColors array
+                const layerColor = this.layerColors[idx % this.layerColors.length];
+                btn.style.background = layerColor;
+                btn.style.borderColor = layerColor;
+                btn.style.color = '#0a0a0a';
+
+                // Add glow if this is also the active layer
+                if (layer === currentLayer) {
+                    btn.style.boxShadow = `0 0 12px ${layerColor}80`;  // 50% opacity glow
+                }
             }
         });
+    }
+
+    // Update layer content states from backend
+    async updateLayerContentStates() {
+        try {
+            const states = await this.getLayerContentFn();
+            if (states && Array.isArray(states)) {
+                this.layerContentStates = states;
+                // Update UI with current states
+                this.updateLayerUI(this.currentLayer, this.highestLayer);
+            }
+        } catch (e) {
+            console.error('Error getting layer content states:', e);
+        }
     }
 
     // Sync layer mute button UI with backend state
@@ -1350,18 +1482,20 @@ class LooperController {
                     // Update recording time if recording
                     if (this.state === 'recording') {
                         this.updateRecordingTime();
-                        // Simulate input level based on waveform activity
-                        if (state.waveform && state.waveform.length > 0) {
-                            const recentLevel = state.waveform[state.waveform.length - 1] || 0;
-                            this.updateInputLevel(recentLevel);
-                        }
                     }
 
-                    // Update layer UI
+                    // Update input level meter (always, not just when recording)
+                    if (typeof state.inputLevelL !== 'undefined' && typeof state.inputLevelR !== 'undefined') {
+                        this.updateInputMeter(state.inputLevelL, state.inputLevelR);
+                    }
+
+                    // Update layer UI and content states
                     if (typeof state.layer !== 'undefined' && typeof state.highestLayer !== 'undefined') {
                         if (state.layer !== this.currentLayer || state.highestLayer !== this.highestLayer) {
-                            this.updateLayerUI(state.layer, state.highestLayer);
+                            // Fetch actual layer content states when layer changes
+                            this.updateLayerContentStates();
                         }
+                        this.updateLayerUI(state.layer, state.highestLayer);
                     }
 
                     // DISABLED: Don't let polling overwrite reverse state
@@ -1572,6 +1706,12 @@ class DegradeController {
         this.lofiLed = document.getElementById('lofi-led');
         this.scramblerLed = document.getElementById('scrambler-led');
 
+        // Individual filter toggle buttons
+        this.hpToggleBtn = document.getElementById('hp-toggle-btn');
+        this.lpToggleBtn = document.getElementById('lp-toggle-btn');
+        this.hpGroup = this.hpToggleBtn?.closest('.filter-group');
+        this.lpGroup = this.lpToggleBtn?.closest('.filter-group');
+
         // Section containers (for dimming when disabled)
         this.filterSection = this.filterLed?.closest('.degrade-section');
         this.lofiSection = this.lofiLed?.closest('.degrade-section');
@@ -1585,11 +1725,15 @@ class DegradeController {
         this.filterEnabled = true;
         this.lofiEnabled = true;
         this.scramblerEnabled = true;
+        this.hpEnabled = true;
+        this.lpEnabled = true;
 
         // Native functions
         this.setFilterEnabledFn = getNativeFunction('setDegradeFilterEnabled');
         this.setLofiEnabledFn = getNativeFunction('setDegradeLofiEnabled');
         this.setScramblerEnabledFn = getNativeFunction('setDegradeScramblerEnabled');
+        this.setHPEnabledFn = getNativeFunction('setDegradeHPEnabled');
+        this.setLPEnabledFn = getNativeFunction('setDegradeLPEnabled');
         this.getDegradeStateFn = getNativeFunction('getDegradeState');
 
         // Current filter params for visualization
@@ -1622,6 +1766,13 @@ class DegradeController {
                 this.toggleScrambler();
             });
         }
+        // Individual HP/LP toggles
+        if (this.hpToggleBtn) {
+            this.hpToggleBtn.addEventListener('click', () => this.toggleHP());
+        }
+        if (this.lpToggleBtn) {
+            this.lpToggleBtn.addEventListener('click', () => this.toggleLP());
+        }
     }
 
     async fetchInitialState() {
@@ -1631,10 +1782,53 @@ class DegradeController {
                 this.filterEnabled = state.filterEnabled !== false;
                 this.lofiEnabled = state.lofiEnabled !== false;
                 this.scramblerEnabled = state.scramblerEnabled !== false;
+                this.hpEnabled = state.hpEnabled !== false;
+                this.lpEnabled = state.lpEnabled !== false;
                 this.updateUI();
             }
         } catch (e) {
             console.log('Could not fetch initial degrade state');
+        }
+    }
+
+    async toggleHP() {
+        this.hpEnabled = !this.hpEnabled;
+        this.updateFilterToggles();
+        try {
+            await this.setHPEnabledFn(this.hpEnabled);
+            console.log(`[DEGRADE] HP filter ${this.hpEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling HP filter:', e);
+            this.hpEnabled = !this.hpEnabled;
+            this.updateFilterToggles();
+        }
+    }
+
+    async toggleLP() {
+        this.lpEnabled = !this.lpEnabled;
+        this.updateFilterToggles();
+        try {
+            await this.setLPEnabledFn(this.lpEnabled);
+            console.log(`[DEGRADE] LP filter ${this.lpEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling LP filter:', e);
+            this.lpEnabled = !this.lpEnabled;
+            this.updateFilterToggles();
+        }
+    }
+
+    updateFilterToggles() {
+        if (this.hpToggleBtn) {
+            this.hpToggleBtn.classList.toggle('active', this.hpEnabled);
+        }
+        if (this.lpToggleBtn) {
+            this.lpToggleBtn.classList.toggle('active', this.lpEnabled);
+        }
+        if (this.hpGroup) {
+            this.hpGroup.classList.toggle('disabled', !this.hpEnabled);
+        }
+        if (this.lpGroup) {
+            this.lpGroup.classList.toggle('disabled', !this.lpEnabled);
         }
     }
 
@@ -1699,6 +1893,9 @@ class DegradeController {
         if (this.scramblerSection) {
             this.scramblerSection.style.opacity = this.scramblerEnabled ? '1' : '0.5';
         }
+
+        // Update individual filter toggles
+        this.updateFilterToggles();
     }
 
     startPolling() {
@@ -1917,6 +2114,27 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         defaultValue: 0.5  // Default to 1.0x speed
     });
+
+    // Speed preset dropdown - sets speed based on musical intervals
+    const speedPresetSelect = document.getElementById('speed-preset-select');
+    if (speedPresetSelect) {
+        speedPresetSelect.addEventListener('change', (e) => {
+            const speedValue = parseFloat(e.target.value);
+            if (!isNaN(speedValue) && speedValue > 0) {
+                // Convert speed to normalized value: v = log(speed/0.25) / log(16)
+                const normalized = Math.log(speedValue / 0.25) / Math.log(16);
+                const clamped = Math.max(0, Math.min(1, normalized));
+
+                // Update the knob AND send to JUCE
+                if (loopSpeedKnob) {
+                    loopSpeedKnob.setValue(clamped);
+                    loopSpeedKnob.sendToJuce();  // This was missing!
+                }
+
+                console.log(`[SPEED] Preset selected: ${speedValue}x (normalized: ${clamped.toFixed(3)})`);
+            }
+        });
+    }
 
     // Loop Pitch: -12 to +12 semitones (center = 0)
     // The C++ parameter sends scaled values (-12 to +12)

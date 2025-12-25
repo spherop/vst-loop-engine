@@ -76,6 +76,7 @@ public:
         state.store(State::Idle);
         isReversed.store(false);
         isMuted.store(false);
+        fadeActive.store(false);
         playbackRateSmoothed.setCurrentAndTargetValue(1.0f);
         pitchRatioSmoothed.setCurrentAndTargetValue(1.0f);
         fadeSmoothed.setCurrentAndTargetValue(1.0f);
@@ -222,6 +223,11 @@ public:
         state.store(State::Idle);
         // Reset pitch shifter to prevent latent audio from continuing
         phaseVocoder.reset();
+        // Reset playhead so any subsequent reads return silence until play() is called
+        playHead = 0.0f;
+        lastPlayheadPosition = 0.0f;
+        // Reset granular pitch shifter state
+        initGrains();
     }
 
     // Parameter setters
@@ -295,6 +301,17 @@ public:
     float getFade() const
     {
         return fadeSmoothed.getTargetValue();
+    }
+
+    // Set whether fade should be active (applies during playback when any layer is recording/overdubbing)
+    void setFadeActive(bool active)
+    {
+        fadeActive.store(active);
+    }
+
+    bool getFadeActive() const
+    {
+        return fadeActive.load();
     }
 
     // Process audio
@@ -461,6 +478,7 @@ private:
     juce::SmoothedValue<float> fadeSmoothed;  // 0.0 = full fade, 1.0 = no fade
     std::atomic<bool> isReversed { false };
     std::atomic<bool> isMuted { false };
+    std::atomic<bool> fadeActive { false };  // True when fade should apply during playback (any layer is recording)
     std::atomic<State> state { State::Idle };
 
     // Preset loop length (0 = free/unlimited)
@@ -523,16 +541,37 @@ private:
             return;
         }
 
-        // Get current pitch ratio
+        // Get current pitch ratio and fade
         const float pitchRatio = pitchRatioSmoothed.getNextValue();
-        fadeSmoothed.getNextValue();  // Consume but don't use - fade only applies in overdub
+        const float fadeTarget = fadeSmoothed.getNextValue();
 
-        // Track position for UI
-        lastPlayheadPosition = getPlayheadPosition();
+        // Track position for UI and detect loop boundary
+        const float currentPos = getPlayheadPosition();
+        const bool loopWrapped = detectLoopWrap(lastPlayheadPosition, currentPos);
+        lastPlayheadPosition = currentPos;
 
-        // Read from loop buffer at current playhead
-        float rawL = readWithInterpolation(bufferL, playHead);
-        float rawR = readWithInterpolation(bufferR, playHead);
+        // Apply fade when fadeActive is true (another layer is recording/overdubbing)
+        // This makes fade affect ALL layers, not just the one being overdubbed
+        if (fadeActive.load() && loopWrapped)
+        {
+            if (fadeTarget < currentFadeMultiplier)
+            {
+                // Decay: multiply by fadeTarget to reduce
+                currentFadeMultiplier *= fadeTarget;
+            }
+            else
+            {
+                // Recovery: lerp towards fadeTarget when knob is raised
+                currentFadeMultiplier += (fadeTarget - currentFadeMultiplier) * 0.3f;
+            }
+        }
+
+        // Determine the fade multiplier to apply
+        float fadeToApply = fadeActive.load() ? currentFadeMultiplier : 1.0f;
+
+        // Read from loop buffer at current playhead (with fade applied)
+        float rawL = readWithInterpolation(bufferL, playHead) * fadeToApply;
+        float rawR = readWithInterpolation(bufferR, playHead) * fadeToApply;
 
         float loopL, loopR;
 

@@ -68,6 +68,12 @@ public:
     bool getDegradeLofiEnabled() const;
     bool getDegradeScramblerEnabled() const;
 
+    // Individual filter bypass
+    void setDegradeHPEnabled(bool enabled);
+    void setDegradeLPEnabled(bool enabled);
+    bool getDegradeHPEnabled() const;
+    bool getDegradeLPEnabled() const;
+
     // Host transport sync
     void setHostTransportSync(bool enabled);
     bool getHostTransportSync() const;
@@ -115,11 +121,11 @@ private:
     std::atomic<int> tempoNoteValue { 1 };  // 0=1/4, 1=1/8, 2=1/8T, 3=1/16, 4=1/16T, 5=1/32
     std::atomic<float> lastHostBpm { 120.0f };
 
-    // Delay bypass
-    std::atomic<bool> delayEnabled { true };
+    // Delay bypass (off by default)
+    std::atomic<bool> delayEnabled { false };
 
-    // Host transport sync
-    std::atomic<bool> hostTransportSyncEnabled { false };
+    // Host transport sync (on by default)
+    std::atomic<bool> hostTransportSyncEnabled { true };
     std::atomic<bool> lastHostPlaying { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoopEngineProcessor)
