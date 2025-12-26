@@ -22,7 +22,6 @@ public:
         bitDepthSmooth.reset(sampleRate, 0.005);
         srReductionSmooth.reset(sampleRate, 0.005);
         wobbleAmountSmooth.reset(sampleRate, 0.01);
-        scramblerAmountSmooth.reset(sampleRate, 0.005);
         mixSmooth.reset(sampleRate, 0.005);
 
         // Set initial values
@@ -33,7 +32,6 @@ public:
         bitDepthSmooth.setCurrentAndTargetValue(16.0f);
         srReductionSmooth.setCurrentAndTargetValue(static_cast<float>(sampleRate));
         wobbleAmountSmooth.setCurrentAndTargetValue(0.0f);
-        scramblerAmountSmooth.setCurrentAndTargetValue(0.5f);
         mixSmooth.setCurrentAndTargetValue(1.0f);
 
         // Initialize bypass gain smoothers for click-free toggling
@@ -43,7 +41,7 @@ public:
         hpBypassGain.reset(sampleRate, 0.003);
         lpBypassGain.reset(sampleRate, 0.003);
         lofiBypassGain.reset(sampleRate, 0.003);
-        scramblerBypassGain.reset(sampleRate, 0.003);
+        textureBypassGain.reset(sampleRate, 0.003);
 
         // Set initial bypass states - most off by default for clean audio
         // EXCEPTION: filterBypassGain and HP/LP start ON because the UI expects them enabled
@@ -53,7 +51,7 @@ public:
         hpBypassGain.setCurrentAndTargetValue(1.0f);      // HP filter ON by default
         lpBypassGain.setCurrentAndTargetValue(1.0f);      // LP filter ON by default
         lofiBypassGain.setCurrentAndTargetValue(0.0f);
-        scramblerBypassGain.setCurrentAndTargetValue(0.0f);
+        textureBypassGain.setCurrentAndTargetValue(0.0f);
 
         // Reset filter states
         resetFilters();
@@ -72,30 +70,8 @@ public:
         wobbleLfoPhase = 0.0f;
         wobbleDelaySmoothed = static_cast<float>(sampleRate) * 0.015f; // Start at base delay
 
-        // Initialize scrambler buffer (store up to 4 bars worth at 60bpm = 16 seconds max)
-        int maxScrambleSize = static_cast<int>(sampleRate * 8.0);
-        scrambleBufferL.resize(maxScrambleSize, 0.0f);
-        scrambleBufferR.resize(maxScrambleSize, 0.0f);
-        scrambleWritePos = 0;
-        scrambleReadPos = 0;
-        segmentPosition = 0;
-        currentSegment = 0;
-        scrambleBufferFilled = false;
-
-        // Initialize segment order
-        for (int i = 0; i < MAX_SCRAMBLE_SEGMENTS; ++i)
-            segmentOrder[i] = i;
-
-        // Initialize smear buffer (500ms max grain size)
-        int smearBufferSize = static_cast<int>(sampleRate * 0.5);
-        smearBufferL.resize(smearBufferSize, 0.0f);
-        smearBufferR.resize(smearBufferSize, 0.0f);
-        smearWritePos = 0;
-        smearReadPos = 0.0f;
-        smearPhase = 0.0f;
-        smearAmountSmooth.reset(sampleRate, 0.05);
-        smearAmountSmooth.setCurrentAndTargetValue(0.0f);
-        updateGrainSize();
+        // Initialize granular texture engine
+        initializeTexture(sampleRate);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer)
@@ -124,7 +100,7 @@ public:
                 hpBypassGain.getNextValue();
                 lpBypassGain.getNextValue();
                 lofiBypassGain.getNextValue();
-                scramblerBypassGain.getNextValue();
+                textureBypassGain.getNextValue();
                 mixSmooth.getNextValue();
                 hpFreqSmooth.getNextValue();
                 hpQSmooth.getNextValue();
@@ -133,7 +109,10 @@ public:
                 bitDepthSmooth.getNextValue();
                 srReductionSmooth.getNextValue();
                 wobbleAmountSmooth.getNextValue();
-                smearAmountSmooth.getNextValue();
+                textureDensitySmooth.getNextValue();
+                textureScatterSmooth.getNextValue();
+                textureMotionSmooth.getNextValue();
+                textureMixSmooth.getNextValue();
                 // Output is unchanged (dry signal)
                 continue;
             }
@@ -142,7 +121,7 @@ public:
             const float hpGain = hpBypassGain.getNextValue();
             const float lpGain = lpBypassGain.getNextValue();
             const float lofiGain = lofiBypassGain.getNextValue();
-            const float scramblerGain = scramblerBypassGain.getNextValue();
+            const float textureGain = textureBypassGain.getNextValue();
 
             float wetL = inputL;
             float wetR = inputR;
@@ -209,27 +188,35 @@ public:
                 wetR = preLofiR * (1.0f - lofiGain) + lofiR * lofiGain;
             }
 
-            // ==== SCRAMBLER SECTION ====
-            // Process and crossfade based on scrambler gain
-            if ((scramblerGain > 0.001f || scramblerEnabled.load()) && scramblerSubdiv > 0)
+            // ==== TEXTURE SECTION ====
+            // Multi-voice granular texture engine
+            if (textureGain > 0.001f || textureEnabled.load())
             {
-                float preScramblerL = wetL;
-                float preScramblerR = wetR;
+                const float density = textureDensitySmooth.getNextValue();
+                const float scatter = textureScatterSmooth.getNextValue();
+                const float motion = textureMotionSmooth.getNextValue();
+                const float texMix = textureMixSmooth.getNextValue();
 
-                processScrambler(wetL, wetR);
+                if (texMix > 0.001f)
+                {
+                    float preTextureL = wetL;
+                    float preTextureR = wetR;
 
-                // Crossfade between unscrambled and scrambled
-                wetL = preScramblerL * (1.0f - scramblerGain) + wetL * scramblerGain;
-                wetR = preScramblerR * (1.0f - scramblerGain) + wetR * scramblerGain;
+                    processTexture(wetL, wetR, density, scatter, motion);
+
+                    // Apply texture mix and bypass crossfade
+                    float effectiveTexMix = texMix * textureGain;
+                    wetL = preTextureL * (1.0f - effectiveTexMix) + wetL * effectiveTexMix;
+                    wetR = preTextureR * (1.0f - effectiveTexMix) + wetR * effectiveTexMix;
+                }
             }
-
-            // ==== SMEAR SECTION ====
-            // Granular smear effect for atmospheric texture
-            // Only process if scrambler/granular section is enabled
-            const float smearAmt = smearAmountSmooth.getNextValue();
-            if ((scramblerGain > 0.001f || scramblerEnabled.load()) && smearAmt > 0.001f)
+            else
             {
-                processSmear(wetL, wetR, smearAmt);
+                // Consume smoothed values to keep them in sync
+                textureDensitySmooth.getNextValue();
+                textureScatterSmooth.getNextValue();
+                textureMotionSmooth.getNextValue();
+                textureMixSmooth.getNextValue();
             }
 
             // Apply dry/wet mix, then master bypass crossfade
@@ -280,53 +267,29 @@ public:
         wobbleAmountSmooth.setTargetValue(std::clamp(amount, 0.0f, 1.0f));
     }
 
-    // Scrambler controls
-    void setScramblerSubdiv(int subdiv)
+    // Texture controls (granular engine)
+    // Density: 0-1 maps to grain size 200ms->5ms and spawn rate 200ms->1ms
+    void setTextureDensity(float normalized)
     {
-        // 0=off, 1=1/4, 2=1/8, 3=1/16, 4=1/32
-        scramblerSubdiv = std::clamp(subdiv, 0, 4);
-        if (subdiv > 0)
-            calculateSegmentSize();
+        textureDensitySmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
     }
 
-    void setScramblerAmount(float amt)
+    // Scatter: 0-1 maps from sequential reading to fully random position jumping
+    void setTextureScatter(float normalized)
     {
-        scramblerAmountSmooth.setTargetValue(std::clamp(amt, 0.0f, 1.0f));
+        textureScatterSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
     }
 
-    // Granular smear: stretches/blurs audio grains for atmospheric texture
-    void setSmear(float amount)
+    // Motion: 0-1 controls per-grain variation (pitch drift, speed, reverse probability)
+    void setTextureMotion(float normalized)
     {
-        smearAmountSmooth.setTargetValue(std::clamp(amount, 0.0f, 1.0f));
+        textureMotionSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
     }
 
-    // Grain size in milliseconds (10-500ms)
-    void setGrainSize(float ms)
+    // Texture mix: dry/wet for the texture section
+    void setTextureMix(float normalized)
     {
-        grainSizeMs = std::clamp(ms, 10.0f, 500.0f);
-        updateGrainSize();
-    }
-
-    float getGrainSize() const { return grainSizeMs; }
-
-    void setTempo(float bpm)
-    {
-        if (std::abs(bpm - currentBpm) > 0.1f)
-        {
-            currentBpm = std::clamp(bpm, 20.0f, 300.0f);
-            if (scramblerSubdiv > 0)
-                calculateSegmentSize();
-        }
-    }
-
-    void setLoopLengthSamples(int len)
-    {
-        if (len != loopLengthSamples)
-        {
-            loopLengthSamples = len;
-            if (scramblerSubdiv > 0)
-                calculateSegmentSize();
-        }
+        textureMixSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
     }
 
     void setMix(float mix)
@@ -353,10 +316,10 @@ public:
         lofiEnabled.store(on);
         lofiBypassGain.setTargetValue(on ? 1.0f : 0.0f);
     }
-    void setScramblerEnabled(bool on)
+    void setTextureEnabled(bool on)
     {
-        scramblerEnabled.store(on);
-        scramblerBypassGain.setTargetValue(on ? 1.0f : 0.0f);
+        textureEnabled.store(on);
+        textureBypassGain.setTargetValue(on ? 1.0f : 0.0f);
     }
 
     // Individual filter bypass controls
@@ -373,7 +336,7 @@ public:
 
     bool getFilterEnabled() const { return filterEnabled.load(); }
     bool getLofiEnabled() const { return lofiEnabled.load(); }
-    bool getScramblerEnabled() const { return scramblerEnabled.load(); }
+    bool getTextureEnabled() const { return textureEnabled.load(); }
     bool getHPEnabled() const { return hpEnabled.load(); }
     bool getLPEnabled() const { return lpEnabled.load(); }
 
@@ -394,7 +357,7 @@ private:
     // (HP and LP have individual toggles that control the actual filter bypass)
     std::atomic<bool> filterEnabled { true };
     std::atomic<bool> lofiEnabled { false };
-    std::atomic<bool> scramblerEnabled { false };
+    std::atomic<bool> textureEnabled { false };
 
     // Individual filter bypass states
     // Default to ON so filters work immediately when user adjusts HP/LP knobs
@@ -407,7 +370,7 @@ private:
     juce::SmoothedValue<float> hpBypassGain;
     juce::SmoothedValue<float> lpBypassGain;
     juce::SmoothedValue<float> lofiBypassGain;
-    juce::SmoothedValue<float> scramblerBypassGain;
+    juce::SmoothedValue<float> textureBypassGain;
 
     // Biquad HP filter coefficients and state
     float hpB0 = 1.0f, hpB1 = 0.0f, hpB2 = 0.0f, hpA1 = 0.0f, hpA2 = 0.0f;
@@ -449,30 +412,39 @@ private:
     float wobbleDelaySmoothed = 0.0f;  // Smoothed delay time to prevent crackling
     juce::SmoothedValue<float> wobbleAmountSmooth;
 
-    // Scrambler
-    static constexpr int MAX_SCRAMBLE_SEGMENTS = 32;
-    std::vector<float> scrambleBufferL, scrambleBufferR;
-    std::array<int, MAX_SCRAMBLE_SEGMENTS> segmentOrder{};
-    int scrambleWritePos = 0;
-    int scrambleReadPos = 0;
-    int currentSegment = 0;
-    int segmentSamples = 0;
-    int segmentPosition = 0;
-    int scramblerSubdiv = 0;
-    float currentBpm = 120.0f;
-    int loopLengthSamples = 0;
-    bool scrambleBufferFilled = false;
-    juce::SmoothedValue<float> scramblerAmountSmooth;
-    juce::Random scrambleRandom;
+    // ========================================
+    // GRANULAR TEXTURE ENGINE
+    // ========================================
+    // Multi-voice granular synthesizer for creating rich, evolving textures
+    // Inspired by Chase Bliss Mood MK2's granular approach
 
-    // Granular smear effect
-    juce::SmoothedValue<float> smearAmountSmooth;
-    float grainSizeMs = 50.0f;
-    int grainSizeSamples = 2400;  // 50ms at 48kHz
-    std::vector<float> smearBufferL, smearBufferR;
-    int smearWritePos = 0;
-    float smearReadPos = 0.0f;
-    float smearPhase = 0.0f;
+    // Grain structure - each voice has independent state
+    struct Grain
+    {
+        bool active = false;
+        float readPosL = 0.0f;       // Read position in left buffer
+        float readPosR = 0.0f;       // Read position in right buffer
+        float grainLength = 0.0f;    // Total grain length in samples
+        float progress = 0.0f;       // 0.0 to 1.0 within grain lifetime
+        float playbackRate = 1.0f;   // Per-grain speed variation (affects pitch)
+        bool reverse = false;        // Per-grain reverse flag
+    };
+
+    static constexpr int NUM_TEXTURE_VOICES = 6;
+    static constexpr int TEXTURE_BUFFER_SIZE = 262144;  // ~5.4s at 48kHz
+
+    std::array<Grain, NUM_TEXTURE_VOICES> textureGrains;
+    std::vector<float> textureBufferL, textureBufferR;
+    int textureWritePos = 0;
+    float textureSpawnTimer = 0.0f;
+    int textureBufferFilled = 0;  // Samples written to buffer
+    juce::Random textureRandom;
+
+    // Smoothed texture parameters
+    juce::SmoothedValue<float> textureDensitySmooth;
+    juce::SmoothedValue<float> textureScatterSmooth;
+    juce::SmoothedValue<float> textureMotionSmooth;
+    juce::SmoothedValue<float> textureMixSmooth;
 
     // Mix
     juce::SmoothedValue<float> mixSmooth;
@@ -751,219 +723,198 @@ private:
         return ((c3 * frac + c2) * frac + c1) * frac + c0;
     }
 
-    void updateGrainSize()
+    // ========================================
+    // TEXTURE ENGINE METHODS
+    // ========================================
+
+    void initializeTexture(double sampleRate)
     {
-        grainSizeSamples = static_cast<int>(grainSizeMs * currentSampleRate / 1000.0f);
-        grainSizeSamples = std::max(grainSizeSamples, 100);  // Minimum 100 samples
-    }
+        // Allocate texture buffer (~5.4 seconds at 48kHz)
+        textureBufferL.resize(TEXTURE_BUFFER_SIZE, 0.0f);
+        textureBufferR.resize(TEXTURE_BUFFER_SIZE, 0.0f);
+        textureWritePos = 0;
+        textureSpawnTimer = 0.0f;
+        textureBufferFilled = 0;
 
-    // Granular smear effect - creates a stretched, blurry texture
-    void processSmear(float& left, float& right, float amount)
-    {
-        if (smearBufferL.empty() || amount < 0.001f)
-            return;
-
-        const int bufferSize = static_cast<int>(smearBufferL.size());
-
-        // Write to circular buffer
-        smearBufferL[smearWritePos] = left;
-        smearBufferR[smearWritePos] = right;
-
-        // Grain-based reading with overlap
-        // Smear slows down the read position relative to write, causing stretching
-        // Amount controls how much slower we read (0 = normal, 1 = very slow/smeared)
-        const float stretchFactor = 1.0f - (amount * 0.95f);  // 1.0 to 0.05
-        smearReadPos += stretchFactor;
-
-        // Wrap read position
-        if (smearReadPos >= static_cast<float>(grainSizeSamples))
+        // Reset all grain voices
+        for (auto& grain : textureGrains)
         {
-            smearReadPos -= static_cast<float>(grainSizeSamples);
-            smearPhase = 0.0f;
+            grain.active = false;
+            grain.progress = 0.0f;
         }
 
-        // Calculate actual read position in buffer
-        float readPosInBuffer = static_cast<float>(smearWritePos) - static_cast<float>(grainSizeSamples) + smearReadPos;
-        while (readPosInBuffer < 0.0f)
-            readPosInBuffer += static_cast<float>(bufferSize);
+        // Initialize smoothed parameters
+        textureDensitySmooth.reset(sampleRate, 0.01);
+        textureScatterSmooth.reset(sampleRate, 0.01);
+        textureMotionSmooth.reset(sampleRate, 0.01);
+        textureMixSmooth.reset(sampleRate, 0.01);
 
-        // Grain window (Hann window for smooth overlap)
-        const float grainProgress = smearReadPos / static_cast<float>(grainSizeSamples);
-        const float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * grainProgress));
+        textureDensitySmooth.setCurrentAndTargetValue(0.5f);
+        textureScatterSmooth.setCurrentAndTargetValue(0.0f);
+        textureMotionSmooth.setCurrentAndTargetValue(0.0f);
+        textureMixSmooth.setCurrentAndTargetValue(0.5f);
+    }
 
-        // Read with interpolation
-        const int idx0 = static_cast<int>(readPosInBuffer) % bufferSize;
-        const int idx1 = (idx0 + 1) % bufferSize;
-        const float frac = readPosInBuffer - std::floor(readPosInBuffer);
+    // Linear interpolation helper
+    static float lerp(float a, float b, float t)
+    {
+        return a + t * (b - a);
+    }
 
-        float grainL = smearBufferL[idx0] * (1.0f - frac) + smearBufferL[idx1] * frac;
-        float grainR = smearBufferR[idx0] * (1.0f - frac) + smearBufferR[idx1] * frac;
+    // Wrap buffer position to valid range
+    float wrapBufferPos(float pos) const
+    {
+        while (pos < 0.0f)
+            pos += static_cast<float>(TEXTURE_BUFFER_SIZE);
+        while (pos >= static_cast<float>(TEXTURE_BUFFER_SIZE))
+            pos -= static_cast<float>(TEXTURE_BUFFER_SIZE);
+        return pos;
+    }
 
-        // Apply window
-        grainL *= window;
-        grainR *= window;
+    // Read from buffer with linear interpolation
+    float readBufferInterpolated(const std::vector<float>& buffer, float pos) const
+    {
+        pos = wrapBufferPos(pos);
+        const int idx0 = static_cast<int>(pos) % TEXTURE_BUFFER_SIZE;
+        const int idx1 = (idx0 + 1) % TEXTURE_BUFFER_SIZE;
+        const float frac = pos - std::floor(pos);
+        return buffer[idx0] * (1.0f - frac) + buffer[idx1] * frac;
+    }
 
-        // Crossfade between dry and smeared based on amount
-        left = left * (1.0f - amount) + grainL * amount;
-        right = right * (1.0f - amount) + grainR * amount;
+    // Spawn a new grain voice
+    void spawnGrain(float density, float scatter, float motion)
+    {
+        // Find an inactive grain slot, or steal the oldest one
+        int slotToUse = -1;
+        float oldestProgress = -1.0f;
+        int oldestSlot = 0;
+
+        for (int i = 0; i < NUM_TEXTURE_VOICES; ++i)
+        {
+            if (!textureGrains[i].active)
+            {
+                slotToUse = i;
+                break;
+            }
+            if (textureGrains[i].progress > oldestProgress)
+            {
+                oldestProgress = textureGrains[i].progress;
+                oldestSlot = i;
+            }
+        }
+
+        // If no inactive slot, steal the oldest
+        if (slotToUse < 0)
+            slotToUse = oldestSlot;
+
+        Grain& grain = textureGrains[slotToUse];
+
+        // Calculate grain size based on density
+        // density 0 = 200ms grains, density 1 = 5ms grains
+        float grainSizeMs = lerp(200.0f, 5.0f, density);
+        grain.grainLength = grainSizeMs * static_cast<float>(currentSampleRate) / 1000.0f;
+        grain.grainLength = std::max(grain.grainLength, 48.0f);  // Minimum ~1ms at 48kHz
+
+        // Calculate read position based on scatter
+        // scatter 0 = read from recent audio (near write position)
+        // scatter 1 = read from anywhere in the buffer
+        float basePos = static_cast<float>(textureWritePos) - grain.grainLength;
+        float scatterRange = static_cast<float>(std::min(textureBufferFilled, TEXTURE_BUFFER_SIZE)) * 0.8f * scatter;
+        float randomOffset = (textureRandom.nextFloat() * 2.0f - 1.0f) * scatterRange;
+        grain.readPosL = wrapBufferPos(basePos + randomOffset);
+        grain.readPosR = grain.readPosL;  // Same position for stereo coherence
+
+        // Per-grain variation based on motion
+        // Pitch/speed variation: ±20% at max motion
+        float speedVar = motion * 0.2f * (textureRandom.nextFloat() * 2.0f - 1.0f);
+        grain.playbackRate = 1.0f + speedVar;
+
+        // Reverse probability: up to 30% at max motion
+        grain.reverse = textureRandom.nextFloat() < (motion * 0.3f);
+
+        grain.progress = 0.0f;
+        grain.active = true;
+    }
+
+    // Main texture processing method
+    void processTexture(float& left, float& right, float density, float scatter, float motion)
+    {
+        if (textureBufferL.empty())
+            return;
+
+        // Write input to circular buffer
+        textureBufferL[textureWritePos] = left;
+        textureBufferR[textureWritePos] = right;
+
+        // Track how much buffer is filled (for scatter range calculation)
+        if (textureBufferFilled < TEXTURE_BUFFER_SIZE)
+            textureBufferFilled++;
+
+        // Check if we should spawn a new grain
+        textureSpawnTimer -= 1.0f;
+        if (textureSpawnTimer <= 0.0f)
+        {
+            spawnGrain(density, scatter, motion);
+
+            // Calculate next spawn interval based on density
+            // density 0 = spawn every 200ms, density 1 = spawn every 1ms
+            float intervalMs = lerp(200.0f, 1.0f, density);
+            textureSpawnTimer = intervalMs * static_cast<float>(currentSampleRate) / 1000.0f;
+        }
+
+        // Process all active grains
+        float outputL = 0.0f;
+        float outputR = 0.0f;
+        int activeCount = 0;
+
+        for (auto& grain : textureGrains)
+        {
+            if (!grain.active)
+                continue;
+
+            activeCount++;
+
+            // Calculate Hann window envelope
+            float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * grain.progress));
+
+            // Read from buffer with interpolation
+            float sampleL = readBufferInterpolated(textureBufferL, grain.readPosL);
+            float sampleR = readBufferInterpolated(textureBufferR, grain.readPosR);
+
+            // Apply window and accumulate
+            outputL += sampleL * window;
+            outputR += sampleR * window;
+
+            // Advance grain read position
+            float increment = grain.playbackRate;
+            if (grain.reverse)
+                increment = -increment;
+
+            grain.readPosL = wrapBufferPos(grain.readPosL + increment);
+            grain.readPosR = wrapBufferPos(grain.readPosR + increment);
+
+            // Advance grain progress
+            grain.progress += 1.0f / grain.grainLength;
+
+            // Deactivate grain when finished
+            if (grain.progress >= 1.0f)
+                grain.active = false;
+        }
+
+        // Normalize output by sqrt of active count to maintain consistent volume
+        if (activeCount > 1)
+        {
+            float normFactor = 1.0f / std::sqrt(static_cast<float>(activeCount));
+            outputL *= normFactor;
+            outputR *= normFactor;
+        }
+
+        // Output the granular texture
+        left = outputL;
+        right = outputR;
 
         // Advance write position
-        smearWritePos = (smearWritePos + 1) % bufferSize;
-        smearPhase += 1.0f;
-    }
-
-    void calculateSegmentSize()
-    {
-        if (scramblerSubdiv == 0)
-        {
-            segmentSamples = 0;
-            return;
-        }
-
-        // Calculate segment size based on subdivision
-        // subdiv: 1=1/4, 2=1/8, 3=1/16, 4=1/32
-        int subdivisions;
-        switch (scramblerSubdiv)
-        {
-            case 1: subdivisions = 4; break;   // Quarter notes
-            case 2: subdivisions = 8; break;   // Eighth notes
-            case 3: subdivisions = 16; break;  // Sixteenth notes
-            case 4: subdivisions = 32; break;  // Thirty-second notes
-            default: subdivisions = 4;
-        }
-
-        if (loopLengthSamples > 0)
-        {
-            // Use loop length to determine segment size
-            segmentSamples = loopLengthSamples / subdivisions;
-        }
-        else
-        {
-            // Fall back to tempo-based calculation (assume 1 bar)
-            const float beatsPerSecond = currentBpm / 60.0f;
-            const float samplesPerBeat = static_cast<float>(currentSampleRate) / beatsPerSecond;
-            const float samplesPerBar = samplesPerBeat * 4.0f;  // Assuming 4/4
-            segmentSamples = static_cast<int>(samplesPerBar * 4.0f / static_cast<float>(subdivisions));
-        }
-
-        // Ensure minimum segment size (avoid tiny glitchy segments)
-        segmentSamples = std::max(segmentSamples, static_cast<int>(currentSampleRate * 0.05)); // Min 50ms
-
-        // Reset scrambler state
-        scrambleBufferFilled = false;
-        scrambleWritePos = 0;
-        scrambleReadPos = 0;
-        segmentPosition = 0;
-        currentSegment = 0;
-
-        // Generate initial segment order
-        updateSegmentOrder();
-    }
-
-    void updateSegmentOrder()
-    {
-        const float amount = scramblerAmountSmooth.getCurrentValue();
-
-        // Number of segments we'll work with
-        const int numSegments = std::min(MAX_SCRAMBLE_SEGMENTS,
-            segmentSamples > 0 ? static_cast<int>(scrambleBufferL.size()) / segmentSamples : 1);
-
-        // Start with sequential order
-        for (int i = 0; i < numSegments; ++i)
-            segmentOrder[i] = i;
-
-        // Shuffle based on amount (0 = no shuffle, 1 = full random)
-        if (amount > 0.01f && numSegments > 1)
-        {
-            // Fisher-Yates shuffle with probability based on amount
-            for (int i = numSegments - 1; i > 0; --i)
-            {
-                if (scrambleRandom.nextFloat() < amount)
-                {
-                    const int j = scrambleRandom.nextInt(i + 1);
-                    std::swap(segmentOrder[i], segmentOrder[j]);
-                }
-            }
-        }
-    }
-
-    void processScrambler(float& left, float& right)
-    {
-        if (segmentSamples <= 0 || scrambleBufferL.empty())
-            return;
-
-        const int bufferSize = static_cast<int>(scrambleBufferL.size());
-        const int numSegments = std::min(MAX_SCRAMBLE_SEGMENTS, bufferSize / segmentSamples);
-
-        if (numSegments < 2)
-            return;
-
-        // Write incoming audio to buffer
-        scrambleBufferL[scrambleWritePos] = left;
-        scrambleBufferR[scrambleWritePos] = right;
-
-        // Need to fill at least one full set of segments before outputting scrambled audio
-        const int requiredSamples = numSegments * segmentSamples;
-
-        if (!scrambleBufferFilled)
-        {
-            scrambleWritePos++;
-            if (scrambleWritePos >= requiredSamples)
-            {
-                scrambleBufferFilled = true;
-                scrambleWritePos = 0;
-                scrambleReadPos = 0;
-                segmentPosition = 0;
-                currentSegment = 0;
-                updateSegmentOrder();
-            }
-            // Pass through while filling buffer
-            return;
-        }
-
-        // Map current segment position to scrambled segment
-        const int mappedSegment = segmentOrder[currentSegment % numSegments];
-        const int readOffset = mappedSegment * segmentSamples + segmentPosition;
-
-        // Calculate actual read position in circular buffer
-        int readIdx = readOffset % bufferSize;
-
-        // Crossfade at segment boundaries to avoid clicks
-        float crossfade = 1.0f;
-        const int crossfadeSamples = std::min(64, segmentSamples / 8);
-
-        if (segmentPosition < crossfadeSamples)
-        {
-            crossfade = static_cast<float>(segmentPosition) / static_cast<float>(crossfadeSamples);
-        }
-        else if (segmentPosition >= segmentSamples - crossfadeSamples)
-        {
-            crossfade = static_cast<float>(segmentSamples - segmentPosition) / static_cast<float>(crossfadeSamples);
-        }
-
-        // Read from scrambled position
-        float scrambledL = scrambleBufferL[readIdx];
-        float scrambledR = scrambleBufferR[readIdx];
-
-        // Apply crossfade between original and scrambled
-        left = left * (1.0f - crossfade) + scrambledL * crossfade;
-        right = right * (1.0f - crossfade) + scrambledR * crossfade;
-
-        // Advance positions
-        scrambleWritePos = (scrambleWritePos + 1) % bufferSize;
-        segmentPosition++;
-
-        if (segmentPosition >= segmentSamples)
-        {
-            segmentPosition = 0;
-            currentSegment++;
-
-            // Re-shuffle periodically for variation
-            if (currentSegment % numSegments == 0)
-            {
-                updateSegmentOrder();
-            }
-        }
+        textureWritePos = (textureWritePos + 1) % TEXTURE_BUFFER_SIZE;
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DegradeProcessor)

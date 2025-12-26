@@ -58,15 +58,14 @@ public:
 
     // Degrade processor access
     DegradeProcessor& getDegradeProcessor() { return degradeProcessor; }
-    void setDegradeScrambleSubdiv(int subdiv);
 
     // Degrade section bypass
     void setDegradeFilterEnabled(bool enabled);
     void setDegradeLofiEnabled(bool enabled);
-    void setDegradeScramblerEnabled(bool enabled);
+    void setTextureEnabled(bool enabled);
     bool getDegradeFilterEnabled() const;
     bool getDegradeLofiEnabled() const;
-    bool getDegradeScramblerEnabled() const;
+    bool getTextureEnabled() const;
 
     // Individual filter bypass
     void setDegradeHPEnabled(bool enabled);
@@ -113,10 +112,13 @@ private:
     std::atomic<float>* degradeBitParam = nullptr;
     std::atomic<float>* degradeSRParam = nullptr;
     std::atomic<float>* degradeWobbleParam = nullptr;
-    std::atomic<float>* degradeScrambleAmtParam = nullptr;
-    std::atomic<float>* degradeSmearParam = nullptr;
-    std::atomic<float>* degradeGrainSizeParam = nullptr;
     std::atomic<float>* degradeMixParam = nullptr;
+
+    // Texture (granular) parameters
+    std::atomic<float>* textureDensityParam = nullptr;
+    std::atomic<float>* textureScatterParam = nullptr;
+    std::atomic<float>* textureMotionParam = nullptr;
+    std::atomic<float>* textureMixParam = nullptr;
 
     // Tempo sync state
     std::atomic<bool> tempoSyncEnabled { false };

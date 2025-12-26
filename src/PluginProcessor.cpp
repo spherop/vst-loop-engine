@@ -28,10 +28,13 @@ LoopEngineProcessor::LoopEngineProcessor()
     degradeBitParam = apvts.getRawParameterValue("degradeBit");
     degradeSRParam = apvts.getRawParameterValue("degradeSR");
     degradeWobbleParam = apvts.getRawParameterValue("degradeWobble");
-    degradeScrambleAmtParam = apvts.getRawParameterValue("degradeScrambleAmt");
-    degradeSmearParam = apvts.getRawParameterValue("degradeSmear");
-    degradeGrainSizeParam = apvts.getRawParameterValue("degradeGrainSize");
     degradeMixParam = apvts.getRawParameterValue("degradeMix");
+
+    // Texture (granular) parameters
+    textureDensityParam = apvts.getRawParameterValue("textureDensity");
+    textureScatterParam = apvts.getRawParameterValue("textureScatter");
+    textureMotionParam = apvts.getRawParameterValue("textureMotion");
+    textureMixParam = apvts.getRawParameterValue("textureMix");
 }
 
 LoopEngineProcessor::~LoopEngineProcessor()
@@ -202,36 +205,49 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         0.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // Scrambler amount
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"degradeScrambleAmt", 1},
-        "Scramble Amount",
-        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
-        50.0f,
-        juce::AudioParameterFloatAttributes().withLabel("%")));
-
-    // Granular smear amount
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"degradeSmear", 1},
-        "Smear",
-        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
-        0.0f,
-        juce::AudioParameterFloatAttributes().withLabel("%")));
-
-    // Grain size (10-500ms)
-    params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"degradeGrainSize", 1},
-        "Grain Size",
-        juce::NormalisableRange<float>(10.0f, 500.0f, 1.0f, 0.5f),
-        50.0f,
-        juce::AudioParameterFloatAttributes().withLabel("ms")));
-
     // Degrade mix (dry/wet)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"degradeMix", 1},
         "Degrade Mix",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
         100.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // =========== TEXTURE (GRANULAR) PARAMETERS ===========
+
+    // Texture Density: controls grain size and spawn rate
+    // 0% = long grains (200ms), slow spawn; 100% = short grains (5ms), fast spawn
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"textureDensity", 1},
+        "Texture Density",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Texture Scatter: controls position randomness
+    // 0% = sequential reading; 100% = random jumps in buffer
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"textureScatter", 1},
+        "Texture Scatter",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Texture Motion: controls per-grain variation
+    // 0% = stable grains; 100% = pitch drift, speed variation, reverse probability
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"textureMotion", 1},
+        "Texture Motion",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Texture Mix: dry/wet for texture section
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"textureMix", 1},
+        "Texture Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
     return { params.begin(), params.end() };
@@ -399,12 +415,13 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     degradeProcessor.setBitDepth(degradeBitParam->load());
     degradeProcessor.setSampleRateReduction(degradeSRParam->load());
     degradeProcessor.setWobble(degradeWobbleParam->load() / 100.0f);  // Convert 0-100% to 0-1
-    degradeProcessor.setScramblerAmount(degradeScrambleAmtParam->load() / 100.0f);  // Convert 0-100% to 0-1
-    degradeProcessor.setSmear(degradeSmearParam->load() / 100.0f);  // Convert 0-100% to 0-1
-    degradeProcessor.setGrainSize(degradeGrainSizeParam->load());  // Already in ms
     degradeProcessor.setMix(degradeMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
-    degradeProcessor.setTempo(lastHostBpm.load());
-    degradeProcessor.setLoopLengthSamples(loopEngine.getLoopLengthSamples());
+
+    // Update texture (granular) parameters
+    degradeProcessor.setTextureDensity(textureDensityParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setTextureScatter(textureScatterParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setTextureMotion(textureMotionParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setTextureMix(textureMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
 
     // Blooper-style degrade: only affects loop playback, not input
     // Apply degrade ONLY to the loop playback buffer
@@ -558,11 +575,6 @@ bool LoopEngineProcessor::getDegradeEnabled() const
     return degradeProcessor.isEnabled();
 }
 
-void LoopEngineProcessor::setDegradeScrambleSubdiv(int subdiv)
-{
-    degradeProcessor.setScramblerSubdiv(subdiv);
-}
-
 void LoopEngineProcessor::setDegradeFilterEnabled(bool enabled)
 {
     degradeProcessor.setFilterEnabled(enabled);
@@ -573,9 +585,9 @@ void LoopEngineProcessor::setDegradeLofiEnabled(bool enabled)
     degradeProcessor.setLofiEnabled(enabled);
 }
 
-void LoopEngineProcessor::setDegradeScramblerEnabled(bool enabled)
+void LoopEngineProcessor::setTextureEnabled(bool enabled)
 {
-    degradeProcessor.setScramblerEnabled(enabled);
+    degradeProcessor.setTextureEnabled(enabled);
 }
 
 bool LoopEngineProcessor::getDegradeFilterEnabled() const
@@ -588,9 +600,9 @@ bool LoopEngineProcessor::getDegradeLofiEnabled() const
     return degradeProcessor.getLofiEnabled();
 }
 
-bool LoopEngineProcessor::getDegradeScramblerEnabled() const
+bool LoopEngineProcessor::getTextureEnabled() const
 {
-    return degradeProcessor.getScramblerEnabled();
+    return degradeProcessor.getTextureEnabled();
 }
 
 void LoopEngineProcessor::setDegradeHPEnabled(bool enabled)

@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "0.8.5";
+const UI_VERSION = "1.0.0";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -1741,8 +1741,8 @@ class DegradeController {
 
         // Section LEDs
         this.lofiLed = document.getElementById('lofi-led');
-        this.scramblerLed = document.getElementById('scrambler-led');
-        console.log('[DEGRADE] Lofi LED:', this.lofiLed, 'Scrambler LED:', this.scramblerLed);
+        this.textureLed = document.getElementById('texture-led');
+        console.log('[DEGRADE] Lofi LED:', this.lofiLed, 'Texture LED:', this.textureLed);
 
         // Individual filter toggle buttons
         this.hpToggleBtn = document.getElementById('hp-toggle-btn');
@@ -1759,14 +1759,14 @@ class DegradeController {
         // State
         this.masterEnabled = true;
         this.lofiEnabled = true;
-        this.scramblerEnabled = true;
+        this.textureEnabled = true;
         this.hpEnabled = true;
         this.lpEnabled = true;
 
         // Native functions
         this.setMasterEnabledFn = getNativeFunction('setDegradeEnabled');
         this.setLofiEnabledFn = getNativeFunction('setDegradeLofiEnabled');
-        this.setScramblerEnabledFn = getNativeFunction('setDegradeScramblerEnabled');
+        this.setTextureEnabledFn = getNativeFunction('setTextureEnabled');
         this.setHPEnabledFn = getNativeFunction('setDegradeHPEnabled');
         this.setLPEnabledFn = getNativeFunction('setDegradeLPEnabled');
         this.getDegradeStateFn = getNativeFunction('getDegradeState');
@@ -1797,10 +1797,10 @@ class DegradeController {
                 this.toggleLofi();
             });
         }
-        if (this.scramblerLed) {
-            this.scramblerLed.addEventListener('click', (e) => {
+        if (this.textureLed) {
+            this.textureLed.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.toggleScrambler();
+                this.toggleTexture();
             });
         }
         // Individual HP/LP toggles
@@ -1819,7 +1819,7 @@ class DegradeController {
                 // C++ returns 'enabled', we use 'masterEnabled' internally
                 this.masterEnabled = state.enabled !== false;
                 this.lofiEnabled = state.lofiEnabled !== false;
-                this.scramblerEnabled = state.scramblerEnabled !== false;
+                this.textureEnabled = state.textureEnabled !== false;
                 this.hpEnabled = state.hpEnabled !== false;
                 this.lpEnabled = state.lpEnabled !== false;
                 this.updateUI();
@@ -1897,15 +1897,15 @@ class DegradeController {
         }
     }
 
-    async toggleScrambler() {
-        this.scramblerEnabled = !this.scramblerEnabled;
+    async toggleTexture() {
+        this.textureEnabled = !this.textureEnabled;
         this.updateUI();
         try {
-            await this.setScramblerEnabledFn(this.scramblerEnabled);
-            console.log(`[DEGRADE] Scrambler ${this.scramblerEnabled ? 'enabled' : 'disabled'}`);
+            await this.setTextureEnabledFn(this.textureEnabled);
+            console.log(`[DEGRADE] Texture ${this.textureEnabled ? 'enabled' : 'disabled'}`);
         } catch (e) {
-            console.error('Error toggling scrambler:', e);
-            this.scramblerEnabled = !this.scramblerEnabled;
+            console.error('Error toggling texture:', e);
+            this.textureEnabled = !this.textureEnabled;
             this.updateUI();
         }
     }
@@ -1920,8 +1920,8 @@ class DegradeController {
         if (this.lofiLed) {
             this.lofiLed.classList.toggle('active', this.lofiEnabled);
         }
-        if (this.scramblerLed) {
-            this.scramblerLed.classList.toggle('active', this.scramblerEnabled);
+        if (this.textureLed) {
+            this.textureLed.classList.toggle('active', this.textureEnabled);
         }
 
         // Update entire degrade section opacity when master is disabled
@@ -2353,40 +2353,30 @@ document.addEventListener('DOMContentLoaded', () => {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Scramble amount: 0% - 100%
-    new KnobController('degradeScrambleAmt-knob', 'degradeScrambleAmt', {
+    // Texture Density: 0% - 100%
+    new KnobController('textureDensity-knob', 'textureDensity', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Granular smear: 0% - 100%
-    new KnobController('degradeSmear-knob', 'degradeSmear', {
+    // Texture Scatter: 0% - 100%
+    new KnobController('textureScatter-knob', 'textureScatter', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Grain size: 10ms - 500ms (exponential)
-    new KnobController('degradeGrainSize-knob', 'degradeGrainSize', {
-        formatValue: (v) => {
-            // v is normalized 0-1, maps to 10-500ms with skew
-            const ms = Math.round(10 + Math.pow(v, 0.5) * (500 - 10));
-            return `${ms}ms`;
-        }
+    // Texture Motion: 0% - 100%
+    new KnobController('textureMotion-knob', 'textureMotion', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Texture Mix: 0% - 100%
+    new KnobController('textureMix-knob', 'textureMix', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
     // Degrade mix: 0% - 100%
     new KnobController('degradeMix-knob', 'degradeMix', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
-
-    // Subdivision selector for scrambler
-    const subdivSelect = document.getElementById('scramble-subdiv');
-    if (subdivSelect) {
-        const setScrambleSubdivFn = getNativeFunction('setDegradeScrambleSubdiv');
-        subdivSelect.addEventListener('change', async (e) => {
-            const subdiv = parseInt(e.target.value);
-            console.log(`[DEGRADE] Setting scramble subdiv: ${subdiv}`);
-            await setScrambleSubdivFn(subdiv);
-        });
-    }
 
     // Degrade section controller
     new DegradeController();

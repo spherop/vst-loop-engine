@@ -567,28 +567,37 @@ private:
         if (loopWrapped)
         {
             // Convert fade knob (0-1) to a per-loop decay multiplier
-            // At 100% (1.0): no decay (multiplier = 1.0)
-            // At 50% (0.5): gentle decay over ~8 loops
-            // At 0% (0.0): fast decay over ~2 loops
+            // At 100% (1.0): no decay (infinite loops)
+            // At 85% (0.85): gentle decay (~8-10 audible loops)
+            // At 50% (0.5): moderate decay (~4-5 audible loops)
+            // At 0% (0.0): fast decay (~2 audible loops)
             //
-            // Formula: decayMultiplier = 1 - (1 - fadeTarget)^2 * 0.3
-            // This creates a gentler curve where 50% takes many loops to fade
-            float decayStrength = (1.0f - fadeTarget) * (1.0f - fadeTarget);  // Quadratic curve
-            float decayMultiplier = 1.0f - (decayStrength * 0.3f);  // Max 30% reduction per loop at 0%
+            // Formula: quadratic curve with moderate decay factor
+            float invFade = 1.0f - fadeTarget;
+            float decayStrength = invFade * invFade;  // Quadratic curve
+            float decayMultiplier = 1.0f - (decayStrength * 0.25f);  // Max 25% reduction per loop at 0%
 
-            // Apply decay based on current knob position
-            currentFadeMultiplier *= decayMultiplier;
+            // Calculate the "target" multiplier for the current fade setting
+            // This is what the multiplier should be if we started fresh at this fade level
+            // Higher fade = higher target (closer to 1.0)
+            float targetMultiplier = fadeTarget;  // Simple: fade knob directly sets target level
+
+            // If current multiplier is below target (user turned knob UP), recover towards target
+            // If current multiplier is above target (user turned knob DOWN), decay towards target
+            if (currentFadeMultiplier < targetMultiplier)
+            {
+                // Recovery: gradually restore volume when knob is turned up
+                float recoveryRate = 0.15f;  // Recover ~15% of the gap per loop
+                currentFadeMultiplier += (targetMultiplier - currentFadeMultiplier) * recoveryRate;
+            }
+            else
+            {
+                // Decay: apply normal fade decay
+                currentFadeMultiplier *= decayMultiplier;
+            }
+
             // Clamp to minimum to prevent complete silence
             currentFadeMultiplier = std::max(currentFadeMultiplier, 0.001f);
-
-            // Recovery: if knob is raised above 90%, gradually restore volume
-            // This allows "rescuing" a faded loop by turning fade back up
-            if (fadeTarget > 0.9f && currentFadeMultiplier < 1.0f)
-            {
-                // Lerp back towards 1.0 - faster recovery when knob is at 100%
-                float recoveryRate = (fadeTarget - 0.9f) * 2.0f;  // 0 to 0.2 based on knob
-                currentFadeMultiplier += (1.0f - currentFadeMultiplier) * recoveryRate;
-            }
         }
 
         // ALWAYS apply fade multiplier - once audio has faded, it stays faded
@@ -728,22 +737,28 @@ private:
         if (loopWrapped)
         {
             // Apply same fade decay formula as processPlaying for consistency
-            // Convert fade knob (0-1) to a per-loop decay multiplier
-            // At 100% (1.0): no decay (multiplier = 1.0)
-            // At 50% (0.5): gentle decay over ~8 loops
-            // At 0% (0.0): fast decay over ~2 loops
-            float decayStrength = (1.0f - fadeTarget) * (1.0f - fadeTarget);  // Quadratic curve
-            float decayMultiplier = 1.0f - (decayStrength * 0.3f);  // Max 30% reduction per loop at 0%
+            // Quadratic curve with moderate decay factor
+            float invFade = 1.0f - fadeTarget;
+            float decayStrength = invFade * invFade;  // Quadratic curve
+            float decayMultiplier = 1.0f - (decayStrength * 0.25f);  // Max 25% reduction per loop at 0%
 
-            currentFadeMultiplier *= decayMultiplier;
-            currentFadeMultiplier = std::max(currentFadeMultiplier, 0.001f);
+            // Target multiplier based on fade knob position
+            float targetMultiplier = fadeTarget;
 
-            // Recovery: if knob is raised above 90%, gradually restore volume
-            if (fadeTarget > 0.9f && currentFadeMultiplier < 1.0f)
+            // Recovery or decay based on current vs target
+            if (currentFadeMultiplier < targetMultiplier)
             {
-                float recoveryRate = (fadeTarget - 0.9f) * 2.0f;
-                currentFadeMultiplier += (1.0f - currentFadeMultiplier) * recoveryRate;
+                // Recovery: gradually restore volume when knob is turned up
+                float recoveryRate = 0.15f;
+                currentFadeMultiplier += (targetMultiplier - currentFadeMultiplier) * recoveryRate;
             }
+            else
+            {
+                // Decay: apply normal fade decay
+                currentFadeMultiplier *= decayMultiplier;
+            }
+
+            currentFadeMultiplier = std::max(currentFadeMultiplier, 0.001f);
         }
 
         // Read existing content (with fade applied)

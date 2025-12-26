@@ -41,10 +41,11 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(degradeBitRelay)
                   .withOptionsFrom(degradeSRRelay)
                   .withOptionsFrom(degradeWobbleRelay)
-                  .withOptionsFrom(degradeScrambleAmtRelay)
-                  .withOptionsFrom(degradeSmearRelay)
-                  .withOptionsFrom(degradeGrainSizeRelay)
                   .withOptionsFrom(degradeMixRelay)
+                  .withOptionsFrom(textureDensityRelay)
+                  .withOptionsFrom(textureScatterRelay)
+                  .withOptionsFrom(textureMotionRelay)
+                  .withOptionsFrom(textureMixRelay)
                   .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().record();
@@ -278,12 +279,6 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.setDegradeEnabled(static_cast<bool>(args[0]));
                       complete({});
                   })
-                  .withNativeFunction("setDegradeScrambleSubdiv", [this](const juce::Array<juce::var>& args, auto complete)
-                  {
-                      if (args.size() > 0)
-                          processorRef.setDegradeScrambleSubdiv(static_cast<int>(args[0]));
-                      complete({});
-                  })
                   .withNativeFunction("setDegradeFilterEnabled", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
@@ -296,10 +291,10 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.setDegradeLofiEnabled(static_cast<bool>(args[0]));
                       complete({});
                   })
-                  .withNativeFunction("setDegradeScramblerEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  .withNativeFunction("setTextureEnabled", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
-                          processorRef.setDegradeScramblerEnabled(static_cast<bool>(args[0]));
+                          processorRef.setTextureEnabled(static_cast<bool>(args[0]));
                       complete({});
                   })
                   .withNativeFunction("setDegradeHPEnabled", [this](const juce::Array<juce::var>& args, auto complete)
@@ -320,7 +315,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("enabled", processorRef.getDegradeEnabled());
                       result->setProperty("filterEnabled", processorRef.getDegradeFilterEnabled());
                       result->setProperty("lofiEnabled", processorRef.getDegradeLofiEnabled());
-                      result->setProperty("scramblerEnabled", processorRef.getDegradeScramblerEnabled());
+                      result->setProperty("textureEnabled", processorRef.getTextureEnabled());
                       result->setProperty("hpEnabled", processorRef.getDegradeHPEnabled());
                       result->setProperty("lpEnabled", processorRef.getDegradeLPEnabled());
                       // Filter visualization data
@@ -413,17 +408,20 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
       degradeWobbleAttachment(*processorRef.getAPVTS().getParameter("degradeWobble"),
                               degradeWobbleRelay,
                               processorRef.getAPVTS().undoManager),
-      degradeScrambleAmtAttachment(*processorRef.getAPVTS().getParameter("degradeScrambleAmt"),
-                                   degradeScrambleAmtRelay,
-                                   processorRef.getAPVTS().undoManager),
-      degradeSmearAttachment(*processorRef.getAPVTS().getParameter("degradeSmear"),
-                             degradeSmearRelay,
-                             processorRef.getAPVTS().undoManager),
-      degradeGrainSizeAttachment(*processorRef.getAPVTS().getParameter("degradeGrainSize"),
-                                 degradeGrainSizeRelay,
-                                 processorRef.getAPVTS().undoManager),
       degradeMixAttachment(*processorRef.getAPVTS().getParameter("degradeMix"),
                            degradeMixRelay,
+                           processorRef.getAPVTS().undoManager),
+      textureDensityAttachment(*processorRef.getAPVTS().getParameter("textureDensity"),
+                               textureDensityRelay,
+                               processorRef.getAPVTS().undoManager),
+      textureScatterAttachment(*processorRef.getAPVTS().getParameter("textureScatter"),
+                               textureScatterRelay,
+                               processorRef.getAPVTS().undoManager),
+      textureMotionAttachment(*processorRef.getAPVTS().getParameter("textureMotion"),
+                              textureMotionRelay,
+                              processorRef.getAPVTS().undoManager),
+      textureMixAttachment(*processorRef.getAPVTS().getParameter("textureMix"),
+                           textureMixRelay,
                            processorRef.getAPVTS().undoManager)
 {
     addAndMakeVisible(webView);

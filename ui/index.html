@@ -406,47 +406,46 @@
                             </div>
                         </div>
 
-                        <!-- GRANULAR Section -->
+                        <!-- TEXTURE Section -->
                         <div class="p-3 border-b border-fd-border">
                             <div class="flex items-center justify-between mb-3">
                                 <div class="flex items-center gap-2">
-                                    <div class="section-led degrade-led active" id="scrambler-led"></div>
-                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">GRANULAR</span>
+                                    <div class="section-led degrade-led" id="texture-led"></div>
+                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">TEXTURE</span>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-2 gap-3 mb-3">
+                            <!-- 3 knobs in a row: DENSITY, SCATTER, MOTION -->
+                            <div class="grid grid-cols-3 gap-3 mb-3">
                                 <div class="flex flex-col items-center gap-1">
-                                    <select class="subdiv-select" id="scramble-subdiv">
-                                        <option value="0">OFF</option>
-                                        <option value="1">1/4</option>
-                                        <option value="2">1/8</option>
-                                        <option value="3">1/16</option>
-                                        <option value="4">1/32</option>
-                                    </select>
-                                    <span class="font-display text-[7px] text-fd-text-dim">DIV</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="degradeScrambleAmt-knob">
+                                    <div class="knob knob-small degrade-knob" id="textureDensity-knob">
                                         <div class="knob-indicator"></div>
                                     </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeScrambleAmt-value">50%</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">AMT</span>
+                                    <span class="font-mono text-[9px] text-white" id="textureDensity-value">50%</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">DENSITY</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="textureScatter-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="textureScatter-value">0%</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">SCATTER</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small degrade-knob" id="textureMotion-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="textureMotion-value">0%</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">MOTION</span>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-2 gap-3">
+                            <!-- MIX knob centered below -->
+                            <div class="flex justify-center">
                                 <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="degradeSmear-knob">
+                                    <div class="knob knob-small degrade-knob" id="textureMix-knob">
                                         <div class="knob-indicator"></div>
                                     </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeSmear-value">0%</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">SMEAR</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="degradeGrainSize-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeGrainSize-value">50ms</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">GRAIN</span>
+                                    <span class="font-mono text-[9px] text-white" id="textureMix-value">50%</span>
+                                    <span class="font-display text-[7px] text-fd-text-dim">MIX</span>
                                 </div>
                             </div>
                         </div>
@@ -578,7 +577,7 @@
         <footer class="py-2 px-4 border-t border-fd-border bg-fd-surface/50">
             <div class="flex items-center justify-between">
                 <!-- Version ticker -->
-                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v0.9.6</span>
+                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.0.0</span>
                 <!-- Tempo controls -->
                 <div class="flex items-center gap-4">
                     <!-- Host Transport Sync LED -->

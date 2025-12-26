@@ -45,10 +45,13 @@ private:
     juce::WebSliderRelay degradeBitRelay { "degradeBit" };
     juce::WebSliderRelay degradeSRRelay { "degradeSR" };
     juce::WebSliderRelay degradeWobbleRelay { "degradeWobble" };
-    juce::WebSliderRelay degradeScrambleAmtRelay { "degradeScrambleAmt" };
-    juce::WebSliderRelay degradeSmearRelay { "degradeSmear" };
-    juce::WebSliderRelay degradeGrainSizeRelay { "degradeGrainSize" };
     juce::WebSliderRelay degradeMixRelay { "degradeMix" };
+
+    // Texture (granular) parameter relays
+    juce::WebSliderRelay textureDensityRelay { "textureDensity" };
+    juce::WebSliderRelay textureScatterRelay { "textureScatter" };
+    juce::WebSliderRelay textureMotionRelay { "textureMotion" };
+    juce::WebSliderRelay textureMixRelay { "textureMix" };
 
     juce::WebBrowserComponent webView;
 
@@ -79,10 +82,13 @@ private:
     juce::WebSliderParameterAttachment degradeBitAttachment;
     juce::WebSliderParameterAttachment degradeSRAttachment;
     juce::WebSliderParameterAttachment degradeWobbleAttachment;
-    juce::WebSliderParameterAttachment degradeScrambleAmtAttachment;
-    juce::WebSliderParameterAttachment degradeSmearAttachment;
-    juce::WebSliderParameterAttachment degradeGrainSizeAttachment;
     juce::WebSliderParameterAttachment degradeMixAttachment;
+
+    // Texture (granular) parameter attachments
+    juce::WebSliderParameterAttachment textureDensityAttachment;
+    juce::WebSliderParameterAttachment textureScatterAttachment;
+    juce::WebSliderParameterAttachment textureMotionAttachment;
+    juce::WebSliderParameterAttachment textureMixAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
 
