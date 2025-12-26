@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "1.0.0";
+const UI_VERSION = "1.0.3";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -571,6 +571,7 @@ class LooperController {
         this.redoFn = getNativeFunction("loopRedo");
         this.clearFn = getNativeFunction("loopClear");
         this.clearLayerFn = getNativeFunction("clearLayer");
+        this.deleteLayerFn = getNativeFunction("deleteLayer");
         this.getStateFn = getNativeFunction("getLoopState");
         this.getLayerContentFn = getNativeFunction("getLayerContentStates");
         this.jumpToLayerFn = getNativeFunction("loopJumpToLayer");
@@ -582,6 +583,12 @@ class LooperController {
 
         // Track layer content states
         this.layerContentStates = [false, false, false, false, false, false, false, false];
+
+        // Waveform crossfade animation state
+        // Store smoothed waveform amplitudes for smooth visual transitions
+        // Instead of jumping to new values, we smoothly interpolate toward target
+        this.smoothedLayerWaveforms = null;
+        this.waveformSmoothingFactor = 0.15; // How fast to move toward target (0-1, lower = smoother)
 
         // Loop length setting (bars + beats)
         this.loopLengthBars = 0;
@@ -753,6 +760,18 @@ class LooperController {
         }
     }
 
+    // Delete a specific layer and shuffle subsequent layers down (1-indexed)
+    async deleteLayer(layer) {
+        console.log(`[LOOPER] Deleting layer ${layer} and shuffling`);
+        try {
+            await this.deleteLayerFn(layer);
+            // Refresh layer content states after delete
+            this.updateLayerContentStates();
+        } catch (e) {
+            console.error('Error deleting layer:', e);
+        }
+    }
+
     setupLoopLengthSelector() {
         this.barsSelect = document.getElementById('bars-select');
         this.beatsSelect = document.getElementById('beats-select');
@@ -799,21 +818,46 @@ class LooperController {
     setupLayers() {
         this.layerBtns = document.querySelectorAll('.layer-btn');
         this.setLayerMutedFn = getNativeFunction("setLayerMuted");
+        this.flattenLayersFn = getNativeFunction("flattenLayers");
+
+        // Flatten button
+        this.flattenBtn = document.getElementById('flatten-btn');
+        if (this.flattenBtn) {
+            this.flattenBtn.addEventListener('click', () => this.flatten());
+        }
 
         this.layerBtns.forEach(btn => {
-            // Left click: jump to layer (Shift+click: clear layer)
-            btn.addEventListener('click', (e) => {
+            // Left click: jump to layer
+            // Shift+click: delete layer and shuffle
+            // CMD+click: solo this layer
+            // Option+click: toggle mute
+            btn.addEventListener('click', async (e) => {
                 const layer = parseInt(btn.dataset.layer);
                 if (e.shiftKey) {
-                    // Shift+click: clear this layer
-                    this.clearLayer(layer);
+                    // Shift+click: delete this layer and shuffle subsequent layers down
+                    this.deleteLayer(layer);
+                } else if (e.metaKey) {
+                    // CMD+click: solo this layer
+                    this.soloLayer(layer);
+                } else if (e.altKey) {
+                    // Option+click: toggle mute
+                    const isMuted = btn.classList.contains('muted');
+                    const newMuted = !isMuted;
+                    btn.classList.toggle('muted', newMuted);
+                    try {
+                        await this.setLayerMutedFn(layer, newMuted);
+                        console.log(`Layer ${layer} muted: ${newMuted}`);
+                        this.updateSoloIndicators();
+                    } catch (err) {
+                        console.error('Error toggling layer mute:', err);
+                    }
                 } else {
                     // Normal click: jump to layer
                     this.jumpToLayer(layer);
                 }
             });
 
-            // Right click: toggle mute
+            // Right click: also toggle mute (alternative to Option+click)
             btn.addEventListener('contextmenu', async (e) => {
                 e.preventDefault();
                 const layer = parseInt(btn.dataset.layer);
@@ -823,11 +867,111 @@ class LooperController {
                 try {
                     await this.setLayerMutedFn(layer, newMuted);
                     console.log(`Layer ${layer} muted: ${newMuted}`);
+                    this.updateSoloIndicators();
                 } catch (err) {
                     console.error('Error toggling layer mute:', err);
                 }
             });
         });
+    }
+
+    // Solo a layer: mute all other layers with content, unmute the target layer
+    async soloLayer(targetLayer) {
+        console.log(`[LOOPER] Soloing layer ${targetLayer}`);
+
+        // Check if this layer is already soloed (all others muted, this one unmuted)
+        const targetBtn = document.querySelector(`.layer-btn[data-layer="${targetLayer}"]`);
+        const isTargetMuted = targetBtn?.classList.contains('muted');
+
+        // Count how many other layers with content are muted
+        let othersMutedCount = 0;
+        let othersWithContentCount = 0;
+
+        this.layerBtns.forEach(btn => {
+            const layer = parseInt(btn.dataset.layer);
+            if (layer !== targetLayer && this.layerContentStates[layer - 1]) {
+                othersWithContentCount++;
+                if (btn.classList.contains('muted')) {
+                    othersMutedCount++;
+                }
+            }
+        });
+
+        // If target is unmuted and all others are muted, unsolo (unmute all)
+        const isCurrentlySoloed = !isTargetMuted && othersMutedCount === othersWithContentCount && othersWithContentCount > 0;
+
+        try {
+            for (const btn of this.layerBtns) {
+                const layer = parseInt(btn.dataset.layer);
+
+                if (isCurrentlySoloed) {
+                    // Unsolo: unmute all layers
+                    btn.classList.remove('muted');
+                    await this.setLayerMutedFn(layer, false);
+                } else {
+                    // Solo: mute all except target
+                    if (layer === targetLayer) {
+                        btn.classList.remove('muted');
+                        await this.setLayerMutedFn(layer, false);
+                    } else {
+                        btn.classList.add('muted');
+                        await this.setLayerMutedFn(layer, true);
+                    }
+                }
+            }
+            console.log(`Layer ${targetLayer} ${isCurrentlySoloed ? 'unsolo' : 'solo'} complete`);
+
+            // Update solo indicator on soloed layer
+            this.updateSoloIndicators();
+        } catch (err) {
+            console.error('Error soloing layer:', err);
+        }
+    }
+
+    // Update solo indicator on layers
+    updateSoloIndicators() {
+        // A layer is "soloed" if it's unmuted and all other layers with content are muted
+        this.layerBtns.forEach(btn => {
+            const layer = parseInt(btn.dataset.layer);
+            const hasContent = this.layerContentStates[layer - 1];
+            const isMuted = btn.classList.contains('muted');
+
+            if (!hasContent) {
+                btn.classList.remove('soloed');
+                return;
+            }
+
+            // Count how many other layers with content are muted
+            let othersMutedCount = 0;
+            let othersWithContentCount = 0;
+
+            this.layerBtns.forEach(otherBtn => {
+                const otherLayer = parseInt(otherBtn.dataset.layer);
+                if (otherLayer !== layer && this.layerContentStates[otherLayer - 1]) {
+                    othersWithContentCount++;
+                    if (otherBtn.classList.contains('muted')) {
+                        othersMutedCount++;
+                    }
+                }
+            });
+
+            // This layer is soloed if: it's not muted, has content, and all others with content are muted
+            const isSoloed = !isMuted && othersWithContentCount > 0 && othersMutedCount === othersWithContentCount;
+            btn.classList.toggle('soloed', isSoloed);
+        });
+    }
+
+    // Flatten all non-muted layers into layer 1
+    async flatten() {
+        console.log('[LOOPER] Flattening layers');
+        try {
+            await this.flattenLayersFn();
+            // Refresh layer content states after flatten
+            await this.updateLayerContentStates();
+            this.updateSoloIndicators();
+        } catch (e) {
+            console.error('Error flattening layers:', e);
+        }
     }
 
     setupWaveform() {
@@ -1110,8 +1254,44 @@ class LooperController {
                 console.log(`[DRAW] Drawing ${layerWaveforms.length} layers with colors:`, this.layerColors.slice(0, layerWaveforms.length));
                 this._loggedLayerColors = true;
             }
-            for (let layerIdx = 0; layerIdx < layerWaveforms.length; layerIdx++) {
-                const layerData = layerWaveforms[layerIdx];
+
+            // Waveform smoothing: instead of jumping to new values, smoothly interpolate
+            // This creates a beautiful crossfade effect when fade multiplier changes
+            let displayWaveforms = layerWaveforms;
+
+            // Initialize smoothed waveforms if needed
+            if (!this.smoothedLayerWaveforms || this.smoothedLayerWaveforms.length !== layerWaveforms.length) {
+                // First time or layer count changed - start with current values
+                this.smoothedLayerWaveforms = layerWaveforms.map(layer => layer ? [...layer] : []);
+            } else {
+                // Smoothly interpolate each layer's waveform toward target
+                displayWaveforms = [];
+                const smoothing = this.waveformSmoothingFactor;
+
+                for (let layerIdx = 0; layerIdx < layerWaveforms.length; layerIdx++) {
+                    const targetData = layerWaveforms[layerIdx] || [];
+                    const smoothedData = this.smoothedLayerWaveforms[layerIdx] || [];
+                    const resultData = [];
+
+                    // Ensure smoothed array is same length as target
+                    const len = targetData.length;
+
+                    for (let i = 0; i < len; i++) {
+                        const target = targetData[i] || 0;
+                        const current = (i < smoothedData.length) ? smoothedData[i] : target;
+                        // Exponential smoothing: move fraction of distance toward target each frame
+                        const smoothed = current + (target - current) * smoothing;
+                        resultData.push(smoothed);
+                    }
+
+                    displayWaveforms.push(resultData);
+                    // Update stored smoothed values for next frame
+                    this.smoothedLayerWaveforms[layerIdx] = resultData;
+                }
+            }
+
+            for (let layerIdx = 0; layerIdx < displayWaveforms.length; layerIdx++) {
+                const layerData = displayWaveforms[layerIdx];
                 if (!layerData || layerData.length === 0) continue;
 
                 // Check if this layer is muted (undone) - draw as outline if so
@@ -1389,8 +1569,18 @@ class LooperController {
             if (btn) btn.classList.remove('active');
         });
 
+        // Reset REC button styling (clear any layer color)
+        if (this.recBtn) {
+            this.recBtn.style.borderColor = '';
+            this.recBtn.style.boxShadow = '';
+        }
+        if (this.recLabel) {
+            this.recLabel.style.color = '';
+        }
+
         // Update REC button label and state based on current state
         // Blooper-style: REC button shows "REC" normally, "DUB" when overdubbing
+        // Shows "DUB+" when clicking will add a new layer, colored with next layer's color
         switch (state) {
             case 'recording':
                 if (this.recBtn) this.recBtn.classList.add('active');
@@ -1398,11 +1588,38 @@ class LooperController {
                 break;
             case 'playing':
                 if (this.playBtn) this.playBtn.classList.add('active');
-                if (this.recLabel) this.recLabel.textContent = 'DUB';  // Show that REC will start overdub
+                // Check if clicking DUB will add a new layer (current layer has content)
+                const willAddLayer = this.layerContentStates[this.currentLayer - 1];
+                if (this.recLabel) this.recLabel.textContent = willAddLayer ? 'DUB+' : 'DUB';
+                // Color the DUB+ button with the next layer's color
+                if (willAddLayer && this.highestLayer < 7) {
+                    const nextLayerColor = this.layerColors[this.highestLayer];  // highestLayer is 0-indexed, so this is the next one
+                    if (this.recBtn) {
+                        this.recBtn.style.borderColor = nextLayerColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
+                    }
+                    if (this.recLabel) {
+                        this.recLabel.style.color = nextLayerColor;
+                    }
+                }
                 break;
             case 'overdubbing':
                 if (this.recBtn) this.recBtn.classList.add('active');
-                if (this.recLabel) this.recLabel.textContent = 'DUB';
+                // Check if clicking DUB again will add a new layer (current layer already has content)
+                // This is true during overdubbing because we're currently writing to this layer
+                const willAddLayerAfterOverdub = this.highestLayer < 7;  // Can still add if not at max
+                if (this.recLabel) this.recLabel.textContent = willAddLayerAfterOverdub ? 'DUB+' : 'DUB';
+                // Color the DUB+ button with the next layer's color
+                if (willAddLayerAfterOverdub) {
+                    const nextLayerColor = this.layerColors[this.highestLayer + 1];  // Next layer after current highest
+                    if (this.recBtn) {
+                        this.recBtn.style.borderColor = nextLayerColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
+                    }
+                    if (this.recLabel) {
+                        this.recLabel.style.color = nextLayerColor;
+                    }
+                }
                 break;
             case 'idle':
             default:
@@ -1485,6 +1702,8 @@ class LooperController {
                 btn.classList.remove('muted', 'undone');
             }
         });
+        // Update solo indicators based on mute states
+        this.updateSoloIndicators();
     }
 
     startStatePolling() {
@@ -1742,12 +1961,15 @@ class DegradeController {
         // Section LEDs
         this.lofiLed = document.getElementById('lofi-led');
         this.textureLed = document.getElementById('texture-led');
-        console.log('[DEGRADE] Lofi LED:', this.lofiLed, 'Texture LED:', this.textureLed);
+        this.filterLed = document.getElementById('filter-led');
+        console.log('[DEGRADE] Lofi LED:', this.lofiLed, 'Texture LED:', this.textureLed, 'Filter LED:', this.filterLed);
 
-        // Individual filter toggle buttons
-        this.hpToggleBtn = document.getElementById('hp-toggle-btn');
-        this.lpToggleBtn = document.getElementById('lp-toggle-btn');
-        console.log('[DEGRADE] HP btn:', this.hpToggleBtn, 'LP btn:', this.lpToggleBtn);
+        // Individual filter toggle labels (now using labels instead of buttons)
+        this.hpToggleLabel = document.getElementById('hp-toggle-label');
+        this.lpToggleLabel = document.getElementById('lp-toggle-label');
+        this.hpGroup = document.getElementById('hp-group');
+        this.lpGroup = document.getElementById('lp-group');
+        console.log('[DEGRADE] HP label:', this.hpToggleLabel, 'LP label:', this.lpToggleLabel);
 
         // Degrade section container (for dimming when master disabled)
         this.degradeSection = document.querySelector('.degrade-section');
@@ -1756,10 +1978,18 @@ class DegradeController {
         this.filterCanvas = document.getElementById('filter-viz-canvas');
         this.filterCtx = this.filterCanvas?.getContext('2d');
 
+        // Setup canvas sizing
+        if (this.filterCanvas) {
+            this.setupCanvas();
+            // Resize on window resize
+            window.addEventListener('resize', () => this.setupCanvas());
+        }
+
         // State
         this.masterEnabled = true;
         this.lofiEnabled = true;
         this.textureEnabled = true;
+        this.filterEnabled = true;
         this.hpEnabled = true;
         this.lpEnabled = true;
 
@@ -1767,6 +1997,7 @@ class DegradeController {
         this.setMasterEnabledFn = getNativeFunction('setDegradeEnabled');
         this.setLofiEnabledFn = getNativeFunction('setDegradeLofiEnabled');
         this.setTextureEnabledFn = getNativeFunction('setTextureEnabled');
+        this.setFilterEnabledFn = getNativeFunction('setDegradeFilterEnabled');
         this.setHPEnabledFn = getNativeFunction('setDegradeHPEnabled');
         this.setLPEnabledFn = getNativeFunction('setDegradeLPEnabled');
         this.getDegradeStateFn = getNativeFunction('getDegradeState');
@@ -1781,6 +2012,21 @@ class DegradeController {
         this.fetchInitialState();
         this.startPolling();
         console.log('[DEGRADE] Controller initialized');
+    }
+
+    setupCanvas() {
+        if (!this.filterCanvas) return;
+        // Set canvas resolution to match display size
+        const rect = this.filterCanvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        this.filterCanvas.width = rect.width * dpr;
+        this.filterCanvas.height = rect.height * dpr;
+        if (this.filterCtx) {
+            this.filterCtx.scale(dpr, dpr);
+        }
+        this.canvasWidth = rect.width;
+        this.canvasHeight = rect.height;
+        this.drawFilterVisualization();
     }
 
     setupEvents() {
@@ -1803,12 +2049,19 @@ class DegradeController {
                 this.toggleTexture();
             });
         }
-        // Individual HP/LP toggles
-        if (this.hpToggleBtn) {
-            this.hpToggleBtn.addEventListener('click', () => this.toggleHP());
+        // Filter section LED toggle
+        if (this.filterLed) {
+            this.filterLed.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleFilter();
+            });
         }
-        if (this.lpToggleBtn) {
-            this.lpToggleBtn.addEventListener('click', () => this.toggleLP());
+        // Individual HP/LP label toggles
+        if (this.hpToggleLabel) {
+            this.hpToggleLabel.addEventListener('click', () => this.toggleHP());
+        }
+        if (this.lpToggleLabel) {
+            this.lpToggleLabel.addEventListener('click', () => this.toggleLP());
         }
     }
 
@@ -1820,12 +2073,26 @@ class DegradeController {
                 this.masterEnabled = state.enabled !== false;
                 this.lofiEnabled = state.lofiEnabled !== false;
                 this.textureEnabled = state.textureEnabled !== false;
+                this.filterEnabled = state.filterEnabled !== false;
                 this.hpEnabled = state.hpEnabled !== false;
                 this.lpEnabled = state.lpEnabled !== false;
                 this.updateUI();
             }
         } catch (e) {
             console.log('Could not fetch initial degrade state');
+        }
+    }
+
+    async toggleFilter() {
+        this.filterEnabled = !this.filterEnabled;
+        this.updateUI();
+        try {
+            await this.setFilterEnabledFn(this.filterEnabled);
+            console.log(`[DEGRADE] Filter section ${this.filterEnabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling filter section:', e);
+            this.filterEnabled = !this.filterEnabled;
+            this.updateUI();
         }
     }
 
@@ -1869,17 +2136,19 @@ class DegradeController {
     }
 
     updateFilterToggles() {
-        if (this.hpToggleBtn) {
-            this.hpToggleBtn.classList.toggle('active', this.hpEnabled);
+        // Update HP/LP toggle labels
+        if (this.hpToggleLabel) {
+            this.hpToggleLabel.classList.toggle('active', this.hpEnabled);
         }
-        if (this.lpToggleBtn) {
-            this.lpToggleBtn.classList.toggle('active', this.lpEnabled);
+        if (this.lpToggleLabel) {
+            this.lpToggleLabel.classList.toggle('active', this.lpEnabled);
         }
+        // Dim the knob groups when disabled
         if (this.hpGroup) {
-            this.hpGroup.classList.toggle('disabled', !this.hpEnabled);
+            this.hpGroup.style.opacity = this.hpEnabled ? '1' : '0.5';
         }
         if (this.lpGroup) {
-            this.lpGroup.classList.toggle('disabled', !this.lpEnabled);
+            this.lpGroup.style.opacity = this.lpEnabled ? '1' : '0.5';
         }
     }
 
@@ -1923,19 +2192,28 @@ class DegradeController {
         if (this.textureLed) {
             this.textureLed.classList.toggle('active', this.textureEnabled);
         }
+        if (this.filterLed) {
+            this.filterLed.classList.toggle('active', this.filterEnabled);
+        }
 
         // Update entire degrade section opacity when master is disabled
         if (this.degradeSection) {
             // Apply dim to everything except the header with master LED
-            const sections = this.degradeSection.querySelectorAll('.p-2');
+            const sections = this.degradeSection.querySelectorAll('.p-3');
             sections.forEach(section => {
-                section.style.opacity = this.masterEnabled ? '1' : '0.4';
-                section.style.pointerEvents = this.masterEnabled ? 'auto' : 'none';
+                // Skip if it's a header section (contains the master LED)
+                if (!section.querySelector('#degrade-master-led')) {
+                    section.style.opacity = this.masterEnabled ? '1' : '0.4';
+                    section.style.pointerEvents = this.masterEnabled ? 'auto' : 'none';
+                }
             });
         }
 
         // Update individual filter toggles
         this.updateFilterToggles();
+
+        // Update filter visualization based on filter enabled state
+        this.drawFilterVisualization();
     }
 
     startPolling() {
@@ -1962,13 +2240,29 @@ class DegradeController {
     drawFilterVisualization() {
         if (!this.filterCtx || !this.filterCanvas) return;
 
-        const width = this.filterCanvas.width;
-        const height = this.filterCanvas.height;
+        const width = this.canvasWidth || this.filterCanvas.width;
+        const height = this.canvasHeight || this.filterCanvas.height;
         const ctx = this.filterCtx;
+
+        // Reset transform and clear
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const dpr = window.devicePixelRatio || 1;
+        ctx.scale(dpr, dpr);
 
         // Clear canvas
         ctx.fillStyle = '#0a0a0a';
         ctx.fillRect(0, 0, width, height);
+
+        // If filter section is disabled, show dimmed state
+        if (!this.filterEnabled) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#333';
+            ctx.font = '10px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('FILTER OFF', width / 2, height / 2 + 4);
+            return;
+        }
 
         // Draw grid lines
         ctx.strokeStyle = '#1a1a1a';
@@ -1990,6 +2284,21 @@ class DegradeController {
         ctx.lineTo(width, height / 2);
         ctx.stroke();
 
+        // Draw shaded cut regions first (behind the curve)
+        // HP cut region (frequencies below HP cutoff)
+        if (this.hpEnabled && this.hpFreq > 20) {
+            const hpX = this.freqToX(this.hpFreq, width);
+            ctx.fillStyle = 'rgba(102, 187, 106, 0.15)';
+            ctx.fillRect(0, 0, hpX, height);
+        }
+
+        // LP cut region (frequencies above LP cutoff)
+        if (this.lpEnabled && this.lpFreq < 20000) {
+            const lpX = this.freqToX(this.lpFreq, width);
+            ctx.fillStyle = 'rgba(102, 187, 106, 0.15)';
+            ctx.fillRect(lpX, 0, width - lpX, height);
+        }
+
         // Draw combined filter response curve
         ctx.beginPath();
         ctx.strokeStyle = '#66bb6a';
@@ -1997,8 +2306,8 @@ class DegradeController {
 
         for (let i = 0; i < width; i++) {
             const freq = this.xToFreq(i, width);
-            const hpResponse = this.getHPResponse(freq);
-            const lpResponse = this.getLPResponse(freq);
+            const hpResponse = this.hpEnabled ? this.getHPResponse(freq) : 0;
+            const lpResponse = this.lpEnabled ? this.getLPResponse(freq) : 0;
             const combinedDb = hpResponse + lpResponse;
 
             // Map dB to y (0dB at center, +/-24dB at edges)
@@ -2012,26 +2321,13 @@ class DegradeController {
         }
         ctx.stroke();
 
-        // Draw HP and LP cutoff markers
-        ctx.fillStyle = '#66bb6a';
-        ctx.font = '9px "JetBrains Mono", monospace';
-
-        // HP marker
-        const hpX = this.freqToX(this.hpFreq, width);
-        ctx.fillStyle = 'rgba(102, 187, 106, 0.3)';
-        ctx.fillRect(0, 0, hpX, height);
-
-        // LP marker
-        const lpX = this.freqToX(this.lpFreq, width);
-        ctx.fillStyle = 'rgba(102, 187, 106, 0.3)';
-        ctx.fillRect(lpX, 0, width - lpX, height);
-
         // Frequency labels
         ctx.fillStyle = '#444';
+        ctx.font = '8px "JetBrains Mono", monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('100', this.freqToX(100, width), height - 3);
-        ctx.fillText('1k', this.freqToX(1000, width), height - 3);
-        ctx.fillText('10k', this.freqToX(10000, width), height - 3);
+        ctx.fillText('100', this.freqToX(100, width), height - 2);
+        ctx.fillText('1k', this.freqToX(1000, width), height - 2);
+        ctx.fillText('10k', this.freqToX(10000, width), height - 2);
     }
 
     // Convert frequency to X position (logarithmic scale, 20Hz to 20kHz)
@@ -2159,35 +2455,74 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Loop Speed: 0.25x - 4.0x (center = 1.0x), default 1.0x
-    // At normalized 0.5: 0.25 * 16^0.5 = 0.25 * 4 = 1.0x
+    // Loop Speed: 0.5x - 2.0x (center = 1.0x), default 1.0x
+    // Speed maps to semitones: -12st (0.5x) to +12st (2.0x), where speed = 2^(semitones/12)
+    // Chromatic scale values for speed dropdown
+    const speedToSemitone = (speed) => 12 * Math.log2(speed);
+    const semitoneToSpeed = (st) => Math.pow(2, st / 12);
+
     loopSpeedKnob = new KnobController('loopSpeed-knob', 'loopSpeed', {
         formatValue: (v) => {
-            // Map 0-1 to 0.25-4.0 with center at 1.0
-            // Using exponential mapping: 0.25 * 16^v = 0.25 to 4.0
-            const speed = 0.25 * Math.pow(16, v);
+            // Map 0-1 to 0.5-2.0 speed ratio (exponential)
+            // At v=0: 0.5x (-12st), at v=0.5: 1.0x (0st), at v=1: 2.0x (+12st)
+            const speed = 0.5 * Math.pow(4, v);  // 0.5 * 4^v gives 0.5 to 2.0
+            const semitones = speedToSemitone(speed);
+            const roundedSt = Math.round(semitones);
+            const sign = roundedSt >= 0 ? '+' : '';
+            // Show semitone when close to chromatic value, otherwise show multiplier
+            if (Math.abs(semitones - roundedSt) < 0.1) {
+                if (roundedSt === -12) return '-12st (½x)';
+                if (roundedSt === 12) return '+12st (2x)';
+                if (roundedSt === 0) return '0st (1x)';
+                return `${sign}${roundedSt}st`;
+            }
             return `${speed.toFixed(2)}x`;
         },
-        defaultValue: 0.5  // Default to 1.0x speed
+        defaultValue: 0.5  // Default to 1.0x speed (0 semitones)
     });
 
     // Speed preset dropdown - sets speed based on musical intervals
     const speedPresetSelect = document.getElementById('speed-preset-select');
+    const speedState = getSliderState('loopSpeed');
+
     if (speedPresetSelect) {
         speedPresetSelect.addEventListener('change', (e) => {
             const speedValue = parseFloat(e.target.value);
             if (!isNaN(speedValue) && speedValue > 0) {
-                // Convert speed to normalized value: v = log(speed/0.25) / log(16)
-                const normalized = Math.log(speedValue / 0.25) / Math.log(16);
+                // Convert speed to normalized value: v = log2(speed/0.5) / log2(4)
+                // Since speed = 0.5 * 4^v, then v = log2(speed/0.5) / 2
+                const normalized = Math.log2(speedValue / 0.5) / 2;
                 const clamped = Math.max(0, Math.min(1, normalized));
 
                 // Update the knob AND send to JUCE
                 if (loopSpeedKnob) {
                     loopSpeedKnob.setValue(clamped);
-                    loopSpeedKnob.sendToJuce();  // This was missing!
+                    loopSpeedKnob.sendToJuce();
                 }
 
                 console.log(`[SPEED] Preset selected: ${speedValue}x (normalized: ${clamped.toFixed(3)})`);
+            }
+        });
+
+        // When knob/parameter changes, update dropdown to nearest chromatic value
+        speedState.valueChangedEvent.addListener(() => {
+            const normalized = speedState.getNormalisedValue();
+            // Convert normalized to speed: 0.5 * 4^v
+            const speed = 0.5 * Math.pow(4, normalized);
+            // Find closest dropdown option
+            let closestOption = speedPresetSelect.options[0];
+            let closestDiff = Infinity;
+            for (let opt of speedPresetSelect.options) {
+                const optSpeed = parseFloat(opt.value);
+                const diff = Math.abs(optSpeed - speed);
+                if (diff < closestDiff) {
+                    closestDiff = diff;
+                    closestOption = opt;
+                }
+            }
+            // Only update if reasonably close to a chromatic value
+            if (closestDiff < 0.02) {
+                speedPresetSelect.value = closestOption.value;
             }
         });
     }

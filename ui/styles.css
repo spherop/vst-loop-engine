@@ -780,6 +780,58 @@ html, body {
     line-height: 1;
 }
 
+/* Solo indicator */
+.layer-btn.soloed::before {
+    content: 'S';
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    font-size: 7px;
+    font-weight: bold;
+    color: #ffeb3b;
+    background: #1a1a1a;
+    border: 1px solid #ffeb3b;
+    border-radius: 2px;
+    padding: 0 2px;
+    line-height: 1;
+    z-index: 10;
+}
+
+/* ============================================
+   FLATTEN BUTTON
+   ============================================ */
+
+.flatten-btn {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    color: #666666;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin-left: 4px;
+}
+
+.flatten-btn:hover {
+    border-color: var(--looper-accent);
+    color: var(--looper-accent);
+    background: rgba(79, 195, 247, 0.1);
+}
+
+.flatten-btn:active {
+    background: rgba(79, 195, 247, 0.2);
+    transform: scale(0.95);
+}
+
+.flatten-icon {
+    font-size: 12px;
+    font-weight: bold;
+}
+
 /* ============================================
    SPEED PRESET DROPDOWN
    ============================================ */
@@ -1682,6 +1734,28 @@ html, body {
     border-color: var(--degrade-accent);
     color: #0a0a0a;
     box-shadow: 0 0 6px var(--degrade-accent-glow);
+}
+
+/* Filter label toggle (clickable HP/LP labels) */
+.filter-label {
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+}
+
+.filter-label.active {
+    color: var(--degrade-accent);
+    text-shadow: 0 0 6px var(--degrade-accent-glow);
+}
+
+.filter-label:not(.active) {
+    color: #444;
+    text-decoration: line-through;
+}
+
+.filter-label:hover {
+    background: rgba(102, 187, 106, 0.1);
 }
 
 /* Small section LED */

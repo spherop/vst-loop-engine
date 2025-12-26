@@ -335,6 +335,20 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       }
                       complete({});
                   })
+                  .withNativeFunction("deleteLayer", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          processorRef.getLoopEngine().deleteLayer(layer);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("flattenLayers", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().flattenLayers();
+                      complete({});
+                  })
                   .withNativeFunction("getLayerContentStates", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       const auto& loopEngine = processorRef.getLoopEngine();
@@ -429,9 +443,10 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
 
     // Set default size to fit the full UI without scrolling
     // Two-column layout: looper left, degrade right (larger degrade panel)
-    setSize(750, 580);
+    // Increased 15% from 990x667 for more comfortable layout
+    setSize(1140, 767);
     setResizable(true, true);
-    setResizeLimits(700, 500, 1100, 900);
+    setResizeLimits(990, 667, 1600, 1150);
 
     // Start timer for BPM polling (100ms interval)
     startTimerHz(10);

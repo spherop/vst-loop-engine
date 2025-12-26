@@ -57,6 +57,8 @@ public:
         ringWritePos = 0;
         ringReadPos = 0;
         samplesInBuffer = 0;
+        pitchRatio = 1.0f;
+        targetPitchRatio = 1.0f;
         std::fill(ringBufferIn.begin(), ringBufferIn.end(), 0.0f);
         std::fill(ringBufferOut.begin(), ringBufferOut.end(), 0.0f);
     }
@@ -66,7 +68,14 @@ public:
         if (!prepared)
             return;
 
-        pitchRatio = std::clamp(ratio, 0.25f, 4.0f);
+        float newRatio = std::clamp(ratio, 0.25f, 4.0f);
+
+        // Smooth pitch ratio changes to prevent clicking
+        // Use a simple exponential smoothing with a fast response
+        const float smoothingCoeff = 0.995f;  // Fast but smooth
+        targetPitchRatio = newRatio;
+        pitchRatio = pitchRatio * smoothingCoeff + targetPitchRatio * (1.0f - smoothingCoeff);
+
         stretch.setTransposeFactor(pitchRatio);
     }
 
@@ -109,6 +118,7 @@ private:
 
     double sampleRate = 44100.0;
     float pitchRatio = 1.0f;
+    float targetPitchRatio = 1.0f;  // Target for smoothing
     bool prepared = false;  // Track if prepare() has been called
 
     signalsmith::stretch::SignalsmithStretch<float> stretch;
@@ -148,12 +158,13 @@ private:
         // Process through Signalsmith
         stretch.process(inPtrs, inputSamples, outPtrs, outputSamples);
 
-        // Copy output to output ring buffer
+        // Copy output to output ring buffer using overlap-add
         // Note: output comes with latency, so we offset the write position
         int outWritePos = (ringReadPos + totalLatency) % RING_BUFFER_SIZE;
         for (int i = 0; i < outputSamples; ++i)
         {
-            ringBufferOut[(outWritePos + i) % RING_BUFFER_SIZE] += outputBuffer[0][i];
+            int idx = (outWritePos + i) % RING_BUFFER_SIZE;
+            ringBufferOut[idx] += outputBuffer[0][i];
         }
 
         samplesInBuffer = 0;  // Reset counter

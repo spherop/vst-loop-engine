@@ -132,11 +132,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         "Loop Reverse",
         false));
 
-    // Pitch shift: -12 to +12 semitones, with 0 at center
+    // Pitch shift: -24 to +24 semitones (2 octaves), with 0 at center
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"loopPitch", 1},
         "Loop Pitch",
-        juce::NormalisableRange<float>(-12.0f, 12.0f, 0.1f),
+        juce::NormalisableRange<float>(-24.0f, 24.0f, 0.1f),
         0.0f,
         juce::AudioParameterFloatAttributes().withLabel("st")));
 

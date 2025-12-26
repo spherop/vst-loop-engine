@@ -158,7 +158,18 @@ public:
 
     void play()
     {
-        // Play all layers that have content
+        LoopBuffer::State currentState = getCurrentState();
+
+        // If currently overdubbing, just stop the overdub (smooth transition)
+        // Don't restart playback - keep position and continue playing
+        if (currentState == LoopBuffer::State::Overdubbing)
+        {
+            DBG("play() - Stopping overdub on layer " + juce::String(currentLayer) + " (smooth transition)");
+            layers[currentLayer].stopOverdub();
+            return;
+        }
+
+        // Otherwise, start/restart playback of all layers
         for (int i = 0; i <= highestLayer; ++i)
         {
             if (layers[i].hasContent())
@@ -204,6 +215,72 @@ public:
         }
 
         // If no layers have content, reset master loop length
+        bool anyContent = false;
+        for (int i = 0; i < NUM_LAYERS; ++i)
+        {
+            if (layers[i].hasContent())
+            {
+                anyContent = true;
+                break;
+            }
+        }
+        if (!anyContent)
+        {
+            masterLoopLength = 0;
+            highestLayer = 0;
+            currentLayer = 0;
+        }
+    }
+
+    // Delete a specific layer and shuffle all subsequent layers down (1-indexed for UI)
+    // This "clips out" the layer so layers after it move to fill the gap
+    void deleteLayer(int layer)
+    {
+        int idx = layer - 1;  // Convert to 0-indexed
+        if (idx < 0 || idx >= NUM_LAYERS)
+            return;
+
+        DBG("deleteLayer() - Deleting layer " + juce::String(layer) + " and shuffling");
+
+        // Clear the target layer
+        layers[idx].clear();
+
+        // Shuffle all subsequent layers down by one
+        for (int i = idx; i < NUM_LAYERS - 1; ++i)
+        {
+            if (layers[i + 1].hasContent())
+            {
+                // Copy content from layer i+1 to layer i
+                layers[i].copyFrom(layers[i + 1]);
+                layers[i + 1].clear();
+                DBG("  Moved layer " + juce::String(i + 2) + " to layer " + juce::String(i + 1));
+            }
+        }
+
+        // Recalculate highest layer
+        highestLayer = 0;
+        for (int i = NUM_LAYERS - 1; i >= 0; --i)
+        {
+            if (layers[i].hasContent())
+            {
+                highestLayer = i;
+                break;
+            }
+        }
+
+        // Adjust current layer if it was above the deleted layer
+        if (currentLayer > idx && currentLayer > 0)
+        {
+            currentLayer--;
+        }
+        // If current layer was the deleted one, stay at same index (now has different content)
+        // but clamp to valid range
+        if (currentLayer > highestLayer)
+        {
+            currentLayer = highestLayer;
+        }
+
+        // If no layers have content, reset everything
         bool anyContent = false;
         for (int i = 0; i < NUM_LAYERS; ++i)
         {
@@ -269,23 +346,38 @@ public:
             // This "commits" the undo - you can no longer redo after recording new content
             clearUndoneLayers();
 
-            // Create a NEW layer for overdub (Blooper-style)
-            // Each overdub creates a separate layer that can be undone
-            if (highestLayer < NUM_LAYERS - 1)
+            // Check if current layer already has content
+            // If it does, create a NEW layer for overdub (Blooper-style)
+            // If it's empty, overdub on the current layer (no new layer creation)
+            if (layers[currentLayer].hasContent())
             {
-                // Get current playhead from layer 0 to sync new layer
-                float masterPlayhead = layers[0].getRawPlayhead();
+                // Current layer has content - create new layer
+                if (highestLayer < NUM_LAYERS - 1)
+                {
+                    // Get current playhead from layer 0 to sync new layer
+                    float masterPlayhead = layers[0].getRawPlayhead();
 
-                currentLayer = highestLayer + 1;
-                highestLayer = currentLayer;
-                DBG("Starting overdub on NEW layer " + juce::String(currentLayer) +
-                    " syncing playhead to " + juce::String(masterPlayhead));
-                layers[currentLayer].startOverdubOnNewLayer(masterLoopLength);
-                layers[currentLayer].setPlayhead(masterPlayhead);
+                    currentLayer = highestLayer + 1;
+                    highestLayer = currentLayer;
+                    DBG("Starting overdub on NEW layer " + juce::String(currentLayer) +
+                        " syncing playhead to " + juce::String(masterPlayhead));
+                    layers[currentLayer].startOverdubOnNewLayer(masterLoopLength);
+                    layers[currentLayer].setPlayhead(masterPlayhead);
+                }
+                else
+                {
+                    DBG("Cannot overdub - max layers reached");
+                }
             }
             else
             {
-                DBG("Cannot overdub - max layers reached");
+                // Current layer is empty - overdub on this layer (don't create new)
+                float masterPlayhead = layers[0].getRawPlayhead();
+                DBG("Starting overdub on EXISTING empty layer " + juce::String(currentLayer) +
+                    " syncing playhead to " + juce::String(masterPlayhead));
+                layers[currentLayer].startOverdubOnNewLayer(masterLoopLength);
+                layers[currentLayer].setPlayhead(masterPlayhead);
+                highestLayer = std::max(highestLayer, currentLayer);
             }
         }
         else if (currentState == LoopBuffer::State::Overdubbing)
@@ -766,15 +858,28 @@ public:
     }
 
     // Get per-layer waveform data for colored visualization
-    // NOTE: Does NOT normalize waveforms so fade effect is visible
+    // Preserves absolute fade levels - faded audio shows as smaller waveforms
     std::vector<std::vector<float>> getLayerWaveforms(int numPoints) const
     {
         std::vector<std::vector<float>> layerWaveforms;
 
-        // First pass: collect all waveforms and find global max for consistent scaling
-        float globalMax = 0.0f;
-        std::vector<std::vector<float>> rawWaveforms;
+        // Find the ORIGINAL (unfaded) max across all layers for consistent baseline scaling
+        // We need to know what the max WOULD be at full volume to scale properly
+        float originalMax = 0.0f;
 
+        for (int i = 0; i <= highestLayer; ++i)
+        {
+            bool isRecording = (layers[i].getState() == LoopBuffer::State::Recording);
+            if (layers[i].hasContent() || isRecording)
+            {
+                // Get the raw buffer max (before fade multiplier)
+                float layerMax = layers[i].getBufferPeakLevel();
+                originalMax = std::max(originalMax, layerMax);
+            }
+        }
+
+        // Now collect waveforms (which have fade applied) and scale by original max
+        // This way, a layer at 50% fade will show at 50% height relative to its original peak
         for (int i = 0; i <= highestLayer; ++i)
         {
             bool isRecording = (layers[i].getState() == LoopBuffer::State::Recording);
@@ -782,33 +887,22 @@ public:
             {
                 auto waveform = layers[i].getWaveformData(numPoints);
 
-                // Track global max across all layers (before fade was applied in getWaveformData)
-                // But waveform already has fade applied, so this gives us the faded max
-                for (float val : waveform)
+                // Scale by original max so fade effect is visible
+                // If originalMax is 1.0 and fadeMultiplier is 0.5, waveform values will be ~0.5
+                if (originalMax > 0.0f)
                 {
-                    globalMax = std::max(globalMax, std::abs(val));
+                    for (float& val : waveform)
+                    {
+                        val /= originalMax;
+                    }
                 }
 
-                rawWaveforms.push_back(waveform);
+                layerWaveforms.push_back(waveform);
             }
             else
             {
-                rawWaveforms.push_back(std::vector<float>(numPoints, 0.0f));
+                layerWaveforms.push_back(std::vector<float>(numPoints, 0.0f));
             }
-        }
-
-        // Second pass: normalize ALL layers by the same global max
-        // This preserves relative fade levels between layers
-        for (auto& waveform : rawWaveforms)
-        {
-            if (globalMax > 0.0f)
-            {
-                for (float& val : waveform)
-                {
-                    val /= globalMax;
-                }
-            }
-            layerWaveforms.push_back(waveform);
         }
 
         return layerWaveforms;
@@ -853,6 +947,76 @@ public:
     bool getInputMuted() const { return inputMuted.load(); }
     float getInputLevelL() const { return inputLevelL.load(); }
     float getInputLevelR() const { return inputLevelR.load(); }
+
+    // Flatten all non-muted layers into layer 1
+    // This sums all active layer buffers into layer 1 and clears the others
+    // SEAMLESS: preserves playhead position and continues playback without interruption
+    void flattenLayers()
+    {
+        if (masterLoopLength <= 0 || !layers[0].hasContent())
+        {
+            DBG("flattenLayers() - Nothing to flatten");
+            return;
+        }
+
+        // Only flatten if there's more than one layer
+        if (highestLayer == 0)
+        {
+            DBG("flattenLayers() - Only one layer, nothing to flatten");
+            return;
+        }
+
+        DBG("flattenLayers() - Flattening " + juce::String(highestLayer + 1) + " layers into layer 1 (seamless)");
+
+        // Capture current playback state BEFORE modifying anything
+        const float savedPlayhead = layers[0].getRawPlayhead();
+        const LoopBuffer::State savedState = layers[0].getState();
+        const bool wasPlaying = (savedState == LoopBuffer::State::Playing ||
+                                  savedState == LoopBuffer::State::Overdubbing);
+
+        DBG("  Saved playhead: " + juce::String(savedPlayhead) + " state: " + juce::String(static_cast<int>(savedState)));
+
+        // Create a temporary buffer to accumulate all layers
+        const int numChannels = 2;  // Stereo
+        juce::AudioBuffer<float> flattenedBuffer(numChannels, masterLoopLength);
+        flattenedBuffer.clear();
+
+        // Sum all non-muted layers
+        for (int i = 0; i <= highestLayer; ++i)
+        {
+            if (!layers[i].getMuted() && layers[i].hasContent())
+            {
+                // Get this layer's buffer and add to flattened
+                layers[i].addToBuffer(flattenedBuffer);
+                DBG("  Added layer " + juce::String(i + 1));
+            }
+        }
+
+        // Soft clip the summed buffer to prevent clipping
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            float* data = flattenedBuffer.getWritePointer(ch);
+            for (int s = 0; s < masterLoopLength; ++s)
+            {
+                data[s] = softClip(data[s]);
+            }
+        }
+
+        // Clear layers 1+ (not layer 0 yet - we'll replace its buffer in place)
+        for (int i = 1; i < NUM_LAYERS; ++i)
+        {
+            layers[i].clear();
+        }
+
+        // Replace layer 0's buffer content in-place while preserving playback state
+        layers[0].setFromBufferSeamless(flattenedBuffer, masterLoopLength, savedPlayhead, savedState);
+
+        // Reset state
+        currentLayer = 0;
+        highestLayer = 0;
+
+        DBG("flattenLayers() - Complete, layer 1 now contains flattened audio, playback continues at " + juce::String(savedPlayhead));
+    }
 
     // Get target loop length in samples (0 = unlimited)
     int getTargetLoopLengthSamples() const
