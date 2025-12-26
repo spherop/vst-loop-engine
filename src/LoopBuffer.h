@@ -37,11 +37,18 @@ public:
         }
 
         currentSampleRate = sampleRate;
+        currentBlockSize = samplesPerBlock;
         maxLoopSamples = static_cast<int>(MAX_LOOP_SECONDS * sampleRate);
 
         // Pre-allocate buffers
         bufferL.resize(maxLoopSamples, 0.0f);
         bufferR.resize(maxLoopSamples, 0.0f);
+
+        // Pre-allocate pitch processing buffers for block-based processing
+        pitchInputL.resize(samplesPerBlock * 2, 0.0f);
+        pitchInputR.resize(samplesPerBlock * 2, 0.0f);
+        pitchOutputL.resize(samplesPerBlock * 2, 0.0f);
+        pitchOutputR.resize(samplesPerBlock * 2, 0.0f);
 
         // Reset state
         clear();
@@ -56,7 +63,10 @@ public:
         fadeSmoothed.reset(sampleRate, 0.1);  // 100ms smoothing for fade
         fadeSmoothed.setCurrentAndTargetValue(1.0f);  // Default to 100% (no fade)
 
-        // Prepare phase vocoder for high-quality pitch shifting during playback
+        // Prepare block-based phase vocoder for efficient pitch shifting
+        blockPitchShifter.prepare(sampleRate, samplesPerBlock);
+
+        // Keep legacy sample-by-sample vocoder for compatibility
         phaseVocoder.prepare(sampleRate);
 
         // Initialize granular pitch shifter grains (for monitoring/lower latency)
@@ -84,6 +94,7 @@ public:
         lastPlayheadPosition = 0.0f;
 
         // Reset pitch shifters
+        blockPitchShifter.reset();
         phaseVocoder.reset();
         initGrains();
     }
@@ -113,6 +124,7 @@ public:
         lastPlayheadPosition = other.lastPlayheadPosition;
 
         // Reset pitch shifters (they have internal state that shouldn't be copied)
+        blockPitchShifter.reset();
         phaseVocoder.reset();
         initGrains();
 
@@ -365,7 +377,8 @@ public:
     void stop()
     {
         state.store(State::Idle);
-        // Reset pitch shifter to prevent latent audio from continuing
+        // Reset pitch shifters to prevent latent audio from continuing
+        blockPitchShifter.reset();
         phaseVocoder.reset();
         // Reset playhead so any subsequent reads return silence until play() is called
         playHead = 0.0f;
@@ -488,6 +501,14 @@ public:
 
         State currentState = state.load();
 
+        // For Playing state with pitch shifting, use optimized block processing
+        if (currentState == State::Playing && loopLength > 0)
+        {
+            processPlayingBlock(buffer);
+            return;
+        }
+
+        // For other states, use sample-by-sample processing
         for (int i = 0; i < numSamples; ++i)
         {
             const float inputL = leftChannel[i];
@@ -503,7 +524,9 @@ public:
                     break;
 
                 case State::Playing:
-                    processPlaying(inputL, inputR, outputL, outputR);
+                    // Fallback for edge cases (loopLength <= 0)
+                    outputL = inputL;
+                    outputR = inputR;
                     break;
 
                 case State::Overdubbing:
@@ -521,6 +544,186 @@ public:
             leftChannel[i] = outputL;
             if (rightChannel)
                 rightChannel[i] = outputR;
+        }
+    }
+
+    // Block-optimized playing - processes entire buffer at once for efficiency
+    void processPlayingBlock(juce::AudioBuffer<float>& buffer)
+    {
+        const int numSamples = buffer.getNumSamples();
+        float* leftChannel = buffer.getWritePointer(0);
+        float* rightChannel = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
+
+        // Ensure pitch buffers are large enough
+        if (static_cast<int>(pitchInputL.size()) < numSamples)
+        {
+            pitchInputL.resize(numSamples, 0.0f);
+            pitchInputR.resize(numSamples, 0.0f);
+            pitchOutputL.resize(numSamples, 0.0f);
+            pitchOutputR.resize(numSamples, 0.0f);
+        }
+
+        // Get pitch ratio for this block (read once, not per-sample)
+        float pitchRatio = pitchRatioSmoothed.getTargetValue();
+        const float pitchDistance = std::abs(pitchRatio - 1.0f);
+        const bool isPitchShifting = pitchDistance >= 0.002f;
+
+        // Fade handling (simplified for block processing)
+        const float fadeTarget = fadeSmoothed.getTargetValue();
+        float fadeToApply = currentFadeMultiplier.load();
+
+        // Calculate effective loop bounds
+        const int effectiveStart = loopStart;
+        const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
+        const int effectiveLength = effectiveEnd - effectiveStart;
+
+        if (effectiveLength <= 0)
+        {
+            // No valid loop - pass through input
+            return;
+        }
+
+        // Phase 1: Read raw loop audio for entire block
+        for (int i = 0; i < numSamples; ++i)
+        {
+            // Advance smoothed values to keep them in sync
+            pitchRatioSmoothed.getNextValue();
+            fadeSmoothed.getNextValue();
+
+            // Detect loop wrap for fade
+            const float currentPos = getPlayheadPosition();
+            const bool loopWrapped = detectLoopWrap(lastPlayheadPosition, currentPos);
+            lastPlayheadPosition = currentPos;
+
+            // Handle fade decay on loop wrap
+            if (fadeTarget >= 0.99f)
+            {
+                currentFadeMultiplier.store(1.0f);
+                fadeToApply = 1.0f;
+            }
+            else if (loopWrapped)
+            {
+                float invFade = 1.0f - fadeTarget;
+                float decayStrength = invFade * invFade;
+                float decayMultiplier = 1.0f - (decayStrength * 0.25f);
+                float targetMultiplier = fadeTarget;
+                float fadeMult = currentFadeMultiplier.load();
+
+                if (fadeMult < targetMultiplier)
+                {
+                    float recoveryRate = 0.15f;
+                    fadeMult += (targetMultiplier - fadeMult) * recoveryRate;
+                }
+                else
+                {
+                    fadeMult *= decayMultiplier;
+                }
+
+                currentFadeMultiplier.store(std::max(fadeMult, 0.001f));
+                fadeToApply = fadeMult;
+            }
+
+            // Read from loop buffer with crossfade handling
+            float rawL = 0.0f;
+            float rawR = 0.0f;
+
+            if (effectiveLength > CROSSFADE_SAMPLES * 2)
+            {
+                const float posInLoop = playHead - effectiveStart;
+                const float distToEnd = effectiveEnd - playHead;
+                const bool reversed = isReversed.load();
+
+                bool inCrossfadeRegion = false;
+                float crossfadeProgress = 0.0f;
+
+                if (!reversed && distToEnd < CROSSFADE_SAMPLES && distToEnd >= 0)
+                {
+                    inCrossfadeRegion = true;
+                    crossfadeProgress = distToEnd / static_cast<float>(CROSSFADE_SAMPLES);
+                }
+                else if (reversed && posInLoop < CROSSFADE_SAMPLES && posInLoop >= 0)
+                {
+                    inCrossfadeRegion = true;
+                    crossfadeProgress = posInLoop / static_cast<float>(CROSSFADE_SAMPLES);
+                }
+
+                if (inCrossfadeRegion)
+                {
+                    const float fadeOutGain = std::sin(crossfadeProgress * juce::MathConstants<float>::halfPi);
+                    const float fadeInGain = std::cos(crossfadeProgress * juce::MathConstants<float>::halfPi);
+
+                    float currentL = readWithInterpolation(bufferL, playHead) * fadeToApply * fadeOutGain;
+                    float currentR = readWithInterpolation(bufferR, playHead) * fadeToApply * fadeOutGain;
+
+                    float wrappedPos;
+                    if (!reversed)
+                        wrappedPos = effectiveStart + (CROSSFADE_SAMPLES - distToEnd);
+                    else
+                        wrappedPos = effectiveEnd - (CROSSFADE_SAMPLES - posInLoop);
+
+                    float wrapL = readWithInterpolation(bufferL, wrappedPos) * fadeToApply * fadeInGain;
+                    float wrapR = readWithInterpolation(bufferR, wrappedPos) * fadeToApply * fadeInGain;
+
+                    rawL = currentL + wrapL;
+                    rawR = currentR + wrapR;
+                }
+                else
+                {
+                    rawL = readWithInterpolation(bufferL, playHead) * fadeToApply;
+                    rawR = readWithInterpolation(bufferR, playHead) * fadeToApply;
+                }
+            }
+            else
+            {
+                rawL = readWithInterpolation(bufferL, playHead) * fadeToApply;
+                rawR = readWithInterpolation(bufferR, playHead) * fadeToApply;
+            }
+
+            pitchInputL[i] = rawL;
+            pitchInputR[i] = rawR;
+
+            // Advance playhead
+            advancePlayhead(false);
+        }
+
+        // Phase 2: Apply pitch shifting to entire block at once (THE KEY OPTIMIZATION)
+        if (isPitchShifting)
+        {
+            blockPitchShifter.setPitchRatio(pitchRatio);
+            blockPitchShifter.processBlock(pitchInputL.data(), pitchInputR.data(),
+                                           pitchOutputL.data(), pitchOutputR.data(), numSamples);
+
+            // Crossfade near unity for smooth transition
+            if (pitchDistance < 0.01f)
+            {
+                float crossfade = pitchDistance / 0.01f;
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    pitchOutputL[i] = pitchInputL[i] * (1.0f - crossfade) + pitchOutputL[i] * crossfade;
+                    pitchOutputR[i] = pitchInputR[i] * (1.0f - crossfade) + pitchOutputR[i] * crossfade;
+                }
+            }
+
+            wasPitchShifting = true;
+        }
+        else
+        {
+            // No pitch shift - bypass
+            if (wasPitchShifting)
+            {
+                blockPitchShifter.reset();
+                wasPitchShifting = false;
+            }
+            std::copy(pitchInputL.begin(), pitchInputL.begin() + numSamples, pitchOutputL.begin());
+            std::copy(pitchInputR.begin(), pitchInputR.begin() + numSamples, pitchOutputR.begin());
+        }
+
+        // Phase 3: Mix with input and write to output buffer
+        for (int i = 0; i < numSamples; ++i)
+        {
+            leftChannel[i] = pitchOutputL[i] + leftChannel[i];
+            if (rightChannel)
+                rightChannel[i] = pitchOutputR[i] + rightChannel[i];
         }
     }
 
@@ -635,6 +838,7 @@ private:
 
     int maxLoopSamples = 0;
     double currentSampleRate = 44100.0;
+    int currentBlockSize = 512;
 
     // Position tracking
     int writeHead = 0;
@@ -667,7 +871,16 @@ private:
     std::atomic<float> currentFadeMultiplier { 1.0f };  // Current fade level (starts at 1.0, decays each loop)
     float lastPlayheadPosition = 0.0f;   // For detecting loop boundary crossings
 
-    // FFT Phase Vocoder for high-quality pitch shifting during playback
+    // Block-based pitch shifter (efficient, processes entire blocks)
+    StereoBlockPitchShifter blockPitchShifter;
+
+    // Pre-allocated buffers for block-based pitch processing
+    std::vector<float> pitchInputL;
+    std::vector<float> pitchInputR;
+    std::vector<float> pitchOutputL;
+    std::vector<float> pitchOutputR;
+
+    // Legacy sample-by-sample phase vocoder (kept for compatibility)
     StereoPhaseVocoder phaseVocoder;
 
     void initGrains()

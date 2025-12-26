@@ -360,6 +360,38 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       }
                       complete(contentArray);
                   })
+                  .withNativeFunction("getAudioDiagnostics", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      // Return diagnostic data for debugging audio issues
+                      auto& loopEngine = processorRef.getLoopEngine();
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+
+                      // Peak levels (before soft clipping)
+                      result->setProperty("preClipPeakL", loopEngine.getPreClipPeakL());
+                      result->setProperty("preClipPeakR", loopEngine.getPreClipPeakR());
+                      result->setProperty("loopOutputPeakL", loopEngine.getLoopOutputPeakL());
+                      result->setProperty("loopOutputPeakR", loopEngine.getLoopOutputPeakR());
+
+                      // Clip event count
+                      result->setProperty("clipEventCount", loopEngine.getClipEventCount());
+
+                      // Per-layer clip counts
+                      juce::Array<juce::var> layerClips;
+                      for (int i = 0; i < 8; ++i)
+                      {
+                          layerClips.add(loopEngine.getLayerClipCount(i));
+                      }
+                      result->setProperty("layerClipCounts", layerClips);
+
+                      complete(juce::var(result.get()));
+                  })
+                  .withNativeFunction("resetAudioDiagnostics", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      auto& loopEngine = processorRef.getLoopEngine();
+                      loopEngine.resetClipEventCount();
+                      loopEngine.resetLayerClipCounts();
+                      complete({});
+                  })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },
                       juce::URL("http://localhost/").getOrigin())),

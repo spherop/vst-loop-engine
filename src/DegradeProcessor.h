@@ -923,11 +923,30 @@ private:
 
         // Calculate read position based on scatter
         // scatter 0 = read from recent audio (near write position)
-        // scatter 1 = read from anywhere in the buffer
-        float basePos = static_cast<float>(textureWritePos) - grain.grainLength;
-        float scatterRange = static_cast<float>(std::min(textureBufferFilled, TEXTURE_BUFFER_SIZE)) * 0.8f * scatter;
-        float randomOffset = (textureRandom.nextFloat() * 2.0f - 1.0f) * scatterRange;
-        grain.readPosL = wrapBufferPos(basePos + randomOffset);
+        // scatter 1 = read from far back in the buffer (up to full buffer length)
+        //
+        // Key insight: To make scatter audible, we need to read from OLD audio,
+        // not just randomly offset recent audio. At high scatter, we pull in
+        // audio from seconds ago, creating obvious time-displacement effects.
+
+        const float filledSamples = static_cast<float>(std::min(textureBufferFilled, TEXTURE_BUFFER_SIZE));
+
+        // Base offset from write position: how far back do we start looking?
+        // scatter 0 = just behind write head (very recent audio)
+        // scatter 1 = anywhere in the entire filled buffer (up to 5+ seconds ago)
+        float minLookback = grain.grainLength + 100.0f;  // At least grain length + safety margin
+        float maxLookback = filledSamples * 0.95f;       // Up to 95% of filled buffer
+
+        // Non-linear curve: scatter has more impact at higher values
+        float scatterCurve = scatter * scatter;  // Quadratic curve for more dramatic high-end
+        float baseLookback = lerp(minLookback, maxLookback, scatterCurve);
+
+        // Add random variation around the base lookback
+        // At high scatter, this creates different grains reading from very different times
+        float randomVariation = (textureRandom.nextFloat() * 2.0f - 1.0f) * baseLookback * 0.5f;
+        float totalLookback = std::clamp(baseLookback + randomVariation, minLookback, maxLookback);
+
+        grain.readPosL = wrapBufferPos(static_cast<float>(textureWritePos) - totalLookback);
         grain.readPosR = grain.readPosL;  // Same position for stereo coherence
 
         // Per-grain variation based on motion

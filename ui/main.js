@@ -1629,33 +1629,32 @@ class LooperController {
                 // Check if clicking DUB will add a new layer (current layer has content)
                 const willAddLayer = this.layerContentStates[this.currentLayer - 1];
                 if (this.recLabel) this.recLabel.textContent = willAddLayer ? 'DUB+' : 'DUB';
-                // Color the DUB+ button with the next layer's color
-                if (willAddLayer && this.highestLayer < 7) {
-                    const nextLayerColor = this.layerColors[this.highestLayer];  // highestLayer is 0-indexed, so this is the next one
+                // Color the DUB button with the CURRENT layer's color (not next)
+                if (willAddLayer) {
+                    const currentLayerColor = this.layerColors[this.currentLayer - 1];  // currentLayer is 1-indexed
                     if (this.recBtn) {
-                        this.recBtn.style.borderColor = nextLayerColor;
-                        this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
+                        this.recBtn.style.borderColor = currentLayerColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${currentLayerColor}60`;
                     }
                     if (this.recLabel) {
-                        this.recLabel.style.color = nextLayerColor;
+                        this.recLabel.style.color = currentLayerColor;
                     }
                 }
                 break;
             case 'overdubbing':
                 if (this.recBtn) this.recBtn.classList.add('active');
-                // Check if clicking DUB again will add a new layer (current layer already has content)
-                // This is true during overdubbing because we're currently writing to this layer
+                // During overdubbing, show DUB+ if we can add more layers, otherwise just DUB
                 const willAddLayerAfterOverdub = this.highestLayer < 7;  // Can still add if not at max
                 if (this.recLabel) this.recLabel.textContent = willAddLayerAfterOverdub ? 'DUB+' : 'DUB';
-                // Color the DUB+ button with the next layer's color
-                if (willAddLayerAfterOverdub) {
-                    const nextLayerColor = this.layerColors[this.highestLayer + 1];  // Next layer after current highest
+                // Color the DUB button with the CURRENT layer's color (not next)
+                {
+                    const currentLayerColor = this.layerColors[this.currentLayer - 1];  // currentLayer is 1-indexed
                     if (this.recBtn) {
-                        this.recBtn.style.borderColor = nextLayerColor;
-                        this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
+                        this.recBtn.style.borderColor = currentLayerColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${currentLayerColor}60`;
                     }
                     if (this.recLabel) {
-                        this.recLabel.style.color = nextLayerColor;
+                        this.recLabel.style.color = currentLayerColor;
                     }
                 }
                 break;
@@ -2421,6 +2420,144 @@ class DegradeController {
     }
 }
 
+// Audio Diagnostics Controller
+class DiagnosticsController {
+    constructor() {
+        this.panel = document.getElementById('diag-panel');
+        this.toggleBtn = document.getElementById('diag-toggle');
+        this.resetBtn = document.getElementById('diag-reset');
+
+        // Display elements
+        this.preClipL = document.getElementById('diag-preclip-l');
+        this.preClipR = document.getElementById('diag-preclip-r');
+        this.loopL = document.getElementById('diag-loop-l');
+        this.loopR = document.getElementById('diag-loop-r');
+        this.clipsEl = document.getElementById('diag-clips');
+        this.layerClipsContainer = document.getElementById('diag-layer-clips');
+
+        // Native functions
+        this.getDiagnosticsFn = getNativeFunction('getAudioDiagnostics');
+        this.resetDiagnosticsFn = getNativeFunction('resetAudioDiagnostics');
+
+        this.isVisible = false;
+        this.pollingInterval = null;
+
+        this.setupEvents();
+    }
+
+    setupEvents() {
+        if (this.toggleBtn) {
+            this.toggleBtn.addEventListener('click', () => this.toggle());
+        }
+        if (this.resetBtn) {
+            this.resetBtn.addEventListener('click', () => this.reset());
+        }
+    }
+
+    toggle() {
+        this.isVisible = !this.isVisible;
+        if (this.panel) {
+            this.panel.classList.toggle('hidden', !this.isVisible);
+        }
+
+        if (this.isVisible) {
+            this.startPolling();
+        } else {
+            this.stopPolling();
+        }
+    }
+
+    async reset() {
+        try {
+            await this.resetDiagnosticsFn();
+            console.log('[DIAG] Reset diagnostics');
+        } catch (e) {
+            console.error('[DIAG] Reset error:', e);
+        }
+    }
+
+    startPolling() {
+        if (this.pollingInterval) return;
+
+        this.pollingInterval = setInterval(async () => {
+            try {
+                const data = await this.getDiagnosticsFn();
+                if (data) {
+                    this.updateDisplay(data);
+                }
+            } catch (e) {
+                // Silently ignore
+            }
+        }, 100);
+    }
+
+    stopPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
+    }
+
+    updateDisplay(data) {
+        // Format value with color coding based on level
+        const formatLevel = (val) => {
+            const db = 20 * Math.log10(Math.max(val, 0.0001));
+            let color = 'text-green-400';
+            if (val > 1.0) color = 'text-red-500 font-bold';
+            else if (val > 0.9) color = 'text-yellow-400';
+            else if (val > 0.7) color = 'text-orange-400';
+
+            return { text: val.toFixed(2), color, db: db.toFixed(1) };
+        };
+
+        // Update pre-clip peaks
+        if (this.preClipL) {
+            const info = formatLevel(data.preClipPeakL);
+            this.preClipL.textContent = `${info.text} (${info.db}dB)`;
+            this.preClipL.className = `text-right ${info.color}`;
+        }
+        if (this.preClipR) {
+            const info = formatLevel(data.preClipPeakR);
+            this.preClipR.textContent = `${info.text} (${info.db}dB)`;
+            this.preClipR.className = `text-right ${info.color}`;
+        }
+
+        // Update loop output peaks
+        if (this.loopL) {
+            const info = formatLevel(data.loopOutputPeakL);
+            this.loopL.textContent = `${info.text} (${info.db}dB)`;
+            this.loopL.className = `text-right ${info.color}`;
+        }
+        if (this.loopR) {
+            const info = formatLevel(data.loopOutputPeakR);
+            this.loopR.textContent = `${info.text} (${info.db}dB)`;
+            this.loopR.className = `text-right ${info.color}`;
+        }
+
+        // Update clip count
+        if (this.clipsEl) {
+            const clips = data.clipEventCount || 0;
+            this.clipsEl.textContent = clips.toLocaleString();
+            this.clipsEl.className = clips > 0 ? 'text-right text-red-500 font-bold' : 'text-right text-yellow-400';
+        }
+
+        // Update per-layer clip counts
+        if (this.layerClipsContainer && data.layerClipCounts) {
+            const spans = this.layerClipsContainer.querySelectorAll('span');
+            data.layerClipCounts.forEach((count, idx) => {
+                if (spans[idx]) {
+                    spans[idx].textContent = `${idx + 1}:${count}`;
+                    if (count > 0) {
+                        spans[idx].className = 'px-1 bg-red-900 text-red-300 rounded';
+                    } else {
+                        spans[idx].className = 'px-1 bg-fd-surface rounded';
+                    }
+                }
+            });
+        }
+    }
+}
+
 // Global BPM update function called from C++ timer
 window.updateBpmDisplay = function(bpm) {
     const bpmEl = document.getElementById('bpm-display');
@@ -2764,6 +2901,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Host transport sync
     new HostSyncController();
+
+    // Audio diagnostics panel
+    new DiagnosticsController();
 
     // Reverse toggle - setup handled in LooperController
     looperController.setupReverseButton();

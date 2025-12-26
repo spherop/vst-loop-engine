@@ -643,8 +643,38 @@
         <!-- Footer - Tempo Sync -->
         <footer class="py-2 px-4 border-t border-fd-border bg-fd-surface/50">
             <div class="flex items-center justify-between">
-                <!-- Version ticker -->
-                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.3.0</span>
+                <!-- Version ticker + Diagnostics toggle -->
+                <div class="flex items-center gap-2">
+                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.3.3</span>
+                    <button class="text-[8px] text-fd-text-dim hover:text-fd-accent transition-colors" id="diag-toggle" title="Toggle audio diagnostics">📊</button>
+                </div>
+                <!-- Diagnostic Panel (hidden by default) -->
+                <div id="diag-panel" class="hidden absolute bottom-10 left-2 bg-fd-card border border-fd-border rounded p-2 text-[9px] font-mono z-50 shadow-lg" style="min-width: 280px;">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="font-bold text-fd-accent">AUDIO DIAGNOSTICS</span>
+                        <button class="text-fd-text-dim hover:text-white" id="diag-reset">Reset</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-fd-text">
+                        <span>Pre-Clip Peak L:</span><span id="diag-preclip-l" class="text-right">0.00</span>
+                        <span>Pre-Clip Peak R:</span><span id="diag-preclip-r" class="text-right">0.00</span>
+                        <span>Loop Output L:</span><span id="diag-loop-l" class="text-right">0.00</span>
+                        <span>Loop Output R:</span><span id="diag-loop-r" class="text-right">0.00</span>
+                        <span class="text-yellow-400">Clip Events:</span><span id="diag-clips" class="text-right text-yellow-400">0</span>
+                    </div>
+                    <div class="mt-2 pt-2 border-t border-fd-border">
+                        <span class="text-fd-text-dim">Layer Clips:</span>
+                        <div class="flex gap-1 mt-1" id="diag-layer-clips">
+                            <span class="px-1 bg-fd-surface rounded">1:0</span>
+                            <span class="px-1 bg-fd-surface rounded">2:0</span>
+                            <span class="px-1 bg-fd-surface rounded">3:0</span>
+                            <span class="px-1 bg-fd-surface rounded">4:0</span>
+                            <span class="px-1 bg-fd-surface rounded">5:0</span>
+                            <span class="px-1 bg-fd-surface rounded">6:0</span>
+                            <span class="px-1 bg-fd-surface rounded">7:0</span>
+                            <span class="px-1 bg-fd-surface rounded">8:0</span>
+                        </div>
+                    </div>
+                </div>
                 <!-- Tempo controls -->
                 <div class="flex items-center gap-4">
                     <!-- Host Transport Sync LED -->

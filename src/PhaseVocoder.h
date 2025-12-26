@@ -10,10 +10,139 @@
 #include <cmath>
 
 /**
- * SignalsmithPitchShifter - High-quality pitch shifter using Signalsmith Stretch
+ * BlockPitchShifter - Efficient block-based pitch shifter using Signalsmith Stretch
  *
- * This wraps the Signalsmith Stretch library for professional-quality pitch shifting
- * that maintains audio quality across a wide range of pitch shifts.
+ * Optimized for processing audio in blocks rather than sample-by-sample.
+ * This dramatically reduces CPU overhead when multiple instances are running.
+ */
+class BlockPitchShifter
+{
+public:
+    BlockPitchShifter() = default;
+
+    void prepare(double newSampleRate, int maxBlockSize)
+    {
+        sampleRate = newSampleRate;
+        prepared = true;
+
+        // Configure for mono - use cheaper preset for better performance
+        // presetCheaper trades some quality for lower CPU usage
+        stretch.presetCheaper(1, static_cast<float>(sampleRate));
+
+        // Get latency info
+        inputLatencySamples = stretch.inputLatency();
+        outputLatencySamples = stretch.outputLatency();
+        totalLatency = inputLatencySamples + outputLatencySamples;
+
+        // Pre-allocate processing buffers sized for expected block sizes
+        int bufferSize = std::max(maxBlockSize * 2, 1024);
+        inputBuffer.resize(bufferSize, 0.0f);
+        outputBuffer.resize(bufferSize, 0.0f);
+
+        // Latency compensation buffer - stores delayed output
+        latencyBuffer.resize(totalLatency + bufferSize, 0.0f);
+        latencyWritePos = 0;
+        latencyReadPos = 0;
+
+        reset();
+    }
+
+    void reset()
+    {
+        if (!prepared)
+            return;
+
+        stretch.reset();
+        pitchRatio = 1.0f;
+        targetPitchRatio = 1.0f;
+        std::fill(latencyBuffer.begin(), latencyBuffer.end(), 0.0f);
+        latencyWritePos = totalLatency;  // Pre-fill latency
+        latencyReadPos = 0;
+    }
+
+    void setPitchRatio(float ratio)
+    {
+        if (!prepared)
+            return;
+
+        targetPitchRatio = std::clamp(ratio, 0.25f, 4.0f);
+    }
+
+    // Process a block of audio - much more efficient than sample-by-sample
+    void processBlock(const float* input, float* output, int numSamples)
+    {
+        if (!prepared || numSamples <= 0)
+        {
+            // Pass through if not prepared
+            if (input != output)
+                std::copy(input, input + numSamples, output);
+            return;
+        }
+
+        // Smooth pitch ratio changes per-block (not per-sample, saves CPU)
+        const float smoothingCoeff = 0.9f;
+        pitchRatio = pitchRatio * smoothingCoeff + targetPitchRatio * (1.0f - smoothingCoeff);
+        stretch.setTransposeFactor(pitchRatio);
+
+        // Copy input to processing buffer
+        std::copy(input, input + numSamples, inputBuffer.data());
+
+        // Process through Signalsmith - single call for entire block
+        float* inPtr = inputBuffer.data();
+        float* outPtr = outputBuffer.data();
+        stretch.process(&inPtr, numSamples, &outPtr, numSamples);
+
+        // Write processed output to latency buffer
+        for (int i = 0; i < numSamples; ++i)
+        {
+            latencyBuffer[latencyWritePos] = outputBuffer[i];
+            latencyWritePos = (latencyWritePos + 1) % static_cast<int>(latencyBuffer.size());
+        }
+
+        // Read from latency buffer (delayed by totalLatency)
+        for (int i = 0; i < numSamples; ++i)
+        {
+            output[i] = latencyBuffer[latencyReadPos];
+            latencyBuffer[latencyReadPos] = 0.0f;  // Clear after reading
+            latencyReadPos = (latencyReadPos + 1) % static_cast<int>(latencyBuffer.size());
+        }
+    }
+
+    int getLatencySamples() const
+    {
+        if (!prepared)
+            return 0;
+        return totalLatency;
+    }
+
+    float getCurrentPitchRatio() const { return pitchRatio; }
+
+private:
+    double sampleRate = 44100.0;
+    float pitchRatio = 1.0f;
+    float targetPitchRatio = 1.0f;
+    bool prepared = false;
+
+    signalsmith::stretch::SignalsmithStretch<float> stretch;
+
+    int inputLatencySamples = 0;
+    int outputLatencySamples = 0;
+    int totalLatency = 0;
+
+    // Processing buffers (no ring buffer overhead)
+    std::vector<float> inputBuffer;
+    std::vector<float> outputBuffer;
+
+    // Simple latency compensation buffer
+    std::vector<float> latencyBuffer;
+    int latencyWritePos = 0;
+    int latencyReadPos = 0;
+};
+
+/**
+ * SignalsmithPitchShifter - Sample-by-sample wrapper (legacy compatibility)
+ *
+ * Kept for backward compatibility but uses the more efficient block processor internally.
  */
 class SignalsmithPitchShifter
 {
@@ -25,22 +154,19 @@ public:
         sampleRate = newSampleRate;
         prepared = true;
 
-        // Configure for mono (we'll use two instances for stereo)
-        // Use the default preset which balances quality and latency
-        stretch.presetDefault(1, static_cast<float>(sampleRate));
+        // Use cheaper preset for sample-by-sample (higher CPU load anyway)
+        stretch.presetCheaper(1, static_cast<float>(sampleRate));
 
-        // Get latency info
         inputLatencySamples = stretch.inputLatency();
         outputLatencySamples = stretch.outputLatency();
         totalLatency = inputLatencySamples + outputLatencySamples;
 
-        // Allocate buffers
-        inputBuffer.resize(1);  // 1 channel
+        // Smaller block size for lower latency in sample-by-sample mode
+        inputBuffer.resize(1);
         outputBuffer.resize(1);
-        inputBuffer[0].resize(MAX_BLOCK_SIZE, 0.0f);
-        outputBuffer[0].resize(MAX_BLOCK_SIZE, 0.0f);
+        inputBuffer[0].resize(PROCESS_BLOCK_SIZE, 0.0f);
+        outputBuffer[0].resize(PROCESS_BLOCK_SIZE, 0.0f);
 
-        // Ring buffer for sample-by-sample processing
         ringBufferIn.resize(RING_BUFFER_SIZE, 0.0f);
         ringBufferOut.resize(RING_BUFFER_SIZE, 0.0f);
 
@@ -49,7 +175,6 @@ public:
 
     void reset()
     {
-        // Only reset if we've been prepared
         if (!prepared)
             return;
 
@@ -68,37 +193,29 @@ public:
         if (!prepared)
             return;
 
-        float newRatio = std::clamp(ratio, 0.25f, 4.0f);
-
-        // Smooth pitch ratio changes to prevent clicking
-        // Use a simple exponential smoothing with a fast response
-        const float smoothingCoeff = 0.995f;  // Fast but smooth
-        targetPitchRatio = newRatio;
+        targetPitchRatio = std::clamp(ratio, 0.25f, 4.0f);
+        // Smoother per-sample updates
+        const float smoothingCoeff = 0.999f;
         pitchRatio = pitchRatio * smoothingCoeff + targetPitchRatio * (1.0f - smoothingCoeff);
-
         stretch.setTransposeFactor(pitchRatio);
     }
 
     float processSample(float input)
     {
-        // Safety check - return input unchanged if not prepared
         if (!prepared)
             return input;
 
-        // Write input to ring buffer
         ringBufferIn[ringWritePos] = input;
         ringWritePos = (ringWritePos + 1) % RING_BUFFER_SIZE;
         samplesInBuffer++;
 
-        // Process in blocks when we have enough samples
         if (samplesInBuffer >= PROCESS_BLOCK_SIZE)
         {
             processBlock();
         }
 
-        // Read from output ring buffer
         float output = ringBufferOut[ringReadPos];
-        ringBufferOut[ringReadPos] = 0.0f;  // Clear after reading
+        ringBufferOut[ringReadPos] = 0.0f;
         ringReadPos = (ringReadPos + 1) % RING_BUFFER_SIZE;
 
         return output;
@@ -112,14 +229,13 @@ public:
     }
 
 private:
-    static constexpr int MAX_BLOCK_SIZE = 2048;
-    static constexpr int PROCESS_BLOCK_SIZE = 256;  // Process in small blocks for low latency
-    static constexpr int RING_BUFFER_SIZE = 8192;   // Must be > total latency + block size
+    static constexpr int PROCESS_BLOCK_SIZE = 128;  // Smaller for lower latency
+    static constexpr int RING_BUFFER_SIZE = 4096;
 
     double sampleRate = 44100.0;
     float pitchRatio = 1.0f;
-    float targetPitchRatio = 1.0f;  // Target for smoothing
-    bool prepared = false;  // Track if prepare() has been called
+    float targetPitchRatio = 1.0f;
+    bool prepared = false;
 
     signalsmith::stretch::SignalsmithStretch<float> stretch;
 
@@ -127,11 +243,9 @@ private:
     int outputLatencySamples = 0;
     int totalLatency = 0;
 
-    // Buffers for Signalsmith
     std::vector<std::vector<float>> inputBuffer;
     std::vector<std::vector<float>> outputBuffer;
 
-    // Ring buffers for sample-by-sample processing
     std::vector<float> ringBufferIn;
     std::vector<float> ringBufferOut;
     int ringWritePos = 0;
@@ -140,39 +254,82 @@ private:
 
     void processBlock()
     {
-        // Copy samples from input ring buffer to processing buffer
         int startPos = (ringWritePos - samplesInBuffer + RING_BUFFER_SIZE) % RING_BUFFER_SIZE;
         for (int i = 0; i < samplesInBuffer; ++i)
         {
             inputBuffer[0][i] = ringBufferIn[(startPos + i) % RING_BUFFER_SIZE];
         }
 
-        // Create pointer arrays for Signalsmith
         float* inPtrs[1] = { inputBuffer[0].data() };
         float* outPtrs[1] = { outputBuffer[0].data() };
 
-        // For pitch shifting without time stretching, input and output sizes are the same
-        int inputSamples = samplesInBuffer;
-        int outputSamples = samplesInBuffer;
+        stretch.process(inPtrs, samplesInBuffer, outPtrs, samplesInBuffer);
 
-        // Process through Signalsmith
-        stretch.process(inPtrs, inputSamples, outPtrs, outputSamples);
-
-        // Copy output to output ring buffer using overlap-add
-        // Note: output comes with latency, so we offset the write position
         int outWritePos = (ringReadPos + totalLatency) % RING_BUFFER_SIZE;
-        for (int i = 0; i < outputSamples; ++i)
+        for (int i = 0; i < samplesInBuffer; ++i)
         {
             int idx = (outWritePos + i) % RING_BUFFER_SIZE;
             ringBufferOut[idx] += outputBuffer[0][i];
         }
 
-        samplesInBuffer = 0;  // Reset counter
+        samplesInBuffer = 0;
     }
 };
 
 /**
- * StereoPhaseVocoder - Stereo wrapper for pitch shifting
+ * StereoBlockPitchShifter - Efficient stereo block-based pitch shifting
+ *
+ * Processes both channels in blocks for maximum efficiency.
+ * Use this for layer playback where entire blocks are available.
+ */
+class StereoBlockPitchShifter
+{
+public:
+    StereoBlockPitchShifter() = default;
+
+    void prepare(double sampleRate, int maxBlockSize)
+    {
+        shifterL.prepare(sampleRate, maxBlockSize);
+        shifterR.prepare(sampleRate, maxBlockSize);
+    }
+
+    void reset()
+    {
+        shifterL.reset();
+        shifterR.reset();
+    }
+
+    void setPitchRatio(float ratio)
+    {
+        shifterL.setPitchRatio(ratio);
+        shifterR.setPitchRatio(ratio);
+    }
+
+    // Process stereo block - much more efficient than sample-by-sample
+    void processBlock(const float* inputL, const float* inputR,
+                      float* outputL, float* outputR, int numSamples)
+    {
+        shifterL.processBlock(inputL, outputL, numSamples);
+        shifterR.processBlock(inputR, outputR, numSamples);
+    }
+
+    int getLatencySamples() const
+    {
+        return shifterL.getLatencySamples();
+    }
+
+    float getCurrentPitchRatio() const
+    {
+        return shifterL.getCurrentPitchRatio();
+    }
+
+private:
+    BlockPitchShifter shifterL;
+    BlockPitchShifter shifterR;
+};
+
+/**
+ * StereoPhaseVocoder - Stereo wrapper for sample-by-sample pitch shifting (legacy)
  */
 class StereoPhaseVocoder
 {

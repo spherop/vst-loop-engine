@@ -676,6 +676,20 @@ public:
 
             layers[i].processBlock(layerBuffer);
 
+            // Check per-layer peak levels for diagnostic metering
+            int layerClips = 0;
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                const float* data = layerBuffer.getReadPointer(ch);
+                for (int s = 0; s < numSamples; ++s)
+                {
+                    if (std::abs(data[s]) > 1.0f)
+                        layerClips++;
+                }
+            }
+            if (layerClips > 0)
+                layerClipCounts[i].fetch_add(layerClips);
+
             // Mix into main output (loop + input combined)
             for (int ch = 0; ch < numChannels; ++ch)
             {
@@ -738,6 +752,50 @@ public:
                 buffer.addFrom(ch, 0, inputBuffer, ch, 0, numSamples);
             }
         }
+
+        // Measure pre-clip peak levels and count clip events for diagnostics
+        float peakPreClipL = 0.0f;
+        float peakPreClipR = 0.0f;
+        int clipsThisBlock = 0;
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            const float* channelData = buffer.getReadPointer(ch);
+            float& peak = (ch == 0) ? peakPreClipL : peakPreClipR;
+            for (int i = 0; i < numSamples; ++i)
+            {
+                float absVal = std::abs(channelData[i]);
+                if (absVal > peak) peak = absVal;
+                if (absVal > 1.0f) clipsThisBlock++;
+            }
+        }
+
+        // Update atomic peak meters (fast attack, slow release)
+        float curPreClipL = preClipPeakL.load();
+        float curPreClipR = preClipPeakR.load();
+        preClipPeakL.store(peakPreClipL > curPreClipL ? peakPreClipL : curPreClipL * 0.99f);
+        preClipPeakR.store(peakPreClipR > curPreClipR ? peakPreClipR : curPreClipR * 0.99f);
+
+        if (clipsThisBlock > 0)
+            clipEventCount.fetch_add(clipsThisBlock);
+
+        // Also measure loop-only peak levels
+        float peakLoopL = 0.0f;
+        float peakLoopR = 0.0f;
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            const float* data = loopOnlyBuffer.getReadPointer(ch);
+            float& peak = (ch == 0) ? peakLoopL : peakLoopR;
+            for (int i = 0; i < numSamples; ++i)
+            {
+                float absVal = std::abs(data[i]);
+                if (absVal > peak) peak = absVal;
+            }
+        }
+        float curLoopL = loopOutputPeakL.load();
+        float curLoopR = loopOutputPeakR.load();
+        loopOutputPeakL.store(peakLoopL > curLoopL ? peakLoopL : curLoopL * 0.99f);
+        loopOutputPeakR.store(peakLoopR > curLoopR ? peakLoopR : curLoopR * 0.99f);
 
         // Soft clip the mixed output
         for (int ch = 0; ch < numChannels; ++ch)
@@ -948,6 +1006,23 @@ public:
     float getInputLevelL() const { return inputLevelL.load(); }
     float getInputLevelR() const { return inputLevelR.load(); }
 
+    // Diagnostic metering getters for debugging audio issues
+    float getPreClipPeakL() const { return preClipPeakL.load(); }
+    float getPreClipPeakR() const { return preClipPeakR.load(); }
+    float getLoopOutputPeakL() const { return loopOutputPeakL.load(); }
+    float getLoopOutputPeakR() const { return loopOutputPeakR.load(); }
+    int getClipEventCount() const { return clipEventCount.load(); }
+    void resetClipEventCount() { clipEventCount.store(0); }
+    int getLayerClipCount(int layer) const {
+        if (layer >= 0 && layer < NUM_LAYERS)
+            return layerClipCounts[layer].load();
+        return 0;
+    }
+    void resetLayerClipCounts() {
+        for (int i = 0; i < NUM_LAYERS; ++i)
+            layerClipCounts[i].store(0);
+    }
+
     // Flatten all non-muted layers into layer 1
     // This sums all active layer buffers into layer 1 and clears the others
     // SEAMLESS: preserves playhead position and continues playback without interruption
@@ -1055,6 +1130,14 @@ private:
     std::atomic<float> inputLevelL { 0.0f };
     std::atomic<float> inputLevelR { 0.0f };
     std::atomic<bool> inputMuted { false };
+
+    // Diagnostic metering for debugging audio issues
+    std::atomic<float> preClipPeakL { 0.0f };   // Peak level before soft clipping
+    std::atomic<float> preClipPeakR { 0.0f };
+    std::atomic<float> loopOutputPeakL { 0.0f }; // Peak level of loop-only output
+    std::atomic<float> loopOutputPeakR { 0.0f };
+    std::atomic<int> clipEventCount { 0 };       // Number of samples that exceeded 1.0
+    std::atomic<int> layerClipCounts[NUM_LAYERS] { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0} };  // Per-layer clip counts
 
     // Pre-allocated buffers to avoid allocation in processBlock
     juce::AudioBuffer<float> inputBuffer;
