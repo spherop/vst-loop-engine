@@ -41,6 +41,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(degradeBitRelay)
                   .withOptionsFrom(degradeSRRelay)
                   .withOptionsFrom(degradeWobbleRelay)
+                  .withOptionsFrom(degradeVinylRelay)
                   .withOptionsFrom(degradeMixRelay)
                   .withOptionsFrom(textureDensityRelay)
                   .withOptionsFrom(textureScatterRelay)
@@ -422,6 +423,9 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
       degradeWobbleAttachment(*processorRef.getAPVTS().getParameter("degradeWobble"),
                               degradeWobbleRelay,
                               processorRef.getAPVTS().undoManager),
+      degradeVinylAttachment(*processorRef.getAPVTS().getParameter("degradeVinyl"),
+                             degradeVinylRelay,
+                             processorRef.getAPVTS().undoManager),
       degradeMixAttachment(*processorRef.getAPVTS().getParameter("degradeMix"),
                            degradeMixRelay,
                            processorRef.getAPVTS().undoManager),

@@ -45,6 +45,7 @@ private:
     juce::WebSliderRelay degradeBitRelay { "degradeBit" };
     juce::WebSliderRelay degradeSRRelay { "degradeSR" };
     juce::WebSliderRelay degradeWobbleRelay { "degradeWobble" };
+    juce::WebSliderRelay degradeVinylRelay { "degradeVinyl" };
     juce::WebSliderRelay degradeMixRelay { "degradeMix" };
 
     // Texture (granular) parameter relays
@@ -82,6 +83,7 @@ private:
     juce::WebSliderParameterAttachment degradeBitAttachment;
     juce::WebSliderParameterAttachment degradeSRAttachment;
     juce::WebSliderParameterAttachment degradeWobbleAttachment;
+    juce::WebSliderParameterAttachment degradeVinylAttachment;
     juce::WebSliderParameterAttachment degradeMixAttachment;
 
     // Texture (granular) parameter attachments

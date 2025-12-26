@@ -590,6 +590,9 @@ class LooperController {
         this.smoothedLayerWaveforms = null;
         this.waveformSmoothingFactor = 0.15; // How fast to move toward target (0-1, lower = smoother)
 
+        // Layer spread for vertical spacing in waveform display (0-1)
+        this.layerSpread = 0;
+
         // Loop length setting (bars + beats)
         this.loopLengthBars = 0;
         this.loopLengthBeats = 0;
@@ -603,6 +606,7 @@ class LooperController {
         this.setupWaveform();
         this.setupZoomControls();
         this.setupRecordingOverlay();
+        this.setupLayerSpread();
         this.startStatePolling();
 
         // Sync UI with current C++ state on open
@@ -1101,6 +1105,23 @@ class LooperController {
         this.inputLevelBar = document.getElementById('input-level-bar');
     }
 
+    setupLayerSpread() {
+        const slider = document.getElementById('layer-spread-slider');
+        if (slider) {
+            slider.addEventListener('input', (e) => {
+                this.layerSpread = parseInt(e.target.value) / 100;
+                // Redraw waveform with new spread if we have cached data
+                if (this.lastWaveformData || this.lastLayerWaveforms) {
+                    this.drawWaveform(
+                        this.lastWaveformData,
+                        this.lastLayerWaveforms,
+                        this.lastLayerMutes
+                    );
+                }
+            });
+        }
+    }
+
     // Zoom methods
     zoomIn() {
         this.zoomLevel = Math.min(this.maxZoom, this.zoomLevel * 1.5);
@@ -1290,6 +1311,9 @@ class LooperController {
                 }
             }
 
+            // Count active (non-empty) layers for spread calculation
+            const activeLayers = displayWaveforms.filter(d => d && d.length > 0).length;
+
             for (let layerIdx = 0; layerIdx < displayWaveforms.length; layerIdx++) {
                 const layerData = displayWaveforms[layerIdx];
                 if (!layerData || layerData.length === 0) continue;
@@ -1298,7 +1322,21 @@ class LooperController {
                 const isMuted = layerMutes && layerMutes[layerIdx];
                 const layerColor = this.layerColors[layerIdx % this.layerColors.length];
 
+                // Calculate per-layer vertical offset based on spread
+                // When spread is 0, all layers are centered (layerCenterY = centerY)
+                // When spread is 1, layers are evenly distributed vertically
+                let layerCenterY = centerY;
+                if (this.layerSpread > 0 && activeLayers > 1) {
+                    // Calculate offset: distribute layers from top to bottom
+                    const spreadHeight = height * 0.8 * this.layerSpread; // Use 80% of height for spread
+                    const layerOffset = (layerIdx - (activeLayers - 1) / 2) * (spreadHeight / Math.max(1, activeLayers - 1));
+                    layerCenterY = centerY + layerOffset;
+                }
+
                 const barWidth = zoomedWidth / layerData.length;
+
+                // Reduce amplitude when spread to prevent overlapping
+                const amplitudeScale = this.layerSpread > 0 ? 0.35 * (1 - this.layerSpread * 0.6) : 0.35;
 
                 if (isMuted) {
                     // Muted/undone layers: draw as colored outline (ghost effect)
@@ -1309,23 +1347,23 @@ class LooperController {
                     // Draw outline path for the waveform shape
                     let started = false;
                     for (let i = 0; i < layerData.length; i++) {
-                        const amplitude = layerData[i] * (height * 0.35);
+                        const amplitude = layerData[i] * (height * amplitudeScale);
                         const x = (i * barWidth) - offsetX;
                         if (x + barWidth > 0 && x < width && amplitude > 0.5) {
                             if (!started) {
-                                this.ctx.moveTo(x, centerY - amplitude);
+                                this.ctx.moveTo(x, layerCenterY - amplitude);
                                 started = true;
                             } else {
-                                this.ctx.lineTo(x, centerY - amplitude);
+                                this.ctx.lineTo(x, layerCenterY - amplitude);
                             }
                         }
                     }
                     // Draw back along the bottom
                     for (let i = layerData.length - 1; i >= 0; i--) {
-                        const amplitude = layerData[i] * (height * 0.35);
+                        const amplitude = layerData[i] * (height * amplitudeScale);
                         const x = (i * barWidth) - offsetX;
                         if (x + barWidth > 0 && x < width && amplitude > 0.5) {
-                            this.ctx.lineTo(x, centerY + amplitude);
+                            this.ctx.lineTo(x, layerCenterY + amplitude);
                         }
                     }
                     this.ctx.closePath();
@@ -1335,11 +1373,11 @@ class LooperController {
                     this.ctx.fillStyle = layerColor + '99';  // 60% opacity for active
 
                     for (let i = 0; i < layerData.length; i++) {
-                        const amplitude = layerData[i] * (height * 0.35);
+                        const amplitude = layerData[i] * (height * amplitudeScale);
                         const x = (i * barWidth) - offsetX;
                         // Only draw visible bars
                         if (x + barWidth > 0 && x < width && amplitude > 0.5) {
-                            this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
+                            this.ctx.fillRect(x, layerCenterY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
                         }
                     }
                 }
@@ -2685,6 +2723,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Wobble: 0% - 100%
     new KnobController('degradeWobble-knob', 'degradeWobble', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Vinyl: 0% - 100% (hiss + crackle)
+    new KnobController('degradeVinyl-knob', 'degradeVinyl', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 

@@ -35,13 +35,13 @@ public:
         mixSmooth.setCurrentAndTargetValue(1.0f);
 
         // Initialize bypass gain smoothers for click-free toggling
-        // Use a very short ramp time (~3ms) for peppy/immediate response
-        masterBypassGain.reset(sampleRate, 0.003);
-        filterBypassGain.reset(sampleRate, 0.003);
-        hpBypassGain.reset(sampleRate, 0.003);
-        lpBypassGain.reset(sampleRate, 0.003);
-        lofiBypassGain.reset(sampleRate, 0.003);
-        textureBypassGain.reset(sampleRate, 0.003);
+        // Use longer ramp time (~20ms) for completely seamless transitions
+        masterBypassGain.reset(sampleRate, 0.020);
+        filterBypassGain.reset(sampleRate, 0.020);
+        hpBypassGain.reset(sampleRate, 0.020);
+        lpBypassGain.reset(sampleRate, 0.020);
+        lofiBypassGain.reset(sampleRate, 0.020);
+        textureBypassGain.reset(sampleRate, 0.020);
 
         // Set initial bypass states - most off by default for clean audio
         // EXCEPTION: filterBypassGain and HP/LP start ON because the UI expects them enabled
@@ -69,6 +69,15 @@ public:
         wobbleWritePos = 0;
         wobbleLfoPhase = 0.0f;
         wobbleDelaySmoothed = static_cast<float>(sampleRate) * 0.015f; // Start at base delay
+
+        // Initialize vinyl degradation
+        vinylAmountSmooth.reset(sampleRate, 0.01);
+        vinylAmountSmooth.setCurrentAndTargetValue(0.0f);
+        vinylCrackleTimer = 0.0f;
+        vinylCrackleDecay = 0.0f;
+        vinylCrackleActive = false;
+        vinylLowpassL = 0.0f;
+        vinylLowpassR = 0.0f;
 
         // Initialize granular texture engine
         initializeTexture(sampleRate);
@@ -109,6 +118,7 @@ public:
                 bitDepthSmooth.getNextValue();
                 srReductionSmooth.getNextValue();
                 wobbleAmountSmooth.getNextValue();
+                vinylAmountSmooth.getNextValue();
                 textureDensitySmooth.getNextValue();
                 textureScatterSmooth.getNextValue();
                 textureMotionSmooth.getNextValue();
@@ -134,6 +144,7 @@ public:
             const float bitDepth = bitDepthSmooth.getNextValue();
             const float srTarget = srReductionSmooth.getNextValue();
             const float wobbleAmt = wobbleAmountSmooth.getNextValue();
+            const float vinylAmt = vinylAmountSmooth.getNextValue();
             const float mix = mixSmooth.getNextValue();
 
             // ==== FILTER SECTION ====
@@ -181,6 +192,12 @@ public:
                 if (wobbleAmt > 0.001f)
                 {
                     processWobble(lofiL, lofiR, wobbleAmt);
+                }
+
+                // Vinyl degradation (hiss + crackle)
+                if (vinylAmt > 0.001f)
+                {
+                    processVinyl(lofiL, lofiR, vinylAmt);
                 }
 
                 // Crossfade between dry and lo-fi processed
@@ -265,6 +282,11 @@ public:
     void setWobble(float amount)
     {
         wobbleAmountSmooth.setTargetValue(std::clamp(amount, 0.0f, 1.0f));
+    }
+
+    void setVinyl(float amount)
+    {
+        vinylAmountSmooth.setTargetValue(std::clamp(amount, 0.0f, 1.0f));
     }
 
     // Texture controls (granular engine)
@@ -411,6 +433,15 @@ private:
     float wobbleLfoPhase = 0.0f;
     float wobbleDelaySmoothed = 0.0f;  // Smoothed delay time to prevent crackling
     juce::SmoothedValue<float> wobbleAmountSmooth;
+
+    // Vinyl degradation (hiss + crackle)
+    juce::SmoothedValue<float> vinylAmountSmooth;
+    juce::Random vinylRandom;
+    float vinylCrackleTimer = 0.0f;  // Time until next crackle
+    float vinylCrackleDecay = 0.0f;  // Current crackle decay envelope
+    bool vinylCrackleActive = false;
+    float vinylLowpassL = 0.0f;  // Low-pass filter state for hiss shaping
+    float vinylLowpassR = 0.0f;
 
     // ========================================
     // GRANULAR TEXTURE ENGINE
@@ -723,6 +754,81 @@ private:
         return ((c3 * frac + c2) * frac + c1) * frac + c0;
     }
 
+    // Vinyl degradation: adds hiss (filtered white noise) and occasional crackles/pops
+    void processVinyl(float& left, float& right, float amount)
+    {
+        // Generate hiss (band-limited white noise, shaped to sound like vinyl)
+        // Vinyl hiss is typically concentrated in 1-8kHz range
+        float noiseL = vinylRandom.nextFloat() * 2.0f - 1.0f;
+        float noiseR = vinylRandom.nextFloat() * 2.0f - 1.0f;
+
+        // Simple one-pole lowpass to shape the hiss (~6kHz cutoff)
+        // This gives it a warmer, more authentic vinyl character
+        const float hissLpCoeff = 0.8f;  // ~6kHz at 48kHz sample rate
+        vinylLowpassL = vinylLowpassL * hissLpCoeff + noiseL * (1.0f - hissLpCoeff);
+        vinylLowpassR = vinylLowpassR * hissLpCoeff + noiseR * (1.0f - hissLpCoeff);
+
+        // Apply high-pass to remove DC and sub-bass rumble from noise
+        float hissL = vinylLowpassL - noiseL * 0.3f;
+        float hissR = vinylLowpassR - noiseR * 0.3f;
+
+        // Hiss level: subtle background noise, scales with amount
+        // At full amount, hiss is about -40dB (0.01 amplitude)
+        const float hissLevel = amount * 0.012f;
+        float hissSampleL = hissL * hissLevel;
+        float hissSampleR = hissR * hissLevel;
+
+        // Crackle/pop generation
+        // Random clicks and pops that occur at irregular intervals
+        float crackle = 0.0f;
+
+        // Update crackle timer
+        vinylCrackleTimer -= 1.0f;
+
+        // Spawn new crackle? Probability increases with amount
+        // Average interval: ~100-500ms (decreases with amount)
+        if (vinylCrackleTimer <= 0.0f)
+        {
+            // Random interval for next potential crackle
+            float avgIntervalMs = 500.0f - amount * 400.0f;  // 500ms at 0%, 100ms at 100%
+            float intervalSamples = (avgIntervalMs / 1000.0f) * static_cast<float>(currentSampleRate);
+            vinylCrackleTimer = intervalSamples * (0.5f + vinylRandom.nextFloat());
+
+            // Probability of actually cracking (not every interval triggers one)
+            float crackleProb = amount * 0.3f;  // Up to 30% chance at full amount
+            if (vinylRandom.nextFloat() < crackleProb)
+            {
+                vinylCrackleActive = true;
+                vinylCrackleDecay = 0.5f + vinylRandom.nextFloat() * 0.5f;  // Random initial level
+            }
+        }
+
+        // Process active crackle
+        if (vinylCrackleActive)
+        {
+            // Short, sharp transient with quick decay
+            crackle = (vinylRandom.nextFloat() * 2.0f - 1.0f) * vinylCrackleDecay;
+
+            // Very fast decay (~0.5-2ms)
+            vinylCrackleDecay *= 0.95f;
+
+            if (vinylCrackleDecay < 0.01f)
+            {
+                vinylCrackleActive = false;
+                vinylCrackleDecay = 0.0f;
+            }
+        }
+
+        // Crackle level: more prominent than hiss but still subtle
+        // At full amount, crackles peak around -20dB (0.1 amplitude)
+        const float crackleLevel = amount * 0.1f;
+        float crackleSample = crackle * crackleLevel;
+
+        // Add hiss and crackle to signal
+        left += hissSampleL + crackleSample;
+        right += hissSampleR + crackleSample;
+    }
+
     // ========================================
     // TEXTURE ENGINE METHODS
     // ========================================
@@ -825,9 +931,49 @@ private:
         grain.readPosR = grain.readPosL;  // Same position for stereo coherence
 
         // Per-grain variation based on motion
-        // Pitch/speed variation: ±20% at max motion
-        float speedVar = motion * 0.2f * (textureRandom.nextFloat() * 2.0f - 1.0f);
-        grain.playbackRate = 1.0f + speedVar;
+        // Use chromatic scale intervals for musical pitch shifting
+        // Semitone ratios: each semitone is 2^(1/12) ≈ 1.0595
+        static const float chromaticRatios[] = {
+            0.5f,      // -12 semitones (octave down)
+            0.5297f,   // -11
+            0.5612f,   // -10
+            0.5946f,   // -9
+            0.6300f,   // -8
+            0.6674f,   // -7
+            0.7071f,   // -6
+            0.7492f,   // -5
+            0.7937f,   // -4
+            0.8409f,   // -3
+            0.8909f,   // -2
+            0.9439f,   // -1
+            1.0f,      // 0 (unison)
+            1.0595f,   // +1
+            1.1225f,   // +2
+            1.1892f,   // +3
+            1.2599f,   // +4
+            1.3348f,   // +5
+            1.4142f,   // +6
+            1.4983f,   // +7
+            1.5874f,   // +8
+            1.6818f,   // +9
+            1.7818f,   // +10
+            1.8877f,   // +11
+            2.0f       // +12 semitones (octave up)
+        };
+        static const int numRatios = 25;
+        static const int unisonIndex = 12;  // Index of 1.0 ratio
+
+        // Motion controls the range of chromatic intervals
+        // motion 0 = only unison, motion 1 = full octave up/down range
+        int maxOffset = static_cast<int>(motion * 12.0f);  // 0-12 semitones
+        int semitoneOffset = 0;
+        if (maxOffset > 0)
+        {
+            // Random chromatic interval within range
+            semitoneOffset = textureRandom.nextInt(maxOffset * 2 + 1) - maxOffset;
+        }
+        int ratioIndex = std::clamp(unisonIndex + semitoneOffset, 0, numRatios - 1);
+        grain.playbackRate = chromaticRatios[ratioIndex];
 
         // Reverse probability: up to 30% at max motion
         grain.reverse = textureRandom.nextFloat() < (motion * 0.3f);
@@ -849,6 +995,15 @@ private:
         // Track how much buffer is filled (for scatter range calculation)
         if (textureBufferFilled < TEXTURE_BUFFER_SIZE)
             textureBufferFilled++;
+
+        // At very low density, don't spawn grains - just passthrough
+        // This prevents the choppy effect when density is near 0
+        if (density < 0.02f)
+        {
+            // Advance write position and return original signal
+            textureWritePos = (textureWritePos + 1) % TEXTURE_BUFFER_SIZE;
+            return;  // left and right are unchanged
+        }
 
         // Check if we should spawn a new grain
         textureSpawnTimer -= 1.0f;

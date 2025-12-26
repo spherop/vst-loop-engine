@@ -112,6 +112,7 @@ private:
     std::atomic<float>* degradeBitParam = nullptr;
     std::atomic<float>* degradeSRParam = nullptr;
     std::atomic<float>* degradeWobbleParam = nullptr;
+    std::atomic<float>* degradeVinylParam = nullptr;
     std::atomic<float>* degradeMixParam = nullptr;
 
     // Texture (granular) parameters

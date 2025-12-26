@@ -28,6 +28,7 @@ LoopEngineProcessor::LoopEngineProcessor()
     degradeBitParam = apvts.getRawParameterValue("degradeBit");
     degradeSRParam = apvts.getRawParameterValue("degradeSR");
     degradeWobbleParam = apvts.getRawParameterValue("degradeWobble");
+    degradeVinylParam = apvts.getRawParameterValue("degradeVinyl");
     degradeMixParam = apvts.getRawParameterValue("degradeMix");
 
     // Texture (granular) parameters
@@ -201,6 +202,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"degradeWobble", 1},
         "Wobble",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Vinyl degradation (hiss + crackle)
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"degradeVinyl", 1},
+        "Vinyl",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
         0.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
@@ -415,6 +424,7 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     degradeProcessor.setBitDepth(degradeBitParam->load());
     degradeProcessor.setSampleRateReduction(degradeSRParam->load());
     degradeProcessor.setWobble(degradeWobbleParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setVinyl(degradeVinylParam->load() / 100.0f);  // Convert 0-100% to 0-1
     degradeProcessor.setMix(degradeMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
 
     // Update texture (granular) parameters

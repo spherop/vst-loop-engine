@@ -12,7 +12,7 @@ class LoopBuffer
 public:
     // 60 seconds max loop time at 48kHz
     static constexpr int MAX_LOOP_SECONDS = 60;
-    static constexpr int CROSSFADE_SAMPLES = 512;  // Increased for smoother loop transitions
+    static constexpr int CROSSFADE_SAMPLES = 2048;  // Long crossfade for click-free looping (~42ms at 48kHz)
 
     enum class State
     {
@@ -1189,8 +1189,13 @@ private:
         if (loopLength < CROSSFADE_SAMPLES * 2)
             return;
 
-        // Apply equal-power crossfade at the loop boundary for seamless looping
-        // This modifies the buffer so the end blends smoothly into the start
+        // Step 1: Remove DC offset from entire buffer
+        // This prevents low-frequency pops at loop boundaries
+        removeDCOffset();
+
+        // Step 2: Apply equal-power crossfade at the loop boundary for seamless looping
+        // Use a longer fade region and create a symmetric crossfade where
+        // the end region and start region blend together
         for (int i = 0; i < CROSSFADE_SAMPLES; ++i)
         {
             // Equal-power crossfade using sine/cosine curves
@@ -1201,10 +1206,53 @@ private:
             const int endIdx = loopLength - CROSSFADE_SAMPLES + i;
             const int startIdx = i;
 
-            // Blend end into start for seamless loop
-            // End samples fade out, start samples fade in
-            bufferL[startIdx] = bufferL[startIdx] * fadeIn + bufferL[endIdx] * fadeOut;
-            bufferR[startIdx] = bufferR[startIdx] * fadeIn + bufferR[endIdx] * fadeOut;
+            // Create a temporary blend of end and start
+            const float blendL = bufferL[startIdx] * fadeIn + bufferL[endIdx] * fadeOut;
+            const float blendR = bufferR[startIdx] * fadeIn + bufferR[endIdx] * fadeOut;
+
+            // Apply to both start AND end regions for symmetry
+            // This ensures both ends of the loop crossfade smoothly
+            bufferL[startIdx] = blendL;
+            bufferR[startIdx] = blendR;
+            bufferL[endIdx] = bufferL[startIdx] * fadeOut + bufferL[endIdx] * fadeIn;
+            bufferR[endIdx] = bufferR[startIdx] * fadeOut + bufferR[endIdx] * fadeIn;
+        }
+
+        // Step 3: Also apply a gentle fade-in at the very start to catch any initial transient
+        const int shortFade = std::min(256, loopLength / 4);
+        for (int i = 0; i < shortFade; ++i)
+        {
+            const float gain = static_cast<float>(i) / static_cast<float>(shortFade);
+            const float smoothGain = gain * gain * (3.0f - 2.0f * gain); // Smoothstep
+            bufferL[i] *= smoothGain;
+            bufferR[i] *= smoothGain;
+        }
+    }
+
+    void removeDCOffset()
+    {
+        if (loopLength <= 0)
+            return;
+
+        // Calculate mean (DC offset) for each channel
+        double sumL = 0.0, sumR = 0.0;
+        for (int i = 0; i < loopLength; ++i)
+        {
+            sumL += bufferL[i];
+            sumR += bufferR[i];
+        }
+        const float dcL = static_cast<float>(sumL / loopLength);
+        const float dcR = static_cast<float>(sumR / loopLength);
+
+        // Only remove if there's significant DC offset (> 0.001)
+        if (std::abs(dcL) > 0.001f || std::abs(dcR) > 0.001f)
+        {
+            for (int i = 0; i < loopLength; ++i)
+            {
+                bufferL[i] -= dcL;
+                bufferR[i] -= dcR;
+            }
+            DBG("Removed DC offset: L=" + juce::String(dcL, 4) + " R=" + juce::String(dcR, 4));
         }
     }
 
