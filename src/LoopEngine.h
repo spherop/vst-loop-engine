@@ -382,9 +382,26 @@ public:
         }
         else if (currentState == LoopBuffer::State::Overdubbing)
         {
-            // Stop overdubbing
-            DBG("Stopping overdub on layer " + juce::String(currentLayer));
-            layers[currentLayer].stopOverdub();
+            // Blooper-style: pressing DUB while overdubbing creates a NEW layer
+            // Stop current layer's overdub immediately (no fade needed - new layer takes over)
+            DBG("Stopping overdub on layer " + juce::String(currentLayer) + " to create new layer");
+            layers[currentLayer].stopOverdubImmediate();
+
+            // Create new layer and start overdubbing
+            if (highestLayer < NUM_LAYERS - 1)
+            {
+                float masterPlayhead = layers[0].getRawPlayhead();
+                currentLayer = highestLayer + 1;
+                highestLayer = currentLayer;
+                DBG("Starting overdub on NEW layer " + juce::String(currentLayer) +
+                    " syncing playhead to " + juce::String(masterPlayhead));
+                layers[currentLayer].startOverdubOnNewLayer(masterLoopLength);
+                layers[currentLayer].setPlayhead(masterPlayhead);
+            }
+            else
+            {
+                DBG("Cannot create new layer - max layers reached, just stopping overdub");
+            }
         }
         else if (currentState == LoopBuffer::State::Idle && highestLayer >= 0 && layers[0].hasContent())
         {

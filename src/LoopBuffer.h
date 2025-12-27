@@ -297,7 +297,8 @@ public:
             }
 
             // Apply crossfade at loop boundary for seamless looping
-            applyCrossfade();
+            // Pass true for initial recording (needs fade-in at start)
+            applyCrossfade(true);
         }
     }
 
@@ -309,6 +310,9 @@ public:
             {
                 // Reset fade multiplier when starting overdub so new content is at full volume
                 currentFadeMultiplier.store(1.0f);
+                // Initialize overdub fade-in (Blooper-style: fade at recording start)
+                overdubFadeInCounter = 0;
+                isOverdubFadingOut = false;
                 state.store(State::Overdubbing);
             }
         }
@@ -331,6 +335,10 @@ public:
         currentFadeMultiplier.store(1.0f);
         lastPlayheadPosition = 0.0f;
 
+        // Initialize overdub fade-in (Blooper-style: fade at recording start)
+        overdubFadeInCounter = 0;
+        isOverdubFadingOut = false;
+
         // Mark as having content immediately so it gets processed
         // (the loopLength > 0 makes hasContent() true)
 
@@ -343,8 +351,24 @@ public:
     {
         if (state.load() == State::Overdubbing)
         {
+            // Start fade-out instead of immediately stopping
+            // The fade-out will be processed in processOverdubbing
+            isOverdubFadingOut = true;
+            overdubFadeOutCounter = OVERDUB_FADE_SAMPLES;
+            // Note: state stays Overdubbing until fade-out completes
+            DBG("stopOverdub() - starting fade-out");
+        }
+    }
+
+    // Immediate stop without fade-out (used when transitioning to a new layer)
+    void stopOverdubImmediate()
+    {
+        if (state.load() == State::Overdubbing)
+        {
+            isOverdubFadingOut = false;
+            overdubFadeOutCounter = 0;
             state.store(State::Playing);
-            applyCrossfade();
+            DBG("stopOverdubImmediate() - immediate switch to Playing");
         }
     }
 
@@ -623,46 +647,11 @@ public:
                 fadeToApply = fadeMult;
             }
 
-            // Real-time crossfade at loop boundaries for seamless looping
-            // The crossfade region is the last CROSSFADE_SAMPLES of the loop
-            // We blend between "end region" audio and "start region" audio
-            float rawL = 0.0f;
-            float rawR = 0.0f;
-
-            const float distToEnd = static_cast<float>(effectiveEnd) - playHead;
-
-            // Only crossfade in the last CROSSFADE_SAMPLES before the loop end
-            if (distToEnd >= 0 && distToEnd < CROSSFADE_SAMPLES)
-            {
-                // Progress: 0.0 when entering crossfade region, 1.0 at loop end
-                const float xfadeProgress = 1.0f - (distToEnd / static_cast<float>(CROSSFADE_SAMPLES));
-
-                // Equal-power crossfade curves
-                const float fadeOut = std::cos(xfadeProgress * juce::MathConstants<float>::halfPi);
-                const float fadeIn = std::sin(xfadeProgress * juce::MathConstants<float>::halfPi);
-
-                // Read from current position (fading out as we approach end)
-                float endL = readWithInterpolation(bufferL, playHead);
-                float endR = readWithInterpolation(bufferR, playHead);
-
-                // Read from mirrored position at start (fading in)
-                // When distToEnd = CROSSFADE_SAMPLES, startPos = effectiveStart
-                // When distToEnd = 0, startPos = effectiveStart + CROSSFADE_SAMPLES
-                float startPos = static_cast<float>(effectiveStart) + (static_cast<float>(CROSSFADE_SAMPLES) - distToEnd);
-                float startL = readWithInterpolation(bufferL, startPos);
-                float startR = readWithInterpolation(bufferR, startPos);
-
-                // Blend: at start of region (progress=0): 100% end, 0% start
-                //        at end of region (progress=1): 0% end, 100% start
-                rawL = (endL * fadeOut + startL * fadeIn) * fadeToApply;
-                rawR = (endR * fadeOut + startR * fadeIn) * fadeToApply;
-            }
-            else
-            {
-                // Normal playback - no crossfade needed
-                rawL = readWithInterpolation(bufferL, playHead) * fadeToApply;
-                rawR = readWithInterpolation(bufferR, playHead) * fadeToApply;
-            }
+            // Read from buffer with real-time crossfade at loop boundary
+            float rawL, rawR;
+            readWithCrossfade(rawL, rawR, playHead, effectiveStart, effectiveEnd);
+            rawL *= fadeToApply;
+            rawR *= fadeToApply;
 
             pitchInputL[i] = rawL;
             pitchInputR[i] = rawR;
@@ -876,6 +865,12 @@ private:
     std::atomic<float> currentFadeMultiplier { 1.0f };  // Current fade level (starts at 1.0, decays each loop)
     float lastPlayheadPosition = 0.0f;   // For detecting loop boundary crossings
 
+    // Overdub fade tracking (Blooper-style: fade at recording start/stop points)
+    static constexpr int OVERDUB_FADE_SAMPLES = 512;  // ~10ms at 48kHz
+    int overdubFadeInCounter = 0;   // Counts up from 0 to OVERDUB_FADE_SAMPLES when overdub starts
+    int overdubFadeOutCounter = 0;  // Counts down from OVERDUB_FADE_SAMPLES to 0 when overdub ends
+    bool isOverdubFadingOut = false;  // True during fade-out after overdub stops
+
     // Block-based pitch shifter (efficient, processes entire blocks)
     StereoBlockPitchShifter blockPitchShifter;
 
@@ -1014,45 +1009,13 @@ private:
         // The fadeActive flag only controls whether decay CONTINUES, not whether it's audible
         float fadeToApply = currentFadeMultiplier.load();
 
-        // Real-time crossfade at loop boundaries for seamless looping
-        // The crossfade region is the last CROSSFADE_SAMPLES of the loop
+        // Read from buffer with real-time crossfade at loop boundary
         const int effectiveStart = loopStart;
         const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
-
-        float rawL = 0.0f;
-        float rawR = 0.0f;
-
-        const float distToEnd = static_cast<float>(effectiveEnd) - playHead;
-
-        // Only crossfade in the last CROSSFADE_SAMPLES before the loop end
-        if (distToEnd >= 0 && distToEnd < CROSSFADE_SAMPLES)
-        {
-            // Progress: 0.0 when entering crossfade region, 1.0 at loop end
-            const float xfadeProgress = 1.0f - (distToEnd / static_cast<float>(CROSSFADE_SAMPLES));
-
-            // Equal-power crossfade curves
-            const float fadeOut = std::cos(xfadeProgress * juce::MathConstants<float>::halfPi);
-            const float fadeIn = std::sin(xfadeProgress * juce::MathConstants<float>::halfPi);
-
-            // Read from current position (fading out as we approach end)
-            float endL = readWithInterpolation(bufferL, playHead);
-            float endR = readWithInterpolation(bufferR, playHead);
-
-            // Read from mirrored position at start (fading in)
-            float startPos = static_cast<float>(effectiveStart) + (static_cast<float>(CROSSFADE_SAMPLES) - distToEnd);
-            float startL = readWithInterpolation(bufferL, startPos);
-            float startR = readWithInterpolation(bufferR, startPos);
-
-            // Blend
-            rawL = (endL * fadeOut + startL * fadeIn) * fadeToApply;
-            rawR = (endR * fadeOut + startR * fadeIn) * fadeToApply;
-        }
-        else
-        {
-            // Normal playback - no crossfade needed
-            rawL = readWithInterpolation(bufferL, playHead) * fadeToApply;
-            rawR = readWithInterpolation(bufferR, playHead) * fadeToApply;
-        }
+        float rawL, rawR;
+        readWithCrossfade(rawL, rawR, playHead, effectiveStart, effectiveEnd);
+        rawL *= fadeToApply;
+        rawR *= fadeToApply;
 
         float loopL, loopR;
 
@@ -1159,10 +1122,14 @@ private:
             currentFadeMultiplier.store(std::max(fadeMult, 0.001f));
         }
 
-        // Read existing content (with fade applied)
+        // Read existing content with real-time crossfade at loop boundary
         float fadeMult = currentFadeMultiplier.load();
-        float existingL = readWithInterpolation(bufferL, playHead) * fadeMult;
-        float existingR = readWithInterpolation(bufferR, playHead) * fadeMult;
+        const int effectiveStart = loopStart;
+        const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
+        float existingL, existingR;
+        readWithCrossfade(existingL, existingR, playHead, effectiveStart, effectiveEnd);
+        existingL *= fadeMult;
+        existingR *= fadeMult;
 
         // Get pitch ratio for monitoring
         const float pitchRatio = pitchRatioSmoothed.getNextValue();
@@ -1210,18 +1177,91 @@ private:
         // Write position
         int writePos = static_cast<int>(playHead) % loopLength;
 
-        // Apply fade to existing buffer content, then add new input
-        // This way existing content decays while new content is added at full volume
-        bufferL[writePos] = bufferL[writePos] * fadeMult + inputL;
-        bufferR[writePos] = bufferR[writePos] * fadeMult + inputR;
+        // Calculate overdub input gain (Blooper-style: fade at recording start/stop)
+        float overdubGain = 1.0f;
+
+        if (isOverdubFadingOut)
+        {
+            // Fade-out: decrement counter and calculate gain
+            if (overdubFadeOutCounter > 0)
+            {
+                overdubGain = static_cast<float>(overdubFadeOutCounter) / static_cast<float>(OVERDUB_FADE_SAMPLES);
+                // Equal-power fade-out
+                overdubGain = std::cos((1.0f - overdubGain) * juce::MathConstants<float>::halfPi);
+                --overdubFadeOutCounter;
+            }
+            else
+            {
+                // Fade-out complete - switch to playing state
+                overdubGain = 0.0f;
+                isOverdubFadingOut = false;
+                state.store(State::Playing);
+                DBG("Overdub fade-out complete, now Playing");
+            }
+        }
+        else if (overdubFadeInCounter < OVERDUB_FADE_SAMPLES)
+        {
+            // Fade-in: increment counter and calculate gain
+            overdubGain = static_cast<float>(overdubFadeInCounter) / static_cast<float>(OVERDUB_FADE_SAMPLES);
+            // Equal-power fade-in
+            overdubGain = std::sin(overdubGain * juce::MathConstants<float>::halfPi);
+            ++overdubFadeInCounter;
+        }
+
+        // CRITICAL: Apply loop-boundary crossfade to the WRITE operation
+        // This prevents pops on overdub layers at the loop seam
+        // When writing near the end, we crossfade-out the input
+        // When writing near the start, we crossfade-in the input
+        // This mirrors what readWithCrossfade does for playback
+        const int effectiveLength = effectiveEnd - effectiveStart;
+        const int writeXfadeLen = std::min(1024, effectiveLength / 4);
+
+        // Calculate position relative to loop
+        float relWritePos = playHead - effectiveStart;
+        while (relWritePos < 0) relWritePos += effectiveLength;
+        while (relWritePos >= effectiveLength) relWritePos -= effectiveLength;
+
+        // Distance from end of loop
+        float distFromEnd = effectiveLength - relWritePos;
+
+        // Apply boundary crossfade gain
+        float boundaryGain = 1.0f;
+        if (writeXfadeLen > 0)
+        {
+            if (distFromEnd < writeXfadeLen)
+            {
+                // Near end: fade OUT the write (will be blended with start content on playback)
+                float xfadeProgress = 1.0f - (distFromEnd / writeXfadeLen);
+                boundaryGain = std::cos(xfadeProgress * juce::MathConstants<float>::halfPi);
+            }
+            else if (relWritePos < writeXfadeLen)
+            {
+                // Near start: fade IN the write (compensates for end region fade)
+                float xfadeProgress = relWritePos / writeXfadeLen;
+                boundaryGain = std::sin(xfadeProgress * juce::MathConstants<float>::halfPi);
+            }
+        }
+
+        // Combine all gains: overdub start/stop fade + loop boundary crossfade
+        float totalGain = overdubGain * boundaryGain;
+
+        // Apply total gain to input
+        float fadedInputL = inputL * totalGain;
+        float fadedInputR = inputR * totalGain;
+
+        // Apply fade to existing buffer content, then add faded new input
+        // This way existing content decays while new content is added with smooth fade
+        bufferL[writePos] = bufferL[writePos] * fadeMult + fadedInputL;
+        bufferR[writePos] = bufferR[writePos] * fadeMult + fadedInputR;
 
         // Soft clip to prevent runaway (gentler curve)
         bufferL[writePos] = softClip(bufferL[writePos]);
         bufferR[writePos] = softClip(bufferR[writePos]);
 
         // Output: pitch-shifted existing content + input for monitoring
-        outputL = monitorL + inputL;
-        outputR = monitorR + inputR;
+        // Use faded input for monitoring too so user hears the fade
+        outputL = monitorL + fadedInputL;
+        outputR = monitorR + fadedInputR;
 
         // Advance playhead WITHOUT pitch ratio (recording must happen at normal speed)
         advancePlayhead(false);
@@ -1264,12 +1304,9 @@ private:
         {
             playHead += effectiveRate;
             // Wrap around for proper looping at any speed
-            // Wrap to effectiveStart + CROSSFADE_SAMPLES to match crossfade endpoint
-            // This ensures continuity: crossfade ends outputting from start+CROSSFADE,
-            // and after wrap we continue from that same position
             while (playHead >= effectiveEnd)
             {
-                playHead -= (effectiveLength - static_cast<float>(CROSSFADE_SAMPLES));
+                playHead -= effectiveLength;
             }
         }
     }
@@ -1284,6 +1321,65 @@ private:
         const float frac = position - std::floor(position);
 
         return buffer[idx0] * (1.0f - frac) + buffer[idx1] * frac;
+    }
+
+    // Real-time crossfade reading for seamless loop boundaries
+    // When near the end of the loop, blend with the start region
+    void readWithCrossfade(float& outL, float& outR, float position, int effectiveStart, int effectiveEnd) const
+    {
+        if (loopLength <= 0)
+        {
+            outL = outR = 0.0f;
+            return;
+        }
+
+        const int effectiveLength = effectiveEnd - effectiveStart;
+        if (effectiveLength <= 0)
+        {
+            outL = outR = 0.0f;
+            return;
+        }
+
+        // Crossfade region size (samples from end where crossfade begins)
+        const int crossfadeLen = std::min(1024, effectiveLength / 4);
+
+        // Current position relative to loop start
+        float relPos = position - effectiveStart;
+        while (relPos < 0) relPos += effectiveLength;
+        while (relPos >= effectiveLength) relPos -= effectiveLength;
+
+        // Distance from end of loop
+        float distFromEnd = effectiveLength - relPos;
+
+        if (distFromEnd < crossfadeLen && crossfadeLen > 0)
+        {
+            // We're in the crossfade region near the end
+            // Blend current position with wrapped position (start region)
+            float crossfadeProgress = 1.0f - (distFromEnd / crossfadeLen);  // 0 at start of xfade, 1 at end
+
+            // Equal-power crossfade
+            float gainCurrent = std::cos(crossfadeProgress * juce::MathConstants<float>::halfPi);
+            float gainWrapped = std::sin(crossfadeProgress * juce::MathConstants<float>::halfPi);
+
+            // Read from current position (near end)
+            float currentL = readWithInterpolation(bufferL, position);
+            float currentR = readWithInterpolation(bufferR, position);
+
+            // Read from wrapped position (near start)
+            float wrappedPos = effectiveStart + (crossfadeLen - distFromEnd);
+            float wrappedL = readWithInterpolation(bufferL, wrappedPos);
+            float wrappedR = readWithInterpolation(bufferR, wrappedPos);
+
+            // Blend
+            outL = currentL * gainCurrent + wrappedL * gainWrapped;
+            outR = currentR * gainCurrent + wrappedR * gainWrapped;
+        }
+        else
+        {
+            // Normal reading outside crossfade region
+            outL = readWithInterpolation(bufferL, position);
+            outR = readWithInterpolation(bufferR, position);
+        }
     }
 
     // Simple pitch shift: just read at a different rate
@@ -1362,17 +1458,90 @@ private:
         return sample1 * window1 + sample2 * window2;
     }
 
-    void applyCrossfade()
+    void applyCrossfade(bool isInitialRecording = true)
     {
-        if (loopLength <= 0)
-            return;
+        // Real-time crossfade is now handled in readWithCrossfade()
+        // Additionally, we adjust the loop length to end on a zero crossing
+        // for cleaner loop boundaries
+        (void)isInitialRecording;  // Unused
 
-        // Remove DC offset from entire buffer
-        // This prevents low-frequency pops at loop boundaries
-        // The real-time crossfade during playback handles the seamless looping
-        removeDCOffset();
+        if (loopLength > 0)
+        {
+            // Try to adjust loop end to nearest zero crossing
+            int adjusted = findNearestZeroCrossing(loopLength - 1, 256);
+            if (adjusted != loopLength - 1 && adjusted > loopLength / 2)
+            {
+                int oldLength = loopLength;
+                loopLength = adjusted + 1;
+                loopEnd = loopLength;
+                DBG("applyCrossfade() - adjusted loop length from " + juce::String(oldLength) +
+                    " to " + juce::String(loopLength) + " for zero crossing");
+            }
+            else
+            {
+                DBG("applyCrossfade() - using real-time crossfade, no length adjustment needed");
+            }
+        }
+    }
 
-        DBG("applyCrossfade() - Removed DC offset from loop of " + juce::String(loopLength) + " samples");
+    // Find the nearest zero crossing within searchRange samples of position
+    // Returns the position of the zero crossing, or the original position if none found
+    int findNearestZeroCrossing(int position, int searchRange) const
+    {
+        if (loopLength <= 0 || position < 0 || position >= loopLength)
+            return position;
+
+        // Search outward from position for a zero crossing
+        // A zero crossing is where consecutive samples have opposite signs
+        int bestPos = position;
+        int bestDist = searchRange + 1;
+
+        for (int offset = 0; offset <= searchRange; ++offset)
+        {
+            // Check position + offset
+            int pos = position + offset;
+            if (pos < loopLength - 1)
+            {
+                float curr = (bufferL[pos] + bufferR[pos]) * 0.5f;
+                float next = (bufferL[pos + 1] + bufferR[pos + 1]) * 0.5f;
+
+                // Zero crossing: signs differ or one is exactly zero
+                if ((curr >= 0.0f && next < 0.0f) || (curr < 0.0f && next >= 0.0f) ||
+                    std::abs(curr) < 0.001f)
+                {
+                    if (offset < bestDist)
+                    {
+                        bestDist = offset;
+                        bestPos = pos;
+                    }
+                    break;  // Found closest in forward direction
+                }
+            }
+
+            // Check position - offset
+            if (offset > 0)
+            {
+                int posBack = position - offset;
+                if (posBack >= 0 && posBack < loopLength - 1)
+                {
+                    float curr = (bufferL[posBack] + bufferR[posBack]) * 0.5f;
+                    float next = (bufferL[posBack + 1] + bufferR[posBack + 1]) * 0.5f;
+
+                    if ((curr >= 0.0f && next < 0.0f) || (curr < 0.0f && next >= 0.0f) ||
+                        std::abs(curr) < 0.001f)
+                    {
+                        if (offset < bestDist)
+                        {
+                            bestDist = offset;
+                            bestPos = posBack;
+                        }
+                        break;  // Found closest in backward direction
+                    }
+                }
+            }
+        }
+
+        return bestPos;
     }
 
     void removeDCOffset()

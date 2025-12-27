@@ -1075,13 +1075,27 @@ private:
                 grain.active = false;
         }
 
-        // Normalize output by sqrt of active count to maintain consistent volume
+        // Apply gain compensation for volume consistency
+        // The Hann window has an average value of 0.5, and overlapping grains
+        // don't sum to unity without compensation. We apply:
+        // 1. Base gain of ~2.0 to compensate for Hann window averaging
+        // 2. Normalization by sqrt(activeCount) to prevent clipping with many grains
+        // 3. Additional boost factor to match dry signal level
+        float gainCompensation = 2.2f;  // Compensate for Hann window and grain overlap
         if (activeCount > 1)
         {
+            // Reduce gain as more grains overlap, but not as aggressively
             float normFactor = 1.0f / std::sqrt(static_cast<float>(activeCount));
-            outputL *= normFactor;
-            outputR *= normFactor;
+            gainCompensation *= normFactor;
         }
+        else if (activeCount == 0)
+        {
+            // No active grains - output silence for texture (will be blended with dry)
+            gainCompensation = 0.0f;
+        }
+
+        outputL *= gainCompensation;
+        outputR *= gainCompensation;
 
         // Output the granular texture
         left = outputL;
