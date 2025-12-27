@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "1.7.1";
+const UI_VERSION = "1.7.2";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -2786,6 +2786,7 @@ class CrossfadeSettingsController {
         this.enabled = true;
 
         this.setupEvents();
+        this.updateEnabledUI();  // Initialize LED state before loading
         this.loadSettings();
         this.updateDisplays();
     }
@@ -2959,8 +2960,11 @@ class CrossfadeSettingsController {
         const width = this.vizCanvas.width;
         const height = this.vizCanvas.height;
 
-        // Clear
-        ctx.fillStyle = '#050505';
+        // Clear with subtle gradient
+        const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+        bgGrad.addColorStop(0, '#080808');
+        bgGrad.addColorStop(1, '#040404');
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, width, height);
 
         // Get values
@@ -2974,68 +2978,198 @@ class CrossfadeSettingsController {
         const centerX = width / 2;
         const preWidth = (preTime / maxTime) * (width / 2);
         const postWidth = (postTime / maxTime) * (width / 2);
+        const margin = 4;
 
-        // Draw boundary line
-        ctx.strokeStyle = '#4fc3f7';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(centerX, 0);
-        ctx.lineTo(centerX, height);
-        ctx.stroke();
-
-        // Draw volume envelope (cyan/teal fill)
-        if (this.enabled && volDepth < 1) {
-            const duckAmount = 1 - volDepth;  // How much to duck
-            const minY = height * 0.1;
-            const maxY = height * 0.9;
-            const duckY = minY + (maxY - minY) * (1 - duckAmount);  // Lower = more duck
-
-            ctx.fillStyle = 'rgba(79, 195, 247, 0.2)';
-            ctx.strokeStyle = 'rgba(79, 195, 247, 0.8)';
-            ctx.lineWidth = 1.5;
-
+        // Draw subtle grid lines (horizontal)
+        ctx.strokeStyle = '#151515';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < 4; i++) {
+            const y = (height / 4) * i;
             ctx.beginPath();
-            // Pre-boundary fade (right to left, curving down to duck point)
-            ctx.moveTo(centerX - preWidth, minY);  // Start at full level
-            ctx.quadraticCurveTo(centerX - preWidth * 0.3, minY, centerX, duckY);  // Curve down
-            // Post-boundary fade (left to right, curving up from duck point)
-            ctx.quadraticCurveTo(centerX + postWidth * 0.3, minY, centerX + postWidth, minY);  // Curve up
-            ctx.lineTo(centerX + postWidth, maxY);
-            ctx.lineTo(centerX - preWidth, maxY);
-            ctx.closePath();
-            ctx.fill();
-
-            // Draw the envelope line
-            ctx.beginPath();
-            ctx.moveTo(centerX - preWidth, minY);
-            ctx.quadraticCurveTo(centerX - preWidth * 0.3, minY, centerX, duckY);
-            ctx.quadraticCurveTo(centerX + postWidth * 0.3, minY, centerX + postWidth, minY);
+            ctx.moveTo(margin, y);
+            ctx.lineTo(width - margin, y);
             ctx.stroke();
         }
 
-        // Draw filter envelope (orange/amber, below volume)
-        if (this.enabled && filterFreqRaw > 0 && filterDepth > 0) {
-            const filterY = height * 0.5 + (height * 0.35 * filterDepth);
+        // Draw subtle grid lines (vertical time markers)
+        ctx.strokeStyle = '#151515';
+        const timeMarks = [0.25, 0.5, 0.75];
+        for (const mark of timeMarks) {
+            const x1 = centerX - (width / 2 - margin) * mark;
+            const x2 = centerX + (width / 2 - margin) * mark;
+            ctx.beginPath();
+            ctx.moveTo(x1, margin);
+            ctx.lineTo(x1, height - margin);
+            ctx.moveTo(x2, margin);
+            ctx.lineTo(x2, height - margin);
+            ctx.stroke();
+        }
 
-            ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
-            ctx.strokeStyle = 'rgba(255, 152, 0, 0.7)';
-            ctx.lineWidth = 1;
+        // Draw baseline (0 dB line)
+        const baselineY = height * 0.15;
+        ctx.strokeStyle = '#252525';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 2]);
+        ctx.beginPath();
+        ctx.moveTo(margin, baselineY);
+        ctx.lineTo(width - margin, baselineY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Draw LP filter envelope first (behind volume)
+        if (this.enabled && filterFreqRaw > 0 && filterDepth > 0) {
+            const filterBaseY = height * 0.45;
+            const filterMaxY = filterBaseY + (height * 0.4 * filterDepth);
+
+            // Fill area
+            const filterGrad = ctx.createLinearGradient(0, filterBaseY, 0, filterMaxY);
+            filterGrad.addColorStop(0, 'rgba(255, 152, 0, 0.05)');
+            filterGrad.addColorStop(1, 'rgba(255, 152, 0, 0.15)');
+            ctx.fillStyle = filterGrad;
 
             ctx.beginPath();
-            ctx.moveTo(centerX - preWidth, height * 0.5);
-            ctx.quadraticCurveTo(centerX - preWidth * 0.3, height * 0.5, centerX, filterY);
-            ctx.quadraticCurveTo(centerX + postWidth * 0.3, height * 0.5, centerX + postWidth, height * 0.5);
+            ctx.moveTo(centerX - preWidth, filterBaseY);
+            ctx.bezierCurveTo(
+                centerX - preWidth * 0.5, filterBaseY,
+                centerX - preWidth * 0.2, filterMaxY,
+                centerX, filterMaxY
+            );
+            ctx.bezierCurveTo(
+                centerX + postWidth * 0.2, filterMaxY,
+                centerX + postWidth * 0.5, filterBaseY,
+                centerX + postWidth, filterBaseY
+            );
+            ctx.lineTo(centerX + postWidth, height - margin);
+            ctx.lineTo(centerX - preWidth, height - margin);
+            ctx.closePath();
+            ctx.fill();
+
+            // Stroke line
+            ctx.strokeStyle = 'rgba(255, 152, 0, 0.7)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(centerX - preWidth, filterBaseY);
+            ctx.bezierCurveTo(
+                centerX - preWidth * 0.5, filterBaseY,
+                centerX - preWidth * 0.2, filterMaxY,
+                centerX, filterMaxY
+            );
+            ctx.bezierCurveTo(
+                centerX + postWidth * 0.2, filterMaxY,
+                centerX + postWidth * 0.5, filterBaseY,
+                centerX + postWidth, filterBaseY
+            );
+            ctx.stroke();
+
+            // Filter label
+            ctx.fillStyle = 'rgba(255, 152, 0, 0.5)';
+            ctx.font = '7px JetBrains Mono';
+            ctx.textAlign = 'left';
+            ctx.fillText('LP', margin + 2, height - 6);
+        }
+
+        // Draw volume envelope
+        if (this.enabled && volDepth < 1) {
+            const duckAmount = 1 - volDepth;
+            const topY = baselineY;
+            const duckY = topY + (height * 0.65 * duckAmount);
+
+            // Gradient fill
+            const volGrad = ctx.createLinearGradient(0, topY, 0, duckY);
+            volGrad.addColorStop(0, 'rgba(79, 195, 247, 0.05)');
+            volGrad.addColorStop(1, 'rgba(79, 195, 247, 0.2)');
+            ctx.fillStyle = volGrad;
+
+            ctx.beginPath();
+            ctx.moveTo(centerX - preWidth, topY);
+            ctx.bezierCurveTo(
+                centerX - preWidth * 0.5, topY,
+                centerX - preWidth * 0.2, duckY,
+                centerX, duckY
+            );
+            ctx.bezierCurveTo(
+                centerX + postWidth * 0.2, duckY,
+                centerX + postWidth * 0.5, topY,
+                centerX + postWidth, topY
+            );
+            ctx.lineTo(centerX + postWidth, topY);
+            ctx.lineTo(centerX - preWidth, topY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Envelope line with glow
+            ctx.shadowColor = 'rgba(79, 195, 247, 0.5)';
+            ctx.shadowBlur = 4;
+            ctx.strokeStyle = '#4fc3f7';
+            ctx.lineWidth = 1.5;
+
+            ctx.beginPath();
+            ctx.moveTo(centerX - preWidth, topY);
+            ctx.bezierCurveTo(
+                centerX - preWidth * 0.5, topY,
+                centerX - preWidth * 0.2, duckY,
+                centerX, duckY
+            );
+            ctx.bezierCurveTo(
+                centerX + postWidth * 0.2, duckY,
+                centerX + postWidth * 0.5, topY,
+                centerX + postWidth, topY
+            );
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Volume label
+            ctx.fillStyle = 'rgba(79, 195, 247, 0.5)';
+            ctx.font = '7px JetBrains Mono';
+            ctx.textAlign = 'right';
+            ctx.fillText('VOL', width - margin - 2, height - 6);
+        }
+
+        // Draw center boundary line (on top)
+        ctx.shadowColor = 'rgba(79, 195, 247, 0.8)';
+        ctx.shadowBlur = 6;
+        ctx.strokeStyle = '#4fc3f7';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX, margin);
+        ctx.lineTo(centerX, height - margin);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Draw time zone indicators
+        if (this.enabled) {
+            // Pre zone bracket
+            ctx.strokeStyle = 'rgba(79, 195, 247, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(centerX - preWidth, margin + 2);
+            ctx.lineTo(centerX - preWidth, margin + 8);
+            ctx.stroke();
+
+            // Post zone bracket
+            ctx.beginPath();
+            ctx.moveTo(centerX + postWidth, margin + 2);
+            ctx.lineTo(centerX + postWidth, margin + 8);
             ctx.stroke();
         }
 
         // Draw disabled overlay
         if (!this.enabled) {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
             ctx.fillRect(0, 0, width, height);
-            ctx.fillStyle = '#555';
-            ctx.font = '10px Orbitron';
+
+            // Strikethrough line
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(margin, height / 2);
+            ctx.lineTo(width - margin, height / 2);
+            ctx.stroke();
+
+            ctx.fillStyle = '#444';
+            ctx.font = '9px Orbitron';
             ctx.textAlign = 'center';
-            ctx.fillText('DISABLED', centerX, height / 2 + 4);
+            ctx.fillText('OFF', centerX, height / 2 + 3);
         }
     }
 
