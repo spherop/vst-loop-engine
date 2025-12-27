@@ -139,66 +139,78 @@
 
                     <!-- Transport Controls (fixed height) -->
                     <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-shrink-0">
-                        <div class="flex justify-center items-center gap-3">
-                            <!-- Input Level Meter and Mute (vertical) -->
-                            <div class="input-monitor-v flex flex-col items-center gap-1 mr-2">
-                                <div class="input-meter-v-container" title="Input Level (L/R)">
-                                    <div class="input-meter-v-track">
-                                        <div id="input-meter-bar-l" class="input-meter-v-bar left"></div>
+                        <div class="flex justify-between items-center gap-3">
+                            <!-- Left side: Input + Transport buttons -->
+                            <div class="flex items-center gap-3">
+                                <!-- Input Level Meter and Mute (vertical) -->
+                                <div class="input-monitor-v flex flex-col items-center gap-1 mr-2">
+                                    <div class="input-meter-v-container" title="Input Level (L/R)">
+                                        <div class="input-meter-v-track">
+                                            <div id="input-meter-bar-l" class="input-meter-v-bar left"></div>
+                                        </div>
+                                        <div class="input-meter-v-track">
+                                            <div id="input-meter-bar-r" class="input-meter-v-bar right"></div>
+                                        </div>
                                     </div>
-                                    <div class="input-meter-v-track">
-                                        <div id="input-meter-bar-r" class="input-meter-v-bar right"></div>
-                                    </div>
+                                    <button id="input-mute-btn" class="input-mute-btn-v" title="Mute Input">
+                                        <span class="mute-label">IN</span>
+                                    </button>
                                 </div>
-                                <button id="input-mute-btn" class="input-mute-btn-v" title="Mute Input">
-                                    <span class="mute-label">IN</span>
+                                <button id="rec-btn" class="transport-btn rec">
+                                    <span class="transport-icon">&#9679;</span>
+                                    <span class="transport-label">REC</span>
                                 </button>
+                                <button id="loop-play-btn" class="transport-btn play">
+                                    <span class="transport-icon">&#9658;</span>
+                                    <span class="transport-label">PLAY</span>
+                                </button>
+                                <button id="reverse-btn" class="transport-btn reverse">
+                                    <span class="transport-icon">&#8634;</span>
+                                    <span class="transport-label">REV</span>
+                                </button>
+                                <button id="loop-stop-btn" class="transport-btn stop">
+                                    <span class="transport-icon">&#9632;</span>
+                                    <span class="transport-label">STOP</span>
+                                </button>
+                                <button id="undo-btn" class="transport-btn undo">
+                                    <span class="transport-icon">&#8617;</span>
+                                    <span class="transport-label">UNDO</span>
+                                </button>
+                                <button id="redo-btn" class="transport-btn redo">
+                                    <span class="transport-icon">&#8618;</span>
+                                    <span class="transport-label">REDO</span>
+                                </button>
+                                <button id="clear-btn" class="transport-btn clear" title="Clear all layers">
+                                    <span class="transport-icon">&#10005;</span>
+                                    <span class="transport-label">CLR</span>
+                                </button>
+                                <!-- Divider -->
+                                <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
+                                <!-- Loop Length Selector -->
+                                <div class="flex items-center gap-2">
+                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">LEN</span>
+                                    <select class="bars-select" id="bars-select" title="Bars (0 = free mode)">
+                                        <option value="0">FREE</option>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="4">4</option>
+                                        <option value="8">8</option>
+                                        <option value="16">16</option>
+                                    </select>
+                                    <span class="font-display text-[6px] text-fd-text-dim">BAR</span>
+                                    <select class="beats-select" id="beats-select" title="Additional beats">
+                                        <option value="0">0</option>
+                                        <option value="1">1</option>
+                                        <option value="2">2</option>
+                                        <option value="3">3</option>
+                                    </select>
+                                    <span class="font-display text-[6px] text-fd-text-dim">BEAT</span>
+                                </div>
                             </div>
-                            <button id="rec-btn" class="transport-btn rec">
-                                <span class="transport-icon">&#9679;</span>
-                                <span class="transport-label">REC</span>
-                            </button>
-                            <button id="loop-play-btn" class="transport-btn play">
-                                <span class="transport-icon">&#9658;</span>
-                                <span class="transport-label">PLAY</span>
-                            </button>
-                            <button id="loop-stop-btn" class="transport-btn stop">
-                                <span class="transport-icon">&#9632;</span>
-                                <span class="transport-label">STOP</span>
-                            </button>
-                            <button id="undo-btn" class="transport-btn undo">
-                                <span class="transport-icon">&#8617;</span>
-                                <span class="transport-label">UNDO</span>
-                            </button>
-                            <button id="redo-btn" class="transport-btn redo">
-                                <span class="transport-icon">&#8618;</span>
-                                <span class="transport-label">REDO</span>
-                            </button>
-                            <button id="clear-btn" class="transport-btn clear" title="Clear all layers">
-                                <span class="transport-icon">&#10005;</span>
-                                <span class="transport-label">CLR</span>
-                            </button>
-                            <!-- Divider -->
-                            <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
-                            <!-- Loop Length Selector -->
+                            <!-- Right side: Loop time display (prominent) -->
                             <div class="flex items-center gap-2">
-                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">LEN</span>
-                                <select class="bars-select" id="bars-select" title="Bars (0 = free mode)">
-                                    <option value="0">FREE</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="4">4</option>
-                                    <option value="8">8</option>
-                                    <option value="16">16</option>
-                                </select>
-                                <span class="font-display text-[6px] text-fd-text-dim">BAR</span>
-                                <select class="beats-select" id="beats-select" title="Additional beats">
-                                    <option value="0">0</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                </select>
-                                <span class="font-display text-[6px] text-fd-text-dim">BEAT</span>
+                                <span id="loop-time-display" class="font-mono text-lg font-bold text-fd-accent"
+                                      style="text-shadow: 0 0 10px rgba(79, 195, 247, 0.3);">0.0s</span>
                             </div>
                         </div>
                     </section>
@@ -239,12 +251,7 @@
 
                     <!-- Layer Controls (fixed at bottom) -->
                     <section class="section-card bg-fd-card rounded-lg border border-fd-border p-2 flex-shrink-0">
-                        <div class="flex justify-between items-center">
-                            <!-- Reverse button -->
-                            <button class="toggle-btn" id="reverse-btn">
-                                <span class="toggle-icon">&#8634;</span>
-                                <span class="toggle-label font-display">REV</span>
-                            </button>
+                        <div class="flex justify-center items-center">
                             <!-- Layer Indicators -->
                             <div class="flex items-center gap-2">
                                 <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
@@ -272,8 +279,6 @@
                                     <span class="font-mono text-[8px] text-fd-text-dim w-[24px]" id="layer-pan-value">C</span>
                                 </div>
                             </div>
-                            <!-- Time display -->
-                            <span id="loop-time-display" class="font-mono text-[10px] text-fd-text">0.0s</span>
                         </div>
                     </section>
 
@@ -660,7 +665,7 @@
             <div class="flex items-center justify-between">
                 <!-- Version ticker + Diagnostics toggle -->
                 <div class="flex items-center gap-2">
-                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.4.1</span>
+                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.5.3</span>
                     <button class="text-[8px] text-fd-text-dim hover:text-fd-accent transition-colors" id="diag-toggle" title="Toggle audio diagnostics">📊</button>
                 </div>
                 <!-- Diagnostic Panel (hidden by default) -->

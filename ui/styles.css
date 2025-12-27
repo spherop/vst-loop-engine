@@ -488,6 +488,29 @@ html, body {
     color: #f44336;
 }
 
+/* Reverse Button */
+.transport-btn.reverse:hover {
+    border-color: var(--looper-accent);
+}
+
+.transport-btn.reverse:hover .transport-icon {
+    color: var(--looper-accent);
+}
+
+.transport-btn.reverse.active {
+    background: linear-gradient(180deg, #102a2a 0%, #081a1a 100%);
+    border-color: var(--looper-accent);
+    box-shadow: 0 0 16px var(--looper-accent-glow);
+}
+
+.transport-btn.reverse.active .transport-icon {
+    color: #81d4fa;
+}
+
+.transport-btn.reverse.active .transport-label {
+    color: var(--looper-accent);
+}
+
 /* ============================================
    INPUT MONITOR (Vertical Level Meter + Mute)
    ============================================ */

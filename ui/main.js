@@ -1460,27 +1460,42 @@ class LooperController {
 
                 // Calculate per-layer vertical offset based on spread
                 // When spread is 0, all layers are centered (layerCenterY = centerY)
-                // When spread is 1, layers are evenly distributed vertically
+                // When spread is 1, layers are evenly distributed vertically with padding
                 let layerCenterY = centerY;
                 let layerSpacing = height;  // Default: full height available for single layer
+
+                // Reserve small space for waveform amplitude at top and bottom
+                const padding = height * 0.05;  // 5% padding on each side (just enough to prevent clipping)
+                const usableHeight = height - (padding * 2);
+
                 if (this.layerSpread > 0 && activeLayers > 1) {
-                    // Calculate offset: distribute layers from top to bottom
-                    const spreadHeight = height * 0.8 * this.layerSpread; // Use 80% of height for spread
-                    layerSpacing = spreadHeight / Math.max(1, activeLayers - 1);
-                    const layerOffset = (layerIdx - (activeLayers - 1) / 2) * layerSpacing;
-                    layerCenterY = centerY + layerOffset;
+                    // At full spread, distribute layers evenly within usable area
+                    // Each layer gets equal vertical space
+                    const slotHeight = usableHeight / activeLayers;
+                    layerSpacing = slotHeight;
+
+                    // Find this layer's position among active layers
+                    let activeIdx = 0;
+                    for (let i = 0; i < layerIdx; i++) {
+                        if (displayWaveforms[i] && displayWaveforms[i].length > 0) activeIdx++;
+                    }
+
+                    // Position: padding + half slot + (activeIdx * slotHeight)
+                    // Interpolate between centered (spread=0) and distributed (spread=1)
+                    const distributedY = padding + slotHeight / 2 + (activeIdx * slotHeight);
+                    layerCenterY = centerY * (1 - this.layerSpread) + distributedY * this.layerSpread;
                 }
 
                 const barWidth = zoomedWidth / layerData.length;
 
                 // Reduce amplitude when spread to prevent overlapping
-                // At 0% spread: use 35% of height
-                // At 100% spread: scale based on layer spacing to leave gaps between waveforms
+                // At 0% spread: use 35% of height (centered, overlapping)
+                // At 100% spread: scale to fit within the allocated slot
                 let amplitudeScale = 0.35;
                 if (this.layerSpread > 0 && activeLayers > 1) {
-                    // At full spread, each waveform should fit within 70% of its allocated space
-                    // (leaving 30% as gap between waveforms)
-                    const maxAmplitudeAtFullSpread = (layerSpacing / height) * 0.35;
+                    // At full spread, each waveform should fit within 80% of its slot
+                    const slotHeight = usableHeight / activeLayers;
+                    const maxAmplitudeAtFullSpread = (slotHeight * 0.4) / height;  // 40% of slot on each side
                     amplitudeScale = 0.35 * (1 - this.layerSpread) + maxAmplitudeAtFullSpread * this.layerSpread;
                 }
 
@@ -1663,8 +1678,19 @@ class LooperController {
 
     async record() {
         try {
-            await this.recordFn();
-            this.updateTransportUI('recording');
+            // Check if any layer has content (layer 1 = index 0)
+            const hasContent = this.layerContentStates && this.layerContentStates[0] === true;
+
+            // When idle with existing content, use overdub (starts playback + records)
+            // When idle with no content, use record (starts fresh recording)
+            if (this.state === 'idle' && hasContent) {
+                console.log('[LOOPER] DUB from idle - calling overdub to start playback + record');
+                await this.overdubFn();
+                this.updateTransportUI('overdubbing');
+            } else {
+                await this.recordFn();
+                this.updateTransportUI('recording');
+            }
         } catch (e) {
             console.error('Error starting record:', e);
         }
@@ -1775,18 +1801,18 @@ class LooperController {
                 // Check if clicking DUB will add a new layer (current layer has content)
                 const willAddLayer = this.layerContentStates[this.currentLayer - 1];
                 if (this.recLabel) this.recLabel.textContent = willAddLayer ? 'DUB+' : 'DUB';
-                // Color the DUB button to match the rightmost layer button (current highest layer)
-                // This matches the layer that will become the "current recording layer" when DUB is clicked
+                // Color the DUB button to match the NEXT layer that will be recorded to
+                // When DUB+ is shown, clicking will record to highestLayer + 1
                 if (willAddLayer && this.highestLayer > 0) {
-                    // Match the rightmost layer button color (highestLayer is 1-indexed)
-                    const rightmostIdx = Math.min(this.highestLayer - 1, 7);
-                    const rightmostColor = this.layerColors[rightmostIdx];
+                    // Next layer index (0-indexed): highestLayer is 1-indexed, so highestLayer = next layer's 0-index
+                    const nextLayerIdx = Math.min(this.highestLayer, 7);
+                    const nextLayerColor = this.layerColors[nextLayerIdx];
                     if (this.recBtn) {
-                        this.recBtn.style.borderColor = rightmostColor;
-                        this.recBtn.style.boxShadow = `0 0 8px ${rightmostColor}60`;
+                        this.recBtn.style.borderColor = nextLayerColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
                     }
                     if (this.recLabel) {
-                        this.recLabel.style.color = rightmostColor;
+                        this.recLabel.style.color = nextLayerColor;
                     }
                 }
                 break;
@@ -1809,7 +1835,25 @@ class LooperController {
                 break;
             case 'idle':
             default:
-                if (this.recLabel) this.recLabel.textContent = 'REC';
+                // When idle with recorded content, show DUB (clicking will start playback + overdub)
+                // When idle with no content, show REC (clicking will start fresh recording)
+                const hasContentIdle = this.layerContentStates && this.layerContentStates[0] === true;
+                if (hasContentIdle) {
+                    if (this.recLabel) this.recLabel.textContent = 'DUB';
+                    // Color to match the next layer that will be recorded to
+                    // highestLayer is 1-indexed, so highestLayer=1 means layer 0 has content, next is layer 1 (index 1)
+                    const nextLayerIdx = Math.min(this.highestLayer, 7);
+                    const nextLayerColor = this.layerColors[nextLayerIdx];
+                    if (this.recBtn) {
+                        this.recBtn.style.borderColor = nextLayerColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
+                    }
+                    if (this.recLabel) {
+                        this.recLabel.style.color = nextLayerColor;
+                    }
+                } else {
+                    if (this.recLabel) this.recLabel.textContent = 'REC';
+                }
                 break;
         }
 
