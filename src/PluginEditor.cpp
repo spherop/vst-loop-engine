@@ -438,7 +438,8 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   })
                   .withNativeFunction("setCrossfadeParams", [this](const juce::Array<juce::var>& args, auto complete)
                   {
-                      // Args: preTimeMs, postTimeMs, volDepth (0-1), filterFreq (Hz, 0=off), filterDepth (0-1)
+                      // Args: preTimeMs, postTimeMs, volDepth (0-1), filterFreq (Hz, 0=off), filterDepth (0-1),
+                      //       smearAmount (0-1), smearAttack (0.01-0.5), smearLength (0.25-2.0)
                       if (args.size() >= 5)
                       {
                           int preTimeMs = static_cast<int>(args[0]);
@@ -446,15 +447,22 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           float volDepth = static_cast<float>(args[2]);
                           float filterFreq = static_cast<float>(args[3]);
                           float filterDepth = static_cast<float>(args[4]);
+                          float smearAmount = args.size() >= 6 ? static_cast<float>(args[5]) : 0.0f;
+                          float smearAttack = args.size() >= 7 ? static_cast<float>(args[6]) : 0.1f;
+                          float smearLength = args.size() >= 8 ? static_cast<float>(args[7]) : 1.0f;
 
                           auto& loopEngine = processorRef.getLoopEngine();
-                          loopEngine.setCrossfadeParams(preTimeMs, postTimeMs, volDepth, filterFreq, filterDepth);
+                          loopEngine.setCrossfadeParams(preTimeMs, postTimeMs, volDepth, filterFreq, filterDepth,
+                                                        smearAmount, smearAttack, smearLength);
 
                           DBG("setCrossfadeParams: pre=" + juce::String(preTimeMs) +
                               "ms post=" + juce::String(postTimeMs) +
                               "ms volDepth=" + juce::String(volDepth, 2) +
                               " filterFreq=" + juce::String(filterFreq, 0) +
-                              "Hz filterDepth=" + juce::String(filterDepth, 2));
+                              "Hz filterDepth=" + juce::String(filterDepth, 2) +
+                              " smear=" + juce::String(smearAmount, 2) +
+                              " attack=" + juce::String(smearAttack, 2) +
+                              " length=" + juce::String(smearLength, 2));
                       }
                       complete({});
                   })
@@ -498,11 +506,11 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           }
                       }
 
-                      // Return default settings
+                      // Return default settings (volDepth 100 = no ducking)
                       auto* defaults = new juce::DynamicObject();
                       defaults->setProperty("preTime", 80);
                       defaults->setProperty("postTime", 100);
-                      defaults->setProperty("volDepth", 0);
+                      defaults->setProperty("volDepth", 100);  // 100% = no volume ducking
                       defaults->setProperty("filterFreq", 0);
                       defaults->setProperty("filterDepth", 0);
                       defaults->setProperty("enabled", true);

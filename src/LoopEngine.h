@@ -28,6 +28,13 @@ public:
         dummyBuffer.setSize(2, samplesPerBlock);
         loopOnlyBuffer.setSize(2, samplesPerBlock);
 
+        // Initialize smear buffers
+        smearBufferL.resize(SMEAR_BUFFER_SIZE, 0.0f);
+        smearBufferR.resize(SMEAR_BUFFER_SIZE, 0.0f);
+        smearWritePos = 0;
+        smearCaptureLength = 0;
+        smearActive = false;
+
         // Reset state
         currentLayer = 0;
         highestLayer = 0;
@@ -904,6 +911,10 @@ public:
             {
                 antiClickCountdown = postSamples;
                 approachingBoundary = false;
+                // Snapshot the smear write position for playback
+                // This is where we stopped capturing, so we read backwards from here
+                smearPlaybackStart = smearWritePos;
+                smearActive = true;
             }
 
             // Check if we're APPROACHING the boundary (pre-boundary zone)
@@ -931,6 +942,24 @@ public:
 
             // Calculate effect strength based on where we are
             float effectStrength = 0.0f;  // 0 = no effect, 1 = full effect at boundary
+            const float smearAmount = xfadeSmearAmount.load();
+
+            // FIRST: Capture clean audio for smear BEFORE any effects are applied
+            // We capture throughout the pre-boundary zone so we have clean audio to blend
+            if (inPreBoundaryZone && smearAmount > 0.0f)
+            {
+                const float* leftData = buffer.getReadPointer(0);
+                const float* rightData = numChannels > 1 ? buffer.getReadPointer(1) : nullptr;
+
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    smearBufferL[smearWritePos] = leftData[i];
+                    smearBufferR[smearWritePos] = rightData ? rightData[i] : leftData[i];
+                    smearWritePos = (smearWritePos + 1) % SMEAR_BUFFER_SIZE;
+                }
+                // Track how many samples we've captured (up to buffer size)
+                smearCaptureLength = std::min(smearCaptureLength + numSamples, SMEAR_BUFFER_SIZE);
+            }
 
             if (inPreBoundaryZone && antiClickCountdown == 0 && preThreshold > 0.0f)
             {
@@ -943,6 +972,17 @@ public:
                 // POST-BOUNDARY: ramp down effect as we move away
                 float fadeProgress = static_cast<float>(antiClickCountdown) / static_cast<float>(postSamples);
                 effectStrength = fadeProgress;  // 1.0 just crossed, 0.0 when done
+                // smearActive is already set when we crossed the boundary
+            }
+            else
+            {
+                // Not in any boundary zone - reset smear state
+                if (!inPreBoundaryZone && antiClickCountdown == 0)
+                {
+                    smearActive = false;
+                    // Don't reset smearCaptureLength here - we want to keep capturing
+                    // It will naturally fill the circular buffer
+                }
             }
 
             // Apply effects if strength > 0
@@ -989,6 +1029,70 @@ public:
                 if (antiClickCountdown > 0)
                 {
                     antiClickCountdown = std::max(0, antiClickCountdown - numSamples);
+                }
+            }
+
+            // SMEAR FILL: Apply AFTER all ducking effects, as a separate pass
+            // This ensures the clean captured audio is not affected by LP filter or volume duck
+            // Smear runs for smearLength * postTime samples, independent of effectStrength
+            if (smearActive && smearAmount > 0.0f && smearCaptureLength > 0)
+            {
+                float* leftData = buffer.getWritePointer(0);
+                float* rightData = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
+
+                const float smearAttackFrac = xfadeSmearAttack.load();  // 0.01 to 0.5
+                const float smearLengthMult = xfadeSmearLength.load();  // 0.25 to 2.0
+                const int smearTotalSamples = static_cast<int>(static_cast<float>(postSamples) * smearLengthMult);
+
+                for (int i = 0; i < numSamples; ++i)
+                {
+                    // How many samples since we crossed the boundary
+                    int samplesSinceCrossing = (postSamples - antiClickCountdown) + i;
+
+                    // Only process if within smear window
+                    if (samplesSinceCrossing >= smearTotalSamples)
+                    {
+                        smearActive = false;
+                        break;
+                    }
+
+                    // Read BACKWARDS from where we stopped writing (smearPlaybackStart)
+                    int reverseOffset = samplesSinceCrossing;
+                    if (reverseOffset >= smearCaptureLength) reverseOffset = reverseOffset % smearCaptureLength;
+                    int readPos = (smearPlaybackStart - 1 - reverseOffset + SMEAR_BUFFER_SIZE) % SMEAR_BUFFER_SIZE;
+
+                    float smearL = smearBufferL[readPos];
+                    float smearR = smearBufferR[readPos];
+
+                    // Apply envelope: attack, sustain, release based on parameters
+                    float smearProgress = static_cast<float>(samplesSinceCrossing) / static_cast<float>(smearTotalSamples);
+
+                    float smearEnvelope;
+                    const float sustainEnd = 0.5f;  // Sustain ends at 50% of total length
+
+                    if (smearProgress < smearAttackFrac)
+                    {
+                        // Attack phase - fade in
+                        float attackProgress = smearProgress / smearAttackFrac;
+                        smearEnvelope = 0.5f * (1.0f - std::cos(attackProgress * juce::MathConstants<float>::pi));
+                    }
+                    else if (smearProgress < sustainEnd)
+                    {
+                        // Sustain at full level
+                        smearEnvelope = 1.0f;
+                    }
+                    else
+                    {
+                        // Release phase - fade out with squared cosine for gentle tail
+                        float releaseProgress = (smearProgress - sustainEnd) / (1.0f - sustainEnd);
+                        float cosVal = std::cos(releaseProgress * juce::MathConstants<float>::halfPi);
+                        smearEnvelope = cosVal * cosVal;
+                    }
+
+                    // Add clean smear audio on top of ducked signal
+                    float smearMix = smearAmount * smearEnvelope;
+                    leftData[i] += smearL * smearMix;
+                    if (rightData) rightData[i] += smearR * smearMix;
                 }
             }
         }
@@ -1210,13 +1314,17 @@ public:
     }
 
     // Set crossfade parameters from UI
-    void setCrossfadeParams(int preTimeMs, int postTimeMs, float volDepth, float filterFreq, float filterDepth)
+    void setCrossfadeParams(int preTimeMs, int postTimeMs, float volDepth, float filterFreq, float filterDepth,
+                            float smearAmount = 0.0f, float smearAttack = 0.1f, float smearLength = 1.0f)
     {
         xfadePreTimeMs.store(preTimeMs);
         xfadePostTimeMs.store(postTimeMs);
         xfadeVolDepth.store(volDepth);
         xfadeFilterFreq.store(filterFreq);
         xfadeFilterDepth.store(filterDepth);
+        xfadeSmearAttack.store(smearAttack);
+        xfadeSmearLength.store(smearLength);
+        xfadeSmearAmount.store(smearAmount);
     }
 
     // Flatten all non-muted layers into layer 1
@@ -1355,6 +1463,18 @@ private:
     std::atomic<float> xfadeFilterDepth { 0.0f }; // Filter mix at boundary (0-1)
     float antiClickFilterL = 0.0f;  // One-pole LP filter state
     float antiClickFilterR = 0.0f;
+
+    // Smear/fill parameters - captures audio before boundary and blends it across
+    std::atomic<float> xfadeSmearAmount { 0.0f };  // 0 = off, 1 = full smear blend
+    std::atomic<float> xfadeSmearAttack { 0.1f };  // Attack time as fraction of post time (0.01 to 0.5)
+    std::atomic<float> xfadeSmearLength { 1.0f };  // Length multiplier (0.25 to 2.0) - extends beyond post time
+    static constexpr int SMEAR_BUFFER_SIZE = 8192; // ~185ms at 44.1kHz
+    std::vector<float> smearBufferL;
+    std::vector<float> smearBufferR;
+    int smearWritePos = 0;
+    int smearCaptureLength = 0;      // How many samples captured before boundary
+    int smearPlaybackStart = 0;      // Write position snapshot at boundary crossing
+    bool smearActive = false;        // True when playing back smear buffer
 
     LoopBuffer::State getCurrentState() const
     {

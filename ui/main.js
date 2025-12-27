@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "1.7.2";
+const UI_VERSION = "1.7.6";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -1823,7 +1823,7 @@ class LooperController {
                 if (this.recLabel) this.recLabel.textContent = willAddLayerAfterOverdub ? 'DUB+' : 'DUB';
                 // Color matches the layer currently being recorded to (currentLayer)
                 {
-                    const currentLayerColor = this.layerColors[this.currentLayer - 1];  // currentLayer is 1-indexed
+                    const currentLayerColor = this.layerColors[this.currentLayer];  // currentLayer is 1-indexed
                     if (this.recBtn) {
                         this.recBtn.style.borderColor = currentLayerColor;
                         this.recBtn.style.boxShadow = `0 0 8px ${currentLayerColor}60`;
@@ -2764,6 +2764,9 @@ class CrossfadeSettingsController {
         this.volDepthSlider = document.getElementById('xfade-vol-depth');
         this.filterFreqSlider = document.getElementById('xfade-filter-freq');
         this.filterDepthSlider = document.getElementById('xfade-filter-depth');
+        this.smearAmountSlider = document.getElementById('xfade-smear-amount');
+        this.smearAttackSlider = document.getElementById('xfade-smear-attack');
+        this.smearLengthSlider = document.getElementById('xfade-smear-length');
 
         // Value displays
         this.preTimeVal = document.getElementById('xfade-pre-time-val');
@@ -2771,6 +2774,9 @@ class CrossfadeSettingsController {
         this.volDepthVal = document.getElementById('xfade-vol-depth-val');
         this.filterFreqVal = document.getElementById('xfade-filter-freq-val');
         this.filterDepthVal = document.getElementById('xfade-filter-depth-val');
+        this.smearAmountVal = document.getElementById('xfade-smear-amount-val');
+        this.smearAttackVal = document.getElementById('xfade-smear-attack-val');
+        this.smearLengthVal = document.getElementById('xfade-smear-length-val');
 
         // Visualizer
         this.vizCanvas = document.getElementById('xfade-viz-canvas');
@@ -2820,7 +2826,10 @@ class CrossfadeSettingsController {
             this.postTimeSlider,
             this.volDepthSlider,
             this.filterFreqSlider,
-            this.filterDepthSlider
+            this.filterDepthSlider,
+            this.smearAmountSlider,
+            this.smearAttackSlider,
+            this.smearLengthSlider
         ];
         sliders.forEach(slider => {
             if (slider) {
@@ -2843,32 +2852,37 @@ class CrossfadeSettingsController {
 
     open() {
         if (this.panel && this.openBtn) {
+            // First unhide to get actual dimensions
+            this.panel.classList.remove('hidden');
+
             // Position panel to the right of the button
             const btnRect = this.openBtn.getBoundingClientRect();
-            this.panel.style.left = `${btnRect.right + 8}px`;
-            this.panel.style.top = `${btnRect.top - 100}px`;  // Center vertically roughly
-
-            // Ensure panel stays within viewport
             const panelRect = this.panel.getBoundingClientRect();
             const viewportHeight = window.innerHeight;
             const viewportWidth = window.innerWidth;
 
+            // Default position: right of button, vertically centered above it
+            let left = btnRect.right + 8;
+            let top = btnRect.top - panelRect.height + 30;  // Anchor near bottom of panel to button
+
             // Adjust if panel goes off right edge
-            if (btnRect.right + 8 + 300 > viewportWidth) {
-                this.panel.style.left = `${btnRect.left - 308}px`;  // Show on left instead
+            if (left + panelRect.width > viewportWidth) {
+                left = btnRect.left - panelRect.width - 8;  // Show on left instead
             }
 
             // Adjust if panel goes off bottom
-            if (parseFloat(this.panel.style.top) + panelRect.height > viewportHeight) {
-                this.panel.style.top = `${viewportHeight - panelRect.height - 10}px`;
+            if (top + panelRect.height > viewportHeight - 10) {
+                top = viewportHeight - panelRect.height - 10;
             }
 
             // Adjust if panel goes off top
-            if (parseFloat(this.panel.style.top) < 10) {
-                this.panel.style.top = '10px';
+            if (top < 10) {
+                top = 10;
             }
 
-            this.panel.classList.remove('hidden');
+            this.panel.style.left = `${left}px`;
+            this.panel.style.top = `${top}px`;
+
             this.openBtn.classList.add('active');
             this.startVisualizerAnimation();
         }
@@ -2934,6 +2948,21 @@ class CrossfadeSettingsController {
         if (this.filterDepthVal && this.filterDepthSlider) {
             this.filterDepthVal.textContent = this.filterDepthSlider.value;
         }
+
+        // Smear amount
+        if (this.smearAmountVal && this.smearAmountSlider) {
+            this.smearAmountVal.textContent = this.smearAmountSlider.value;
+        }
+
+        // Smear attack
+        if (this.smearAttackVal && this.smearAttackSlider) {
+            this.smearAttackVal.textContent = this.smearAttackSlider.value;
+        }
+
+        // Smear length
+        if (this.smearLengthVal && this.smearLengthSlider) {
+            this.smearLengthVal.textContent = this.smearLengthSlider.value;
+        }
     }
 
     // Visualizer animation
@@ -2970,9 +2999,10 @@ class CrossfadeSettingsController {
         // Get values
         const preTime = parseInt(this.preTimeSlider?.value || 80);
         const postTime = parseInt(this.postTimeSlider?.value || 100);
-        const volDepth = parseInt(this.volDepthSlider?.value || 0) / 100;  // 0 = full duck, 1 = no duck
+        const volDepth = parseInt(this.volDepthSlider?.value || 100) / 100;  // 0 = full duck, 1 = no duck (default: no duck)
         const filterFreqRaw = parseInt(this.filterFreqSlider?.value || 0);
         const filterDepth = parseInt(this.filterDepthSlider?.value || 0) / 100;
+        const smearAmount = parseInt(this.smearAmountSlider?.value || 0) / 100;
 
         const maxTime = 500;
         const centerX = width / 2;
@@ -3016,15 +3046,15 @@ class CrossfadeSettingsController {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Draw LP filter envelope first (behind volume)
+        // Draw LP filter envelope (main effect visualization)
         if (this.enabled && filterFreqRaw > 0 && filterDepth > 0) {
-            const filterBaseY = height * 0.45;
-            const filterMaxY = filterBaseY + (height * 0.4 * filterDepth);
+            const filterBaseY = height * 0.2;
+            const filterMaxY = filterBaseY + (height * 0.6 * filterDepth);
 
-            // Fill area
+            // Fill area with gradient
             const filterGrad = ctx.createLinearGradient(0, filterBaseY, 0, filterMaxY);
             filterGrad.addColorStop(0, 'rgba(255, 152, 0, 0.05)');
-            filterGrad.addColorStop(1, 'rgba(255, 152, 0, 0.15)');
+            filterGrad.addColorStop(1, 'rgba(255, 152, 0, 0.2)');
             ctx.fillStyle = filterGrad;
 
             ctx.beginPath();
@@ -3044,8 +3074,10 @@ class CrossfadeSettingsController {
             ctx.closePath();
             ctx.fill();
 
-            // Stroke line
-            ctx.strokeStyle = 'rgba(255, 152, 0, 0.7)';
+            // Stroke line with glow
+            ctx.shadowColor = 'rgba(255, 152, 0, 0.5)';
+            ctx.shadowBlur = 4;
+            ctx.strokeStyle = '#ff9800';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.moveTo(centerX - preWidth, filterBaseY);
@@ -3060,69 +3092,50 @@ class CrossfadeSettingsController {
                 centerX + postWidth, filterBaseY
             );
             ctx.stroke();
-
-            // Filter label
-            ctx.fillStyle = 'rgba(255, 152, 0, 0.5)';
-            ctx.font = '7px JetBrains Mono';
-            ctx.textAlign = 'left';
-            ctx.fillText('LP', margin + 2, height - 6);
-        }
-
-        // Draw volume envelope
-        if (this.enabled && volDepth < 1) {
-            const duckAmount = 1 - volDepth;
-            const topY = baselineY;
-            const duckY = topY + (height * 0.65 * duckAmount);
-
-            // Gradient fill
-            const volGrad = ctx.createLinearGradient(0, topY, 0, duckY);
-            volGrad.addColorStop(0, 'rgba(79, 195, 247, 0.05)');
-            volGrad.addColorStop(1, 'rgba(79, 195, 247, 0.2)');
-            ctx.fillStyle = volGrad;
-
-            ctx.beginPath();
-            ctx.moveTo(centerX - preWidth, topY);
-            ctx.bezierCurveTo(
-                centerX - preWidth * 0.5, topY,
-                centerX - preWidth * 0.2, duckY,
-                centerX, duckY
-            );
-            ctx.bezierCurveTo(
-                centerX + postWidth * 0.2, duckY,
-                centerX + postWidth * 0.5, topY,
-                centerX + postWidth, topY
-            );
-            ctx.lineTo(centerX + postWidth, topY);
-            ctx.lineTo(centerX - preWidth, topY);
-            ctx.closePath();
-            ctx.fill();
-
-            // Envelope line with glow
-            ctx.shadowColor = 'rgba(79, 195, 247, 0.5)';
-            ctx.shadowBlur = 4;
-            ctx.strokeStyle = '#4fc3f7';
-            ctx.lineWidth = 1.5;
-
-            ctx.beginPath();
-            ctx.moveTo(centerX - preWidth, topY);
-            ctx.bezierCurveTo(
-                centerX - preWidth * 0.5, topY,
-                centerX - preWidth * 0.2, duckY,
-                centerX, duckY
-            );
-            ctx.bezierCurveTo(
-                centerX + postWidth * 0.2, duckY,
-                centerX + postWidth * 0.5, topY,
-                centerX + postWidth, topY
-            );
-            ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Volume label
-            ctx.fillStyle = 'rgba(79, 195, 247, 0.5)';
+            // Filter label
+            ctx.fillStyle = 'rgba(255, 152, 0, 0.6)';
+            ctx.font = '7px JetBrains Mono';
+            ctx.textAlign = 'left';
+            ctx.fillText('LP FILTER', margin + 2, height - 6);
+        }
+
+        // Note: Volume duck visualization removed (feature hidden, LP filter is more effective)
+
+        // Draw smear fill visualization (shows audio being captured and blended)
+        if (this.enabled && smearAmount > 0) {
+            const smearY = height * 0.4;
+            const smearHeight = height * 0.3 * smearAmount;
+
+            // Gradient fill showing captured audio zone
+            const smearGrad = ctx.createLinearGradient(centerX - preWidth, 0, centerX + postWidth, 0);
+            smearGrad.addColorStop(0, 'rgba(156, 39, 176, 0.0)');      // Transparent at start
+            smearGrad.addColorStop(0.3, 'rgba(156, 39, 176, 0.15)');   // Capture zone (purple)
+            smearGrad.addColorStop(0.5, 'rgba(156, 39, 176, 0.3)');    // Peak at boundary
+            smearGrad.addColorStop(0.7, 'rgba(156, 39, 176, 0.15)');   // Blend zone
+            smearGrad.addColorStop(1, 'rgba(156, 39, 176, 0.0)');      // Transparent at end
+
+            ctx.fillStyle = smearGrad;
+            ctx.fillRect(centerX - preWidth, smearY, preWidth + postWidth, smearHeight);
+
+            // Horizontal lines showing smear texture
+            ctx.strokeStyle = 'rgba(156, 39, 176, 0.4)';
+            ctx.lineWidth = 1;
+            const numLines = 3;
+            for (let i = 0; i < numLines; i++) {
+                const y = smearY + (smearHeight / (numLines + 1)) * (i + 1);
+                ctx.beginPath();
+                ctx.moveTo(centerX - preWidth * 0.8, y);
+                ctx.lineTo(centerX + postWidth * 0.8, y);
+                ctx.stroke();
+            }
+
+            // Label
+            ctx.fillStyle = 'rgba(156, 39, 176, 0.6)';
             ctx.font = '7px JetBrains Mono';
             ctx.textAlign = 'right';
-            ctx.fillText('VOL', width - margin - 2, height - 6);
+            ctx.fillText('SMEAR', width - margin - 2, height - 6);
         }
 
         // Draw center boundary line (on top)
@@ -3180,9 +3193,12 @@ class CrossfadeSettingsController {
                 if (settings) {
                     if (this.preTimeSlider) this.preTimeSlider.value = settings.preTime || 80;
                     if (this.postTimeSlider) this.postTimeSlider.value = settings.postTime || 100;
-                    if (this.volDepthSlider) this.volDepthSlider.value = settings.volDepth || 0;
+                    if (this.volDepthSlider) this.volDepthSlider.value = settings.volDepth !== undefined ? settings.volDepth : 100;
                     if (this.filterFreqSlider) this.filterFreqSlider.value = settings.filterFreq || 0;
                     if (this.filterDepthSlider) this.filterDepthSlider.value = settings.filterDepth || 0;
+                    if (this.smearAmountSlider) this.smearAmountSlider.value = settings.smearAmount || 0;
+                    if (this.smearAttackSlider) this.smearAttackSlider.value = settings.smearAttack || 10;
+                    if (this.smearLengthSlider) this.smearLengthSlider.value = settings.smearLength || 100;
                     this.enabled = settings.enabled !== false;  // Default to true
                     this.updateEnabledUI();
                     this.updateDisplays();
@@ -3200,9 +3216,12 @@ class CrossfadeSettingsController {
                 await this.saveCrossfadeSettingsFn({
                     preTime: parseInt(this.preTimeSlider?.value || 80),
                     postTime: parseInt(this.postTimeSlider?.value || 100),
-                    volDepth: parseInt(this.volDepthSlider?.value || 0),
+                    volDepth: parseInt(this.volDepthSlider?.value || 100),
                     filterFreq: parseInt(this.filterFreqSlider?.value || 0),
                     filterDepth: parseInt(this.filterDepthSlider?.value || 0),
+                    smearAmount: parseInt(this.smearAmountSlider?.value || 0),
+                    smearAttack: parseInt(this.smearAttackSlider?.value || 10),
+                    smearLength: parseInt(this.smearLengthSlider?.value || 100),
                     enabled: this.enabled
                 });
             } catch (e) {
@@ -3217,7 +3236,7 @@ class CrossfadeSettingsController {
         // If disabled, send zeros
         if (!this.enabled) {
             try {
-                await this.setCrossfadeParamsFn(5, 5, 1.0, 0, 0);  // Minimal effect
+                await this.setCrossfadeParamsFn(5, 5, 1.0, 0, 0, 0, 0.1, 1.0);  // Minimal effect
             } catch (e) {
                 console.error('[XFADE] Error sending params:', e);
             }
@@ -3226,16 +3245,19 @@ class CrossfadeSettingsController {
 
         const preTimeMs = parseInt(this.preTimeSlider?.value || 80);
         const postTimeMs = parseInt(this.postTimeSlider?.value || 100);
-        const volDepth = parseInt(this.volDepthSlider?.value || 0) / 100.0;  // 0-1
+        const volDepth = parseInt(this.volDepthSlider?.value || 100) / 100.0;  // 0-1 (default: 1.0 = no duck)
 
         // Filter freq: 0 = off, else map to Hz
         const filterFreqRaw = parseInt(this.filterFreqSlider?.value || 0);
         const filterFreq = filterFreqRaw === 0 ? 0 : 100 * Math.pow(200, filterFreqRaw / 100);
 
         const filterDepth = parseInt(this.filterDepthSlider?.value || 0) / 100.0;  // 0-1
+        const smearAmount = parseInt(this.smearAmountSlider?.value || 0) / 100.0;  // 0-1
+        const smearAttack = parseInt(this.smearAttackSlider?.value || 10) / 100.0;  // 1-50% -> 0.01-0.5
+        const smearLength = parseInt(this.smearLengthSlider?.value || 100) / 100.0;  // 25-200% -> 0.25-2.0
 
         try {
-            await this.setCrossfadeParamsFn(preTimeMs, postTimeMs, volDepth, filterFreq, filterDepth);
+            await this.setCrossfadeParamsFn(preTimeMs, postTimeMs, volDepth, filterFreq, filterDepth, smearAmount, smearAttack, smearLength);
             this.saveSettings();  // Save on every change
         } catch (e) {
             console.error('[XFADE] Error sending params:', e);

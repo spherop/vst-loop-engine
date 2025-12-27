@@ -669,7 +669,7 @@
             <div class="flex items-center justify-between">
                 <!-- Version ticker + Diagnostics toggle -->
                 <div class="flex items-center gap-2">
-                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.7.2</span>
+                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.7.7</span>
                     <button class="text-[8px] text-fd-text-dim hover:text-fd-accent transition-colors" id="diag-toggle" title="Toggle audio diagnostics">📊</button>
                 </div>
                 <!-- Diagnostic Panel (hidden by default) -->
@@ -781,13 +781,33 @@
             </div>
         </div>
 
-        <!-- Volume Duck -->
+        <!-- Smear Fill (blends audio across boundary) -->
         <div class="xfade-section">
+            <div class="xfade-section-label">SMEAR FILL</div>
+            <div class="xfade-param-row">
+                <label class="xfade-label">Amount (%)</label>
+                <input type="range" id="xfade-smear-amount" min="0" max="100" value="0" class="xfade-slider xfade-slider-smear">
+                <span class="xfade-value" id="xfade-smear-amount-val">0</span>
+            </div>
+            <div class="xfade-param-row">
+                <label class="xfade-label">Attack (%)</label>
+                <input type="range" id="xfade-smear-attack" min="1" max="50" value="10" class="xfade-slider xfade-slider-smear">
+                <span class="xfade-value" id="xfade-smear-attack-val">10</span>
+            </div>
+            <div class="xfade-param-row">
+                <label class="xfade-label">Length (%)</label>
+                <input type="range" id="xfade-smear-length" min="25" max="200" value="100" class="xfade-slider xfade-slider-smear">
+                <span class="xfade-value" id="xfade-smear-length-val">100</span>
+            </div>
+        </div>
+
+        <!-- Volume Duck (hidden for now - LP filter is more effective) -->
+        <div class="xfade-section hidden">
             <div class="xfade-section-label">VOLUME DUCK</div>
             <div class="xfade-param-row">
                 <label class="xfade-label">Min Level (%)</label>
-                <input type="range" id="xfade-vol-depth" min="0" max="100" value="0" class="xfade-slider">
-                <span class="xfade-value" id="xfade-vol-depth-val">0</span>
+                <input type="range" id="xfade-vol-depth" min="0" max="100" value="100" class="xfade-slider">
+                <span class="xfade-value" id="xfade-vol-depth-val">100</span>
             </div>
         </div>
     </div>
