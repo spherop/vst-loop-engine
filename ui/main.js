@@ -593,6 +593,15 @@ class LooperController {
         // Layer spread for vertical spacing in waveform display (0-1)
         this.layerSpread = 0;
 
+        // Selected layer for volume/pan editing (1-indexed, default to layer 1)
+        this.selectedLayer = 1;
+
+        // Per-layer volume/pan native functions
+        this.setLayerVolumeFn = getNativeFunction("setLayerVolume");
+        this.getLayerVolumeFn = getNativeFunction("getLayerVolume");
+        this.setLayerPanFn = getNativeFunction("setLayerPan");
+        this.getLayerPanFn = getNativeFunction("getLayerPan");
+
         // Loop length setting (bars + beats)
         this.loopLengthBars = 0;
         this.loopLengthBeats = 0;
@@ -607,6 +616,7 @@ class LooperController {
         this.setupZoomControls();
         this.setupRecordingOverlay();
         this.setupLayerSpread();
+        this.setupLayerMixer();
         this.startStatePolling();
 
         // Sync UI with current C++ state on open
@@ -856,8 +866,8 @@ class LooperController {
                         console.error('Error toggling layer mute:', err);
                     }
                 } else {
-                    // Normal click: jump to layer
-                    this.jumpToLayer(layer);
+                    // Normal click: select layer for editing (volume/pan)
+                    this.selectLayer(layer);
                 }
             });
 
@@ -1122,6 +1132,132 @@ class LooperController {
         }
     }
 
+    setupLayerMixer() {
+        this.volumeSlider = document.getElementById('layer-volume-slider');
+        this.volumeValue = document.getElementById('layer-volume-value');
+        this.panKnob = document.getElementById('layer-pan-knob');
+        this.panKnobIndicator = this.panKnob ? this.panKnob.querySelector('.knob-indicator') : null;
+        this.panValue = document.getElementById('layer-pan-value');
+
+        // Pan knob state
+        this.panKnobValue = 0;  // -100 to 100 (center = 0)
+        this.panDragging = false;
+        this.panLastY = 0;
+
+        // Volume slider
+        if (this.volumeSlider) {
+            this.volumeSlider.addEventListener('input', async (e) => {
+                const vol = parseInt(e.target.value) / 100;
+                // Update numeric display
+                if (this.volumeValue) {
+                    this.volumeValue.textContent = e.target.value;
+                }
+                // Update fill gradient
+                this.volumeSlider.style.setProperty('--volume-fill', `${e.target.value}%`);
+                try {
+                    await this.setLayerVolumeFn(this.selectedLayer, vol);
+                } catch (err) {
+                    console.error('Error setting layer volume:', err);
+                }
+            });
+            // Initialize fill
+            this.volumeSlider.style.setProperty('--volume-fill', '100%');
+        }
+
+        // Pan knob - custom mini-knob handler (not using full KnobController)
+        if (this.panKnob) {
+            this.panKnob.addEventListener('mousedown', (e) => {
+                this.panDragging = true;
+                this.panLastY = e.clientY;
+                this.panKnob.classList.add('active');
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!this.panDragging) return;
+                const deltaY = this.panLastY - e.clientY;
+                const sensitivity = 1.5;
+                this.panKnobValue = Math.max(-100, Math.min(100, this.panKnobValue + deltaY * sensitivity));
+                this.updatePanKnobUI();
+                this.sendPanToBackend();
+                this.panLastY = e.clientY;
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (this.panDragging) {
+                    this.panDragging = false;
+                    this.panKnob.classList.remove('active');
+                }
+            });
+
+            // Initialize knob rotation
+            this.updatePanKnobUI();
+        }
+
+        // Initialize with layer 1 selected
+        this.selectLayer(1);
+    }
+
+    updatePanKnobUI() {
+        // Pan goes from -100 to 100, map to -135 to 135 degrees
+        const angle = (this.panKnobValue / 100) * 135;
+        if (this.panKnobIndicator) {
+            this.panKnobIndicator.style.transform = `translateY(-100%) rotate(${angle}deg)`;
+        }
+        // Update text display
+        if (this.panValue) {
+            if (Math.abs(this.panKnobValue) < 5) {
+                this.panValue.textContent = 'C';
+            } else if (this.panKnobValue < 0) {
+                this.panValue.textContent = `L${Math.abs(Math.round(this.panKnobValue))}`;
+            } else {
+                this.panValue.textContent = `R${Math.round(this.panKnobValue)}`;
+            }
+        }
+    }
+
+    async sendPanToBackend() {
+        const panNorm = this.panKnobValue / 100;  // -1 to 1
+        try {
+            await this.setLayerPanFn(this.selectedLayer, panNorm);
+        } catch (err) {
+            console.error('Error setting layer pan:', err);
+        }
+    }
+
+    // Select a layer for editing (volume/pan) - shows white outline
+    async selectLayer(layer) {
+        this.selectedLayer = layer;
+
+        // Update visual selection on layer buttons
+        this.layerBtns.forEach(btn => {
+            const btnLayer = parseInt(btn.dataset.layer);
+            btn.classList.toggle('selected', btnLayer === layer);
+        });
+
+        // Load this layer's current volume and pan
+        try {
+            const vol = await this.getLayerVolumeFn(layer);
+            const panVal = await this.getLayerPanFn(layer);
+
+            // Update volume slider and display
+            if (this.volumeSlider) {
+                const volPercent = Math.round(vol * 100);
+                this.volumeSlider.value = volPercent;
+                this.volumeSlider.style.setProperty('--volume-fill', `${volPercent}%`);
+                if (this.volumeValue) {
+                    this.volumeValue.textContent = volPercent;
+                }
+            }
+
+            // Update pan knob value and UI
+            this.panKnobValue = Math.round(panVal * 100);
+            this.updatePanKnobUI();
+        } catch (err) {
+            console.error('Error loading layer volume/pan:', err);
+        }
+    }
+
     // Zoom methods
     zoomIn() {
         this.zoomLevel = Math.min(this.maxZoom, this.zoomLevel * 1.5);
@@ -1326,17 +1462,27 @@ class LooperController {
                 // When spread is 0, all layers are centered (layerCenterY = centerY)
                 // When spread is 1, layers are evenly distributed vertically
                 let layerCenterY = centerY;
+                let layerSpacing = height;  // Default: full height available for single layer
                 if (this.layerSpread > 0 && activeLayers > 1) {
                     // Calculate offset: distribute layers from top to bottom
                     const spreadHeight = height * 0.8 * this.layerSpread; // Use 80% of height for spread
-                    const layerOffset = (layerIdx - (activeLayers - 1) / 2) * (spreadHeight / Math.max(1, activeLayers - 1));
+                    layerSpacing = spreadHeight / Math.max(1, activeLayers - 1);
+                    const layerOffset = (layerIdx - (activeLayers - 1) / 2) * layerSpacing;
                     layerCenterY = centerY + layerOffset;
                 }
 
                 const barWidth = zoomedWidth / layerData.length;
 
                 // Reduce amplitude when spread to prevent overlapping
-                const amplitudeScale = this.layerSpread > 0 ? 0.35 * (1 - this.layerSpread * 0.6) : 0.35;
+                // At 0% spread: use 35% of height
+                // At 100% spread: scale based on layer spacing to leave gaps between waveforms
+                let amplitudeScale = 0.35;
+                if (this.layerSpread > 0 && activeLayers > 1) {
+                    // At full spread, each waveform should fit within 70% of its allocated space
+                    // (leaving 30% as gap between waveforms)
+                    const maxAmplitudeAtFullSpread = (layerSpacing / height) * 0.35;
+                    amplitudeScale = 0.35 * (1 - this.layerSpread) + maxAmplitudeAtFullSpread * this.layerSpread;
+                }
 
                 if (isMuted) {
                     // Muted/undone layers: draw as colored outline (ghost effect)
@@ -1629,15 +1775,18 @@ class LooperController {
                 // Check if clicking DUB will add a new layer (current layer has content)
                 const willAddLayer = this.layerContentStates[this.currentLayer - 1];
                 if (this.recLabel) this.recLabel.textContent = willAddLayer ? 'DUB+' : 'DUB';
-                // Color the DUB button with the CURRENT layer's color (not next)
-                if (willAddLayer) {
-                    const currentLayerColor = this.layerColors[this.currentLayer - 1];  // currentLayer is 1-indexed
+                // Color the DUB button to match the rightmost layer button (current highest layer)
+                // This matches the layer that will become the "current recording layer" when DUB is clicked
+                if (willAddLayer && this.highestLayer > 0) {
+                    // Match the rightmost layer button color (highestLayer is 1-indexed)
+                    const rightmostIdx = Math.min(this.highestLayer - 1, 7);
+                    const rightmostColor = this.layerColors[rightmostIdx];
                     if (this.recBtn) {
-                        this.recBtn.style.borderColor = currentLayerColor;
-                        this.recBtn.style.boxShadow = `0 0 8px ${currentLayerColor}60`;
+                        this.recBtn.style.borderColor = rightmostColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${rightmostColor}60`;
                     }
                     if (this.recLabel) {
-                        this.recLabel.style.color = currentLayerColor;
+                        this.recLabel.style.color = rightmostColor;
                     }
                 }
                 break;
@@ -1646,7 +1795,7 @@ class LooperController {
                 // During overdubbing, show DUB+ if we can add more layers, otherwise just DUB
                 const willAddLayerAfterOverdub = this.highestLayer < 7;  // Can still add if not at max
                 if (this.recLabel) this.recLabel.textContent = willAddLayerAfterOverdub ? 'DUB+' : 'DUB';
-                // Color the DUB button with the CURRENT layer's color (not next)
+                // Color matches the layer currently being recorded to (currentLayer)
                 {
                     const currentLayerColor = this.layerColors[this.currentLayer - 1];  // currentLayer is 1-indexed
                     if (this.recBtn) {

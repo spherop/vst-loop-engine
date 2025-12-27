@@ -718,12 +718,22 @@ public:
             std::copy(pitchInputR.begin(), pitchInputR.begin() + numSamples, pitchOutputR.begin());
         }
 
-        // Phase 3: Mix with input and write to output buffer
+        // Phase 3: Apply volume and pan, then mix with input and write to output buffer
+        const float vol = volume.load();
+        const float panVal = pan.load();
+        // Pan law: constant power panning
+        // panVal: -1.0 = full left, 0.0 = center, 1.0 = full right
+        const float panAngle = (panVal + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
+        const float panL = std::cos(panAngle);
+        const float panR = std::sin(panAngle);
+
         for (int i = 0; i < numSamples; ++i)
         {
-            leftChannel[i] = pitchOutputL[i] + leftChannel[i];
+            float outL = pitchOutputL[i] * vol * panL;
+            float outR = pitchOutputR[i] * vol * panR;
+            leftChannel[i] = outL + leftChannel[i];
             if (rightChannel)
-                rightChannel[i] = pitchOutputR[i] + rightChannel[i];
+                rightChannel[i] = outR + rightChannel[i];
         }
     }
 
@@ -764,6 +774,14 @@ public:
     // Mute control
     void setMuted(bool muted) { isMuted.store(muted); }
     bool getMuted() const { return isMuted.load(); }
+
+    // Per-layer volume (0.0 to 1.0)
+    void setVolume(float vol) { volume.store(std::clamp(vol, 0.0f, 1.0f)); }
+    float getVolume() const { return volume.load(); }
+
+    // Per-layer pan (-1.0 = full left, 0.0 = center, 1.0 = full right)
+    void setPan(float p) { pan.store(std::clamp(p, -1.0f, 1.0f)); }
+    float getPan() const { return pan.load(); }
 
     // Get waveform data for UI visualization (downsampled)
     // Works during recording (uses writeHead) and playback (uses loopLength)
@@ -853,6 +871,8 @@ private:
     juce::SmoothedValue<float> fadeSmoothed;  // 0.0 = full fade, 1.0 = no fade
     std::atomic<bool> isReversed { false };
     std::atomic<bool> isMuted { false };
+    std::atomic<float> volume { 1.0f };      // Per-layer volume (0.0 to 1.0)
+    std::atomic<float> pan { 0.0f };         // Per-layer pan (-1.0 to 1.0)
     std::atomic<bool> fadeActive { false };  // True when fade should apply during playback (any layer is recording)
     std::atomic<State> state { State::Idle };
 

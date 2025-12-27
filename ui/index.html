@@ -137,8 +137,8 @@
                 <!-- LEFT COLUMN: Looper Controls -->
                 <div class="flex-1 flex flex-col gap-3 min-w-0">
 
-                    <!-- Transport Controls -->
-                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3">
+                    <!-- Transport Controls (fixed height) -->
+                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-shrink-0">
                         <div class="flex justify-center items-center gap-3">
                             <!-- Input Level Meter and Mute (vertical) -->
                             <div class="input-monitor-v flex flex-col items-center gap-1 mr-2">
@@ -178,34 +178,68 @@
                                 <span class="transport-icon">&#10005;</span>
                                 <span class="transport-label">CLR</span>
                             </button>
+                            <!-- Divider -->
+                            <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
+                            <!-- Loop Length Selector -->
+                            <div class="flex items-center gap-2">
+                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">LEN</span>
+                                <select class="bars-select" id="bars-select" title="Bars (0 = free mode)">
+                                    <option value="0">FREE</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="4">4</option>
+                                    <option value="8">8</option>
+                                    <option value="16">16</option>
+                                </select>
+                                <span class="font-display text-[6px] text-fd-text-dim">BAR</span>
+                                <select class="beats-select" id="beats-select" title="Additional beats">
+                                    <option value="0">0</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                </select>
+                                <span class="font-display text-[6px] text-fd-text-dim">BEAT</span>
+                            </div>
                         </div>
                     </section>
 
-                    <!-- Waveform Display & Layers -->
-                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-1 flex flex-col">
-                        <div class="waveform-container flex-1" id="waveform-container">
-                            <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
-                            <!-- Loop region shading -->
-                            <div id="loop-region-shade" class="loop-region-shade"></div>
-                            <div id="playhead" class="playhead"></div>
-                            <div id="loop-region" class="loop-region">
-                                <div id="loop-start-handle" class="loop-handle start"></div>
-                                <div id="loop-end-handle" class="loop-handle end"></div>
+                    <!-- Waveform Display (fills remaining space) -->
+                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-1 flex flex-col min-h-0">
+                        <!-- Waveform with vertical spread slider -->
+                        <div class="waveform-wrapper flex gap-2">
+                            <div class="waveform-container flex-1" id="waveform-container">
+                                <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
+                                <!-- Loop region shading -->
+                                <div id="loop-region-shade" class="loop-region-shade"></div>
+                                <div id="playhead" class="playhead"></div>
+                                <div id="loop-region" class="loop-region">
+                                    <div id="loop-start-handle" class="loop-handle start"></div>
+                                    <div id="loop-end-handle" class="loop-handle end"></div>
+                                </div>
+                                <!-- Recording indicator overlay -->
+                                <div id="recording-overlay" class="recording-overlay hidden">
+                                    <div class="recording-indicator">
+                                        <span class="rec-dot"></span>
+                                        <span class="rec-text">RECORDING</span>
+                                        <span id="rec-time" class="rec-time">0.0s</span>
+                                    </div>
+                                    <div id="input-level" class="input-level-meter">
+                                        <div id="input-level-bar" class="input-level-bar"></div>
+                                    </div>
+                                </div>
                             </div>
-                            <!-- Recording indicator overlay -->
-                            <div id="recording-overlay" class="recording-overlay hidden">
-                                <div class="recording-indicator">
-                                    <span class="rec-dot"></span>
-                                    <span class="rec-text">RECORDING</span>
-                                    <span id="rec-time" class="rec-time">0.0s</span>
-                                </div>
-                                <div id="input-level" class="input-level-meter">
-                                    <div id="input-level-bar" class="input-level-bar"></div>
-                                </div>
+                            <!-- Vertical Spread Slider - matches waveform height -->
+                            <div class="spread-slider-v">
+                                <span class="font-display text-[6px] font-bold tracking-[1px] text-fd-text-dim uppercase">SPR</span>
+                                <input type="range" id="layer-spread-slider" min="0" max="100" value="0"
+                                       class="layer-spread-slider-v" title="Spread layers vertically" orient="vertical">
                             </div>
                         </div>
-                        <!-- Controls row -->
-                        <div class="flex justify-between items-center mt-2">
+                    </section>
+
+                    <!-- Layer Controls (fixed at bottom) -->
+                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-2 flex-shrink-0">
+                        <div class="flex justify-between items-center">
                             <!-- Reverse button -->
                             <button class="toggle-btn" id="reverse-btn">
                                 <span class="toggle-icon">&#8634;</span>
@@ -214,7 +248,7 @@
                             <!-- Layer Indicators -->
                             <div class="flex items-center gap-2">
                                 <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
-                                <div class="layer-indicators flex gap-1">
+                                <div class="layer-indicators flex gap-2">
                                     <button class="layer-btn active" data-layer="1">1</button>
                                     <button class="layer-btn" data-layer="2">2</button>
                                     <button class="layer-btn" data-layer="3">3</button>
@@ -227,43 +261,24 @@
                                 <button class="flatten-btn" id="flatten-btn" title="Flatten all unmuted layers into layer 1">
                                     <span class="flatten-icon">⊞</span>
                                 </button>
-                            </div>
-                            <!-- Layer Spread Slider -->
-                            <div class="flex items-center gap-2">
-                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">SPREAD</span>
-                                <input type="range" id="layer-spread-slider" min="0" max="100" value="0"
-                                       class="layer-spread-slider" title="Spread layers vertically">
+                                <!-- Layer Volume/Pan Controls -->
+                                <div class="layer-mixer flex items-center gap-2 ml-2 pl-2 border-l border-fd-border">
+                                    <input type="range" id="layer-volume-slider" min="0" max="100" value="100"
+                                           class="layer-volume-slider" title="Layer volume">
+                                    <span class="font-mono text-[8px] text-fd-text-dim w-[24px] text-right" id="layer-volume-value">100</span>
+                                    <div class="knob knob-tiny" id="layer-pan-knob" title="Layer pan">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[8px] text-fd-text-dim w-[24px]" id="layer-pan-value">C</span>
+                                </div>
                             </div>
                             <!-- Time display -->
                             <span id="loop-time-display" class="font-mono text-[10px] text-fd-text">0.0s</span>
                         </div>
                     </section>
 
-                    <!-- Loop Controls -->
-                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3">
-                        <div class="flex justify-between items-center mb-2">
-                            <!-- Loop Length Selector -->
-                            <div class="flex items-center gap-2">
-                                <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">LENGTH</span>
-                                <select class="bars-select" id="bars-select" title="Bars (0 = free mode)">
-                                    <option value="0">FREE</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="4">4</option>
-                                    <option value="8">8</option>
-                                    <option value="16">16</option>
-                                </select>
-                                <span class="font-display text-[7px] text-fd-text-dim">BARS</span>
-                                <span class="text-fd-text-dim text-xs">+</span>
-                                <select class="beats-select" id="beats-select" title="Additional beats">
-                                    <option value="0">0</option>
-                                    <option value="1">1</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                </select>
-                                <span class="font-display text-[7px] text-fd-text-dim">BEATS</span>
-                            </div>
-                        </div>
+                    <!-- Loop Controls (fixed at bottom) -->
+                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-shrink-0">
                         <div class="flex justify-center items-end gap-6">
                             <!-- START -->
                             <div class="flex flex-col items-center gap-1">
@@ -645,7 +660,7 @@
             <div class="flex items-center justify-between">
                 <!-- Version ticker + Diagnostics toggle -->
                 <div class="flex items-center gap-2">
-                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.3.3</span>
+                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.4.1</span>
                     <button class="text-[8px] text-fd-text-dim hover:text-fd-accent transition-colors" id="diag-toggle" title="Toggle audio diagnostics">📊</button>
                 </div>
                 <!-- Diagnostic Panel (hidden by default) -->

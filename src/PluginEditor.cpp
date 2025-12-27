@@ -108,6 +108,50 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       }
                       complete(juce::var(result.get()));
                   })
+                  .withNativeFunction("setLayerVolume", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          float vol = static_cast<float>(args[1]);
+                          processorRef.getLoopEngine().setLayerVolume(layer, vol);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerVolume", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          complete(processorRef.getLoopEngine().getLayerVolume(layer));
+                      }
+                      else
+                      {
+                          complete(1.0f);
+                      }
+                  })
+                  .withNativeFunction("setLayerPan", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          float p = static_cast<float>(args[1]);
+                          processorRef.getLoopEngine().setLayerPan(layer, p);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerPan", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          complete(processorRef.getLoopEngine().getLayerPan(layer));
+                      }
+                      else
+                      {
+                          complete(0.0f);
+                      }
+                  })
                   .withNativeFunction("setLoopLengthBars", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)

@@ -526,6 +526,46 @@ public:
         return false;
     }
 
+    // Per-layer volume (1-indexed for UI)
+    void setLayerVolume(int layer, float vol)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setVolume(vol);
+        }
+    }
+
+    float getLayerVolume(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getVolume();
+        }
+        return 1.0f;
+    }
+
+    // Per-layer pan (1-indexed for UI)
+    void setLayerPan(int layer, float p)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setPan(p);
+        }
+    }
+
+    float getLayerPan(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getPan();
+        }
+        return 0.0f;
+    }
+
     // Parameters (apply to all layers)
     void setLoopStart(float normalizedPos)
     {
