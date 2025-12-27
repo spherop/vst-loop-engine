@@ -28,13 +28,7 @@ public:
     {
         juce::String msg = "LoopBuffer::prepare() sampleRate=" + juce::String(sampleRate);
         DBG(msg);
-
-        // Write to log file for DAW debugging - Documents folder
-        {
-            juce::File logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                .getChildFile("LoopEngine_debug.log");
-            logFile.appendText(juce::Time::getCurrentTime().toString(true, true) + " - " + msg + "\n");
-        }
+        // Note: prepare() logging to file removed to reduce spam (called 8x per layer)
 
         currentSampleRate = sampleRate;
         currentBlockSize = samplesPerBlock;

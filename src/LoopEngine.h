@@ -864,62 +864,106 @@ public:
             }
         }
 
-        // Apply surgical anti-click filter at loop boundaries
-        // Detects when master playhead wraps and briefly applies a gentle low-pass
-        if (anyPlaying && masterLoopLength > 0)
+        // Apply anti-click ducking at loop boundaries
+        // BEFORE the boundary: fade OUT as we approach
+        // AFTER the boundary: fade IN as we move away
+        // This creates a smooth envelope that straddles the crossing point with COMPLETE MUTE at center
+        if (masterLoopLength > 0 && layers[0].hasContent())
         {
             float currentMasterPos = layers[0].getPlayheadPosition();
 
             // Detect loop boundary crossing (position jumps from high to low or vice versa)
             bool loopWrapped = false;
+            float posDelta = currentMasterPos - lastMasterPlayheadPos;
+
             if (!isReversed)
             {
-                // Forward: detect when position drops from > 0.95 to < 0.05
-                loopWrapped = (lastMasterPlayheadPos > 0.95f && currentMasterPos < 0.05f);
+                loopWrapped = (posDelta < -0.5f);
             }
             else
             {
-                // Reverse: detect when position jumps from < 0.05 to > 0.95
-                loopWrapped = (lastMasterPlayheadPos < 0.05f && currentMasterPos > 0.95f);
+                loopWrapped = (posDelta > 0.5f);
             }
 
             if (loopWrapped)
             {
-                antiClickCountdown = ANTI_CLICK_SAMPLES;
+                // Start post-boundary fade-in (half of total duration)
+                antiClickCountdown = ANTI_CLICK_SAMPLES / 2;
+                approachingBoundary = false;  // We've crossed, now fading in
+
+                // Log to file for debugging
+                juce::File logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                    .getChildFile("LoopEngine_debug.log");
+                logFile.appendText(juce::Time::getCurrentTime().toString(true, true) +
+                    " - ANTI-CLICK CROSSED: pos=" + juce::String(currentMasterPos, 3) + "\n");
             }
+
+            // Check if we're APPROACHING the boundary (pre-boundary zone)
+            // Forward: approaching when pos > (1.0 - threshold)
+            // Reverse: approaching when pos < threshold
+            bool inPreBoundaryZone = false;
+            float distanceFromBoundary = 0.0f;
+
+            if (!isReversed)
+            {
+                // Forward playback: boundary is at 1.0 (end)
+                if (currentMasterPos > (1.0f - BOUNDARY_THRESHOLD))
+                {
+                    inPreBoundaryZone = true;
+                    distanceFromBoundary = 1.0f - currentMasterPos;  // 0.0 at boundary, THRESHOLD at start of zone
+                }
+            }
+            else
+            {
+                // Reverse playback: boundary is at 0.0 (start)
+                if (currentMasterPos < BOUNDARY_THRESHOLD)
+                {
+                    inPreBoundaryZone = true;
+                    distanceFromBoundary = currentMasterPos;  // 0.0 at boundary, THRESHOLD at start of zone
+                }
+            }
+
             lastMasterPlayheadPos = currentMasterPos;
 
-            // Apply anti-click filter if active
-            if (antiClickCountdown > 0)
+            // Calculate volume multiplier based on where we are
+            float volumeMultiplier = 1.0f;
+
+            if (inPreBoundaryZone && antiClickCountdown == 0)
+            {
+                // PRE-BOUNDARY: Fade OUT as we approach
+                // distanceFromBoundary goes from THRESHOLD (far) to 0.0 (at boundary)
+                // We want volume to go from 1.0 (far) to 0.0 (at boundary)
+                float fadeProgress = distanceFromBoundary / BOUNDARY_THRESHOLD;  // 1.0 = far, 0.0 = at boundary
+                volumeMultiplier = fadeProgress;  // Linear fade to complete silence
+            }
+            else if (antiClickCountdown > 0)
+            {
+                // POST-BOUNDARY: Fade IN as we move away
+                // antiClickCountdown goes from ANTI_CLICK_SAMPLES/2 (just crossed) to 0 (done)
+                // We want volume to go from 0.0 (just crossed) to 1.0 (done)
+                float fadeProgress = static_cast<float>(antiClickCountdown) / static_cast<float>(ANTI_CLICK_SAMPLES / 2);
+                volumeMultiplier = 1.0f - fadeProgress;  // 0.0 at start, 1.0 at end
+            }
+
+            // Apply volume duck if not at full volume
+            if (volumeMultiplier < 1.0f)
             {
                 float* leftData = buffer.getWritePointer(0);
                 float* rightData = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
 
-                // One-pole low-pass filter coefficient
-                // Higher = more filtering (cuts more highs). ~0.3 is gentle, ~0.7 is aggressive
-                // We use a coefficient that ramps down as the countdown decreases
-                for (int i = 0; i < numSamples && antiClickCountdown > 0; ++i)
+                for (int i = 0; i < numSamples; ++i)
                 {
-                    // Ramp coefficient from ~0.5 (start) to ~0.1 (end) for smooth transition
-                    float filterStrength = static_cast<float>(antiClickCountdown) / static_cast<float>(ANTI_CLICK_SAMPLES);
-                    float coeff = 0.1f + filterStrength * 0.4f;  // Range: 0.1 to 0.5
-
-                    // Apply one-pole LP: y[n] = coeff * x[n] + (1 - coeff) * y[n-1]
-                    // But we want to blend between filtered and original based on strength
-                    float filteredL = coeff * leftData[i] + (1.0f - coeff) * antiClickFilterL;
-                    antiClickFilterL = filteredL;
-
-                    // Blend between original and filtered based on filter strength
-                    leftData[i] = leftData[i] * (1.0f - filterStrength * 0.5f) + filteredL * (filterStrength * 0.5f);
-
+                    leftData[i] *= volumeMultiplier;
                     if (rightData)
                     {
-                        float filteredR = coeff * rightData[i] + (1.0f - coeff) * antiClickFilterR;
-                        antiClickFilterR = filteredR;
-                        rightData[i] = rightData[i] * (1.0f - filterStrength * 0.5f) + filteredR * (filterStrength * 0.5f);
+                        rightData[i] *= volumeMultiplier;
                     }
+                }
 
-                    --antiClickCountdown;
+                // Decrement countdown for post-boundary phase
+                if (antiClickCountdown > 0)
+                {
+                    antiClickCountdown = std::max(0, antiClickCountdown - numSamples);
                 }
             }
         }
@@ -1262,12 +1306,13 @@ private:
     juce::AudioBuffer<float> dummyBuffer;
     juce::AudioBuffer<float> loopOnlyBuffer;  // Loop playback only, no input (for Blooper-style effects)
 
-    // Anti-click filter state - briefly ducks high frequencies at loop boundary
+    // Anti-click ducking state - fades out BEFORE boundary and fades in AFTER
+    // This creates a smooth volume envelope that straddles the loop crossing point
     float lastMasterPlayheadPos = 0.0f;  // For detecting loop boundary crossing
-    int antiClickCountdown = 0;          // Samples remaining in anti-click mode
-    float antiClickFilterL = 0.0f;       // One-pole LP filter state (left)
-    float antiClickFilterR = 0.0f;       // One-pole LP filter state (right)
-    static constexpr int ANTI_CLICK_SAMPLES = 64;  // ~1.3ms at 48kHz - very brief
+    int antiClickCountdown = 0;          // Samples remaining in POST-boundary fade-in
+    bool approachingBoundary = false;    // True when we're in PRE-boundary fade-out zone
+    static constexpr int ANTI_CLICK_SAMPLES = 48000;  // 1 second total at 48kHz (500ms each side)
+    static constexpr float BOUNDARY_THRESHOLD = 0.02f; // Start ducking when within 2% of loop end
 
     LoopBuffer::State getCurrentState() const
     {
