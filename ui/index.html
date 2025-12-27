@@ -278,6 +278,10 @@
                                     </div>
                                     <span class="font-mono text-[8px] text-fd-text-dim w-[24px]" id="layer-pan-value">C</span>
                                 </div>
+                                <!-- Crossfade Settings Button -->
+                                <button class="xfade-settings-btn ml-2" id="xfade-settings-btn" title="Loop crossfade settings">
+                                    <span class="xfade-icon">&#8734;</span>
+                                </button>
                             </div>
                         </div>
                     </section>
@@ -665,7 +669,7 @@
             <div class="flex items-center justify-between">
                 <!-- Version ticker + Diagnostics toggle -->
                 <div class="flex items-center gap-2">
-                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.6.11</span>
+                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.7.1</span>
                     <button class="text-[8px] text-fd-text-dim hover:text-fd-accent transition-colors" id="diag-toggle" title="Toggle audio diagnostics">📊</button>
                 </div>
                 <!-- Diagnostic Panel (hidden by default) -->
@@ -725,6 +729,67 @@
                 <div class="w-12"></div>
             </div>
         </footer>
+    </div>
+
+    <!-- Crossfade Settings Panel (positioned relative to button) -->
+    <div id="xfade-panel" class="xfade-panel hidden">
+        <div class="xfade-panel-header">
+            <span class="xfade-panel-title">LOOP BOUNDARY</span>
+            <button class="xfade-led-toggle" id="xfade-enable-toggle" title="Enable/Disable">
+                <span class="led-indicator"></span>
+                <span class="led-label">ON</span>
+            </button>
+        </div>
+
+        <!-- Real-time Visualizer -->
+        <div class="xfade-visualizer">
+            <canvas id="xfade-viz-canvas" width="280" height="60"></canvas>
+            <div class="xfade-viz-labels">
+                <span class="viz-label-pre">PRE</span>
+                <span class="viz-label-boundary">|</span>
+                <span class="viz-label-post">POST</span>
+            </div>
+        </div>
+
+        <!-- Time Window (applies to both effects) -->
+        <div class="xfade-section">
+            <div class="xfade-section-label">FADE WINDOW</div>
+            <div class="xfade-param-row">
+                <label class="xfade-label">Pre (ms)</label>
+                <input type="range" id="xfade-pre-time" min="5" max="500" value="80" class="xfade-slider">
+                <span class="xfade-value" id="xfade-pre-time-val">80</span>
+            </div>
+            <div class="xfade-param-row">
+                <label class="xfade-label">Post (ms)</label>
+                <input type="range" id="xfade-post-time" min="5" max="500" value="100" class="xfade-slider">
+                <span class="xfade-value" id="xfade-post-time-val">100</span>
+            </div>
+        </div>
+
+        <!-- Volume Duck -->
+        <div class="xfade-section">
+            <div class="xfade-section-label">VOLUME DUCK</div>
+            <div class="xfade-param-row">
+                <label class="xfade-label">Min Level (%)</label>
+                <input type="range" id="xfade-vol-depth" min="0" max="100" value="0" class="xfade-slider">
+                <span class="xfade-value" id="xfade-vol-depth-val">0</span>
+            </div>
+        </div>
+
+        <!-- LP Filter -->
+        <div class="xfade-section">
+            <div class="xfade-section-label">LOW-PASS FILTER</div>
+            <div class="xfade-param-row">
+                <label class="xfade-label">Cutoff (Hz)</label>
+                <input type="range" id="xfade-filter-freq" min="0" max="100" value="0" class="xfade-slider">
+                <span class="xfade-value" id="xfade-filter-freq-val">OFF</span>
+            </div>
+            <div class="xfade-param-row">
+                <label class="xfade-label">Depth (%)</label>
+                <input type="range" id="xfade-filter-depth" min="0" max="100" value="0" class="xfade-slider">
+                <span class="xfade-value" id="xfade-filter-depth-val">0</span>
+            </div>
+        </div>
     </div>
 
     <script src="main.js"></script>

@@ -867,12 +867,27 @@ public:
         // Apply anti-click ducking at loop boundaries
         // BEFORE the boundary: fade OUT as we approach
         // AFTER the boundary: fade IN as we move away
-        // This creates a smooth envelope that straddles the crossing point with COMPLETE MUTE at center
+        // Uses dynamic parameters from UI settings
         if (masterLoopLength > 0 && layers[0].hasContent())
         {
+            // Load current crossfade parameters
+            const int preTimeMs = xfadePreTimeMs.load();
+            const int postTimeMs = xfadePostTimeMs.load();
+            const float minVolume = xfadeVolDepth.load();  // Minimum volume at boundary (0 = mute, 1 = no duck)
+            const float filterFreq = xfadeFilterFreq.load();  // LP filter cutoff (0 = off)
+            const float filterMix = xfadeFilterDepth.load();  // Filter wet mix (0-1)
+
+            // Convert pre-time to position threshold (normalized 0-1)
+            // threshold = preTimeMs / loopLengthMs
+            const float loopLengthMs = static_cast<float>(masterLoopLength) / static_cast<float>(currentSampleRate) * 1000.0f;
+            const float preThreshold = std::min(0.5f, static_cast<float>(preTimeMs) / loopLengthMs);
+
+            // Convert post-time to samples
+            const int postSamples = static_cast<int>(static_cast<float>(postTimeMs) * static_cast<float>(currentSampleRate) / 1000.0f);
+
             float currentMasterPos = layers[0].getPlayheadPosition();
 
-            // Detect loop boundary crossing (position jumps from high to low or vice versa)
+            // Detect loop boundary crossing
             bool loopWrapped = false;
             float posDelta = currentMasterPos - lastMasterPlayheadPos;
 
@@ -887,76 +902,86 @@ public:
 
             if (loopWrapped)
             {
-                // Start post-boundary fade-in (half of total duration)
-                antiClickCountdown = ANTI_CLICK_SAMPLES / 2;
-                approachingBoundary = false;  // We've crossed, now fading in
-
-                // Log to file for debugging
-                juce::File logFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                    .getChildFile("LoopEngine_debug.log");
-                logFile.appendText(juce::Time::getCurrentTime().toString(true, true) +
-                    " - ANTI-CLICK CROSSED: pos=" + juce::String(currentMasterPos, 3) + "\n");
+                antiClickCountdown = postSamples;
+                approachingBoundary = false;
             }
 
             // Check if we're APPROACHING the boundary (pre-boundary zone)
-            // Forward: approaching when pos > (1.0 - threshold)
-            // Reverse: approaching when pos < threshold
             bool inPreBoundaryZone = false;
             float distanceFromBoundary = 0.0f;
 
             if (!isReversed)
             {
-                // Forward playback: boundary is at 1.0 (end)
-                if (currentMasterPos > (1.0f - BOUNDARY_THRESHOLD))
+                if (currentMasterPos > (1.0f - preThreshold))
                 {
                     inPreBoundaryZone = true;
-                    distanceFromBoundary = 1.0f - currentMasterPos;  // 0.0 at boundary, THRESHOLD at start of zone
+                    distanceFromBoundary = 1.0f - currentMasterPos;
                 }
             }
             else
             {
-                // Reverse playback: boundary is at 0.0 (start)
-                if (currentMasterPos < BOUNDARY_THRESHOLD)
+                if (currentMasterPos < preThreshold)
                 {
                     inPreBoundaryZone = true;
-                    distanceFromBoundary = currentMasterPos;  // 0.0 at boundary, THRESHOLD at start of zone
+                    distanceFromBoundary = currentMasterPos;
                 }
             }
 
             lastMasterPlayheadPos = currentMasterPos;
 
-            // Calculate volume multiplier based on where we are
-            float volumeMultiplier = 1.0f;
+            // Calculate effect strength based on where we are
+            float effectStrength = 0.0f;  // 0 = no effect, 1 = full effect at boundary
 
-            if (inPreBoundaryZone && antiClickCountdown == 0)
+            if (inPreBoundaryZone && antiClickCountdown == 0 && preThreshold > 0.0f)
             {
-                // PRE-BOUNDARY: Fade OUT as we approach
-                // distanceFromBoundary goes from THRESHOLD (far) to 0.0 (at boundary)
-                // We want volume to go from 1.0 (far) to 0.0 (at boundary)
-                float fadeProgress = distanceFromBoundary / BOUNDARY_THRESHOLD;  // 1.0 = far, 0.0 = at boundary
-                volumeMultiplier = fadeProgress;  // Linear fade to complete silence
+                // PRE-BOUNDARY: ramp up effect as we approach
+                float fadeProgress = distanceFromBoundary / preThreshold;  // 1.0 = far, 0.0 = at boundary
+                effectStrength = 1.0f - fadeProgress;  // 0.0 far, 1.0 at boundary
             }
-            else if (antiClickCountdown > 0)
+            else if (antiClickCountdown > 0 && postSamples > 0)
             {
-                // POST-BOUNDARY: Fade IN as we move away
-                // antiClickCountdown goes from ANTI_CLICK_SAMPLES/2 (just crossed) to 0 (done)
-                // We want volume to go from 0.0 (just crossed) to 1.0 (done)
-                float fadeProgress = static_cast<float>(antiClickCountdown) / static_cast<float>(ANTI_CLICK_SAMPLES / 2);
-                volumeMultiplier = 1.0f - fadeProgress;  // 0.0 at start, 1.0 at end
+                // POST-BOUNDARY: ramp down effect as we move away
+                float fadeProgress = static_cast<float>(antiClickCountdown) / static_cast<float>(postSamples);
+                effectStrength = fadeProgress;  // 1.0 just crossed, 0.0 when done
             }
 
-            // Apply volume duck if not at full volume
-            if (volumeMultiplier < 1.0f)
+            // Apply effects if strength > 0
+            if (effectStrength > 0.0f)
             {
                 float* leftData = buffer.getWritePointer(0);
                 float* rightData = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
 
+                // Volume: lerp from 1.0 to minVolume based on effectStrength
+                float volumeMultiplier = 1.0f - effectStrength * (1.0f - minVolume);
+
+                // LP filter coefficient (lower = more filtering)
+                // Map filterFreq to coefficient: higher freq = less filtering
+                float filterCoeff = 1.0f;
+                if (filterFreq > 0.0f && filterMix > 0.0f)
+                {
+                    // Simple one-pole: coeff = 2*pi*fc/sr, clamped
+                    filterCoeff = std::clamp(2.0f * juce::MathConstants<float>::pi * filterFreq / static_cast<float>(currentSampleRate), 0.01f, 1.0f);
+                }
+
                 for (int i = 0; i < numSamples; ++i)
                 {
+                    // Apply volume ducking
                     leftData[i] *= volumeMultiplier;
-                    if (rightData)
+                    if (rightData) rightData[i] *= volumeMultiplier;
+
+                    // Apply LP filter if enabled
+                    if (filterFreq > 0.0f && filterMix > 0.0f)
                     {
-                        rightData[i] *= volumeMultiplier;
+                        // One-pole LP: y[n] = coeff * x[n] + (1 - coeff) * y[n-1]
+                        float filteredL = filterCoeff * leftData[i] + (1.0f - filterCoeff) * antiClickFilterL;
+                        float filteredR = rightData ? filterCoeff * rightData[i] + (1.0f - filterCoeff) * antiClickFilterR : 0.0f;
+                        antiClickFilterL = filteredL;
+                        antiClickFilterR = filteredR;
+
+                        // Mix filtered with dry based on effectStrength and filterMix
+                        float wetAmount = effectStrength * filterMix;
+                        leftData[i] = leftData[i] * (1.0f - wetAmount) + filteredL * wetAmount;
+                        if (rightData) rightData[i] = rightData[i] * (1.0f - wetAmount) + filteredR * wetAmount;
                     }
                 }
 
@@ -1184,6 +1209,16 @@ public:
             layerClipCounts[i].store(0);
     }
 
+    // Set crossfade parameters from UI
+    void setCrossfadeParams(int preTimeMs, int postTimeMs, float volDepth, float filterFreq, float filterDepth)
+    {
+        xfadePreTimeMs.store(preTimeMs);
+        xfadePostTimeMs.store(postTimeMs);
+        xfadeVolDepth.store(volDepth);
+        xfadeFilterFreq.store(filterFreq);
+        xfadeFilterDepth.store(filterDepth);
+    }
+
     // Flatten all non-muted layers into layer 1
     // This sums all active layer buffers into layer 1 and clears the others
     // SEAMLESS: preserves playhead position and continues playback without interruption
@@ -1311,8 +1346,15 @@ private:
     float lastMasterPlayheadPos = 0.0f;  // For detecting loop boundary crossing
     int antiClickCountdown = 0;          // Samples remaining in POST-boundary fade-in
     bool approachingBoundary = false;    // True when we're in PRE-boundary fade-out zone
-    static constexpr int ANTI_CLICK_SAMPLES = 48000;  // 1 second total at 48kHz (500ms each side)
-    static constexpr float BOUNDARY_THRESHOLD = 0.02f; // Start ducking when within 2% of loop end
+
+    // Crossfade parameters (settable from UI)
+    std::atomic<int> xfadePreTimeMs { 80 };      // Pre-boundary fade time (ms)
+    std::atomic<int> xfadePostTimeMs { 100 };    // Post-boundary fade time (ms)
+    std::atomic<float> xfadeVolDepth { 0.0f };   // Min volume at boundary (0 = full mute, 1 = no ducking)
+    std::atomic<float> xfadeFilterFreq { 0.0f }; // LP filter cutoff at boundary (Hz, 0 = off)
+    std::atomic<float> xfadeFilterDepth { 0.0f }; // Filter mix at boundary (0-1)
+    float antiClickFilterL = 0.0f;  // One-pole LP filter state
+    float antiClickFilterR = 0.0f;
 
     LoopBuffer::State getCurrentState() const
     {

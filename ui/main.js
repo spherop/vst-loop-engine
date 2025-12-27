@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "1.6.11";
+const UI_VERSION = "1.7.1";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -2751,6 +2751,364 @@ class DiagnosticsController {
     }
 }
 
+// Crossfade Settings Controller
+class CrossfadeSettingsController {
+    constructor() {
+        this.panel = document.getElementById('xfade-panel');
+        this.openBtn = document.getElementById('xfade-settings-btn');
+        this.enableToggle = document.getElementById('xfade-enable-toggle');
+
+        // Sliders
+        this.preTimeSlider = document.getElementById('xfade-pre-time');
+        this.postTimeSlider = document.getElementById('xfade-post-time');
+        this.volDepthSlider = document.getElementById('xfade-vol-depth');
+        this.filterFreqSlider = document.getElementById('xfade-filter-freq');
+        this.filterDepthSlider = document.getElementById('xfade-filter-depth');
+
+        // Value displays
+        this.preTimeVal = document.getElementById('xfade-pre-time-val');
+        this.postTimeVal = document.getElementById('xfade-post-time-val');
+        this.volDepthVal = document.getElementById('xfade-vol-depth-val');
+        this.filterFreqVal = document.getElementById('xfade-filter-freq-val');
+        this.filterDepthVal = document.getElementById('xfade-filter-depth-val');
+
+        // Visualizer
+        this.vizCanvas = document.getElementById('xfade-viz-canvas');
+        this.vizCtx = this.vizCanvas?.getContext('2d');
+        this.animationId = null;
+
+        // Native functions
+        this.setCrossfadeParamsFn = getNativeFunction('setCrossfadeParams');
+        this.saveCrossfadeSettingsFn = getNativeFunction('saveCrossfadeSettings');
+        this.loadCrossfadeSettingsFn = getNativeFunction('loadCrossfadeSettings');
+
+        // Enabled state
+        this.enabled = true;
+
+        this.setupEvents();
+        this.loadSettings();
+        this.updateDisplays();
+    }
+
+    setupEvents() {
+        // Open/close panel
+        if (this.openBtn) {
+            this.openBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggle();
+            });
+        }
+
+        // Click outside to close
+        document.addEventListener('click', (e) => {
+            if (this.panel && !this.panel.classList.contains('hidden')) {
+                if (!this.panel.contains(e.target) && e.target !== this.openBtn) {
+                    this.close();
+                }
+            }
+        });
+
+        // LED toggle for enable/disable
+        if (this.enableToggle) {
+            this.enableToggle.addEventListener('click', () => this.toggleEnabled());
+        }
+
+        // Slider changes
+        const sliders = [
+            this.preTimeSlider,
+            this.postTimeSlider,
+            this.volDepthSlider,
+            this.filterFreqSlider,
+            this.filterDepthSlider
+        ];
+        sliders.forEach(slider => {
+            if (slider) {
+                slider.addEventListener('input', () => {
+                    this.updateDisplays();
+                    this.sendToPlugin();
+                    this.drawVisualizer();
+                });
+            }
+        });
+    }
+
+    toggle() {
+        if (this.panel?.classList.contains('hidden')) {
+            this.open();
+        } else {
+            this.close();
+        }
+    }
+
+    open() {
+        if (this.panel && this.openBtn) {
+            // Position panel to the right of the button
+            const btnRect = this.openBtn.getBoundingClientRect();
+            this.panel.style.left = `${btnRect.right + 8}px`;
+            this.panel.style.top = `${btnRect.top - 100}px`;  // Center vertically roughly
+
+            // Ensure panel stays within viewport
+            const panelRect = this.panel.getBoundingClientRect();
+            const viewportHeight = window.innerHeight;
+            const viewportWidth = window.innerWidth;
+
+            // Adjust if panel goes off right edge
+            if (btnRect.right + 8 + 300 > viewportWidth) {
+                this.panel.style.left = `${btnRect.left - 308}px`;  // Show on left instead
+            }
+
+            // Adjust if panel goes off bottom
+            if (parseFloat(this.panel.style.top) + panelRect.height > viewportHeight) {
+                this.panel.style.top = `${viewportHeight - panelRect.height - 10}px`;
+            }
+
+            // Adjust if panel goes off top
+            if (parseFloat(this.panel.style.top) < 10) {
+                this.panel.style.top = '10px';
+            }
+
+            this.panel.classList.remove('hidden');
+            this.openBtn.classList.add('active');
+            this.startVisualizerAnimation();
+        }
+    }
+
+    close() {
+        if (this.panel) {
+            this.panel.classList.add('hidden');
+            this.openBtn?.classList.remove('active');
+            this.stopVisualizerAnimation();
+        }
+    }
+
+    toggleEnabled() {
+        this.enabled = !this.enabled;
+        this.updateEnabledUI();
+        this.sendToPlugin();
+        this.saveSettings();
+    }
+
+    updateEnabledUI() {
+        if (this.enableToggle) {
+            const label = this.enableToggle.querySelector('.led-label');
+            if (this.enabled) {
+                this.enableToggle.classList.add('active');
+                if (label) label.textContent = 'ON';
+            } else {
+                this.enableToggle.classList.remove('active');
+                if (label) label.textContent = 'OFF';
+            }
+        }
+    }
+
+    updateDisplays() {
+        // Pre-fade time
+        if (this.preTimeVal && this.preTimeSlider) {
+            this.preTimeVal.textContent = this.preTimeSlider.value;
+        }
+
+        // Post-fade time
+        if (this.postTimeVal && this.postTimeSlider) {
+            this.postTimeVal.textContent = this.postTimeSlider.value;
+        }
+
+        // Volume depth (0 = full mute at boundary, 100 = no ducking)
+        if (this.volDepthVal && this.volDepthSlider) {
+            this.volDepthVal.textContent = this.volDepthSlider.value;
+        }
+
+        // Filter frequency (logarithmic: 0 = OFF, 100 = 100Hz to 0 = 20kHz)
+        if (this.filterFreqVal && this.filterFreqSlider) {
+            const val = parseInt(this.filterFreqSlider.value);
+            if (val === 0) {
+                this.filterFreqVal.textContent = 'OFF';
+            } else {
+                // Map 1-100 to 100Hz - 20kHz (logarithmic)
+                const hz = 100 * Math.pow(200, val / 100);  // 100Hz to 20kHz
+                this.filterFreqVal.textContent = hz >= 1000 ? `${(hz/1000).toFixed(1)}k` : `${Math.round(hz)}`;
+            }
+        }
+
+        // Filter depth
+        if (this.filterDepthVal && this.filterDepthSlider) {
+            this.filterDepthVal.textContent = this.filterDepthSlider.value;
+        }
+    }
+
+    // Visualizer animation
+    startVisualizerAnimation() {
+        this.drawVisualizer();
+        const animate = () => {
+            this.drawVisualizer();
+            this.animationId = requestAnimationFrame(animate);
+        };
+        this.animationId = requestAnimationFrame(animate);
+    }
+
+    stopVisualizerAnimation() {
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+    }
+
+    drawVisualizer() {
+        if (!this.vizCtx || !this.vizCanvas) return;
+
+        const ctx = this.vizCtx;
+        const width = this.vizCanvas.width;
+        const height = this.vizCanvas.height;
+
+        // Clear
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, width, height);
+
+        // Get values
+        const preTime = parseInt(this.preTimeSlider?.value || 80);
+        const postTime = parseInt(this.postTimeSlider?.value || 100);
+        const volDepth = parseInt(this.volDepthSlider?.value || 0) / 100;  // 0 = full duck, 1 = no duck
+        const filterFreqRaw = parseInt(this.filterFreqSlider?.value || 0);
+        const filterDepth = parseInt(this.filterDepthSlider?.value || 0) / 100;
+
+        const maxTime = 500;
+        const centerX = width / 2;
+        const preWidth = (preTime / maxTime) * (width / 2);
+        const postWidth = (postTime / maxTime) * (width / 2);
+
+        // Draw boundary line
+        ctx.strokeStyle = '#4fc3f7';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(centerX, 0);
+        ctx.lineTo(centerX, height);
+        ctx.stroke();
+
+        // Draw volume envelope (cyan/teal fill)
+        if (this.enabled && volDepth < 1) {
+            const duckAmount = 1 - volDepth;  // How much to duck
+            const minY = height * 0.1;
+            const maxY = height * 0.9;
+            const duckY = minY + (maxY - minY) * (1 - duckAmount);  // Lower = more duck
+
+            ctx.fillStyle = 'rgba(79, 195, 247, 0.2)';
+            ctx.strokeStyle = 'rgba(79, 195, 247, 0.8)';
+            ctx.lineWidth = 1.5;
+
+            ctx.beginPath();
+            // Pre-boundary fade (right to left, curving down to duck point)
+            ctx.moveTo(centerX - preWidth, minY);  // Start at full level
+            ctx.quadraticCurveTo(centerX - preWidth * 0.3, minY, centerX, duckY);  // Curve down
+            // Post-boundary fade (left to right, curving up from duck point)
+            ctx.quadraticCurveTo(centerX + postWidth * 0.3, minY, centerX + postWidth, minY);  // Curve up
+            ctx.lineTo(centerX + postWidth, maxY);
+            ctx.lineTo(centerX - preWidth, maxY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw the envelope line
+            ctx.beginPath();
+            ctx.moveTo(centerX - preWidth, minY);
+            ctx.quadraticCurveTo(centerX - preWidth * 0.3, minY, centerX, duckY);
+            ctx.quadraticCurveTo(centerX + postWidth * 0.3, minY, centerX + postWidth, minY);
+            ctx.stroke();
+        }
+
+        // Draw filter envelope (orange/amber, below volume)
+        if (this.enabled && filterFreqRaw > 0 && filterDepth > 0) {
+            const filterY = height * 0.5 + (height * 0.35 * filterDepth);
+
+            ctx.fillStyle = 'rgba(255, 152, 0, 0.15)';
+            ctx.strokeStyle = 'rgba(255, 152, 0, 0.7)';
+            ctx.lineWidth = 1;
+
+            ctx.beginPath();
+            ctx.moveTo(centerX - preWidth, height * 0.5);
+            ctx.quadraticCurveTo(centerX - preWidth * 0.3, height * 0.5, centerX, filterY);
+            ctx.quadraticCurveTo(centerX + postWidth * 0.3, height * 0.5, centerX + postWidth, height * 0.5);
+            ctx.stroke();
+        }
+
+        // Draw disabled overlay
+        if (!this.enabled) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, width, height);
+            ctx.fillStyle = '#555';
+            ctx.font = '10px Orbitron';
+            ctx.textAlign = 'center';
+            ctx.fillText('DISABLED', centerX, height / 2 + 4);
+        }
+    }
+
+    async loadSettings() {
+        if (this.loadCrossfadeSettingsFn) {
+            try {
+                const settings = await this.loadCrossfadeSettingsFn();
+                if (settings) {
+                    if (this.preTimeSlider) this.preTimeSlider.value = settings.preTime || 80;
+                    if (this.postTimeSlider) this.postTimeSlider.value = settings.postTime || 100;
+                    if (this.volDepthSlider) this.volDepthSlider.value = settings.volDepth || 0;
+                    if (this.filterFreqSlider) this.filterFreqSlider.value = settings.filterFreq || 0;
+                    if (this.filterDepthSlider) this.filterDepthSlider.value = settings.filterDepth || 0;
+                    this.enabled = settings.enabled !== false;  // Default to true
+                    this.updateEnabledUI();
+                    this.updateDisplays();
+                    this.sendToPlugin();
+                }
+            } catch (e) {
+                console.log('[XFADE] No saved settings found, using defaults');
+            }
+        }
+    }
+
+    async saveSettings() {
+        if (this.saveCrossfadeSettingsFn) {
+            try {
+                await this.saveCrossfadeSettingsFn({
+                    preTime: parseInt(this.preTimeSlider?.value || 80),
+                    postTime: parseInt(this.postTimeSlider?.value || 100),
+                    volDepth: parseInt(this.volDepthSlider?.value || 0),
+                    filterFreq: parseInt(this.filterFreqSlider?.value || 0),
+                    filterDepth: parseInt(this.filterDepthSlider?.value || 0),
+                    enabled: this.enabled
+                });
+            } catch (e) {
+                console.error('[XFADE] Error saving settings:', e);
+            }
+        }
+    }
+
+    async sendToPlugin() {
+        if (!this.setCrossfadeParamsFn) return;
+
+        // If disabled, send zeros
+        if (!this.enabled) {
+            try {
+                await this.setCrossfadeParamsFn(5, 5, 1.0, 0, 0);  // Minimal effect
+            } catch (e) {
+                console.error('[XFADE] Error sending params:', e);
+            }
+            return;
+        }
+
+        const preTimeMs = parseInt(this.preTimeSlider?.value || 80);
+        const postTimeMs = parseInt(this.postTimeSlider?.value || 100);
+        const volDepth = parseInt(this.volDepthSlider?.value || 0) / 100.0;  // 0-1
+
+        // Filter freq: 0 = off, else map to Hz
+        const filterFreqRaw = parseInt(this.filterFreqSlider?.value || 0);
+        const filterFreq = filterFreqRaw === 0 ? 0 : 100 * Math.pow(200, filterFreqRaw / 100);
+
+        const filterDepth = parseInt(this.filterDepthSlider?.value || 0) / 100.0;  // 0-1
+
+        try {
+            await this.setCrossfadeParamsFn(preTimeMs, postTimeMs, volDepth, filterFreq, filterDepth);
+            this.saveSettings();  // Save on every change
+        } catch (e) {
+            console.error('[XFADE] Error sending params:', e);
+        }
+    }
+}
+
 // Global BPM update function called from C++ timer
 window.updateBpmDisplay = function(bpm) {
     const bpmEl = document.getElementById('bpm-display');
@@ -3097,6 +3455,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Audio diagnostics panel
     new DiagnosticsController();
+
+    // Crossfade settings modal
+    new CrossfadeSettingsController();
 
     // Reverse toggle - setup handled in LooperController
     looperController.setupReverseButton();

@@ -2040,3 +2040,245 @@ html, body {
         height: 14px;
     }
 }
+
+/* ============================================
+   CROSSFADE SETTINGS BUTTON & PANEL
+   ============================================ */
+
+.xfade-settings-btn {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.xfade-settings-btn:hover {
+    border-color: var(--looper-accent);
+    box-shadow: 0 0 8px var(--looper-accent-glow);
+}
+
+.xfade-settings-btn.active {
+    border-color: var(--looper-accent);
+    background: linear-gradient(180deg, #1a2a2a 0%, #0d1a1a 100%);
+}
+
+.xfade-icon {
+    font-size: 16px;
+    color: #666;
+    transition: color 0.15s ease;
+}
+
+.xfade-settings-btn:hover .xfade-icon,
+.xfade-settings-btn.active .xfade-icon {
+    color: var(--looper-accent);
+}
+
+/* Panel Overlay (positioned to right of button) */
+.xfade-panel {
+    position: fixed;
+    z-index: 1000;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0d0d0d 100%);
+    border: 1px solid var(--looper-accent-dim);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 20px var(--looper-accent-glow);
+    width: 300px;
+    padding: 0;
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.xfade-panel.hidden {
+    display: none;
+    opacity: 0;
+    transform: translateX(-10px);
+}
+
+.xfade-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid #333;
+}
+
+.xfade-panel-title {
+    font-family: var(--font-display);
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 1.5px;
+    color: var(--looper-accent);
+}
+
+/* LED Toggle Button */
+.xfade-led-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: linear-gradient(180deg, #222 0%, #1a1a1a 100%);
+    border: 1px solid #444;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.xfade-led-toggle:hover {
+    border-color: #666;
+}
+
+.xfade-led-toggle.active {
+    border-color: #4caf50;
+}
+
+.led-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #333;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    transition: all 0.15s ease;
+}
+
+.xfade-led-toggle.active .led-indicator {
+    background: #4caf50;
+    box-shadow: 0 0 8px #4caf50, 0 0 16px rgba(76, 175, 80, 0.5);
+}
+
+.led-label {
+    font-family: var(--font-display);
+    font-size: 8px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+    color: #666;
+    transition: color 0.15s ease;
+}
+
+.xfade-led-toggle.active .led-label {
+    color: #4caf50;
+}
+
+/* Visualizer */
+.xfade-visualizer {
+    padding: 10px 12px;
+    background: #0a0a0a;
+    border-bottom: 1px solid #333;
+}
+
+#xfade-viz-canvas {
+    width: 100%;
+    height: 50px;
+    border-radius: 4px;
+    background: #050505;
+}
+
+.xfade-viz-labels {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 4px;
+    padding: 0 10px;
+}
+
+.viz-label-pre,
+.viz-label-post {
+    font-family: var(--font-display);
+    font-size: 7px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    color: #555;
+}
+
+.viz-label-boundary {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--looper-accent);
+}
+
+/* Section Styling */
+.xfade-section {
+    padding: 10px 12px;
+    border-bottom: 1px solid #222;
+}
+
+.xfade-section:last-child {
+    border-bottom: none;
+}
+
+.xfade-section-label {
+    font-family: var(--font-display);
+    font-size: 8px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+/* Parameter Rows */
+.xfade-param-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.xfade-param-row:last-child {
+    margin-bottom: 0;
+}
+
+.xfade-label {
+    flex: 0 0 80px;
+    font-family: var(--font-display);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    color: #888;
+}
+
+.xfade-slider {
+    flex: 1;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: #222;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+    border: none;
+}
+
+.xfade-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: linear-gradient(180deg, var(--looper-accent) 0%, var(--looper-accent-dim) 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 1px solid var(--looper-accent);
+    box-shadow: 0 0 4px var(--looper-accent-glow);
+}
+
+.xfade-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: linear-gradient(180deg, var(--looper-accent) 0%, var(--looper-accent-dim) 100%);
+    border-radius: 50%;
+    cursor: pointer;
+    border: 1px solid var(--looper-accent);
+    box-shadow: 0 0 4px var(--looper-accent-glow);
+}
+
+.xfade-value {
+    flex: 0 0 36px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: #fff;
+    text-align: right;
+}

@@ -436,6 +436,78 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       loopEngine.resetLayerClipCounts();
                       complete({});
                   })
+                  .withNativeFunction("setCrossfadeParams", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      // Args: preTimeMs, postTimeMs, volDepth (0-1), filterFreq (Hz, 0=off), filterDepth (0-1)
+                      if (args.size() >= 5)
+                      {
+                          int preTimeMs = static_cast<int>(args[0]);
+                          int postTimeMs = static_cast<int>(args[1]);
+                          float volDepth = static_cast<float>(args[2]);
+                          float filterFreq = static_cast<float>(args[3]);
+                          float filterDepth = static_cast<float>(args[4]);
+
+                          auto& loopEngine = processorRef.getLoopEngine();
+                          loopEngine.setCrossfadeParams(preTimeMs, postTimeMs, volDepth, filterFreq, filterDepth);
+
+                          DBG("setCrossfadeParams: pre=" + juce::String(preTimeMs) +
+                              "ms post=" + juce::String(postTimeMs) +
+                              "ms volDepth=" + juce::String(volDepth, 2) +
+                              " filterFreq=" + juce::String(filterFreq, 0) +
+                              "Hz filterDepth=" + juce::String(filterDepth, 2));
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("saveCrossfadeSettings", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 1 && args[0].isObject())
+                      {
+                          auto* obj = args[0].getDynamicObject();
+                          if (obj != nullptr)
+                          {
+                              // Save to user preferences file
+                              juce::File settingsDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                  .getChildFile("LoopEngine");
+                              settingsDir.createDirectory();
+                              juce::File settingsFile = settingsDir.getChildFile("crossfade_settings.json");
+
+                              juce::var settings = args[0];
+                              juce::String json = juce::JSON::toString(settings);
+                              settingsFile.replaceWithText(json);
+
+                              DBG("Saved crossfade settings to: " + settingsFile.getFullPathName());
+                          }
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("loadCrossfadeSettings", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      juce::File settingsDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                          .getChildFile("LoopEngine");
+                      juce::File settingsFile = settingsDir.getChildFile("crossfade_settings.json");
+
+                      if (settingsFile.existsAsFile())
+                      {
+                          juce::String json = settingsFile.loadFileAsString();
+                          auto settings = juce::JSON::parse(json);
+                          if (settings.isObject())
+                          {
+                              DBG("Loaded crossfade settings from: " + settingsFile.getFullPathName());
+                              complete(settings);
+                              return;
+                          }
+                      }
+
+                      // Return default settings
+                      auto* defaults = new juce::DynamicObject();
+                      defaults->setProperty("preTime", 80);
+                      defaults->setProperty("postTime", 100);
+                      defaults->setProperty("volDepth", 0);
+                      defaults->setProperty("filterFreq", 0);
+                      defaults->setProperty("filterDepth", 0);
+                      defaults->setProperty("enabled", true);
+                      complete(juce::var(defaults));
+                  })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },
                       juce::URL("http://localhost/").getOrigin())),
