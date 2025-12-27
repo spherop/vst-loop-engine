@@ -864,6 +864,66 @@ public:
             }
         }
 
+        // Apply surgical anti-click filter at loop boundaries
+        // Detects when master playhead wraps and briefly applies a gentle low-pass
+        if (anyPlaying && masterLoopLength > 0)
+        {
+            float currentMasterPos = layers[0].getPlayheadPosition();
+
+            // Detect loop boundary crossing (position jumps from high to low or vice versa)
+            bool loopWrapped = false;
+            if (!isReversed)
+            {
+                // Forward: detect when position drops from > 0.95 to < 0.05
+                loopWrapped = (lastMasterPlayheadPos > 0.95f && currentMasterPos < 0.05f);
+            }
+            else
+            {
+                // Reverse: detect when position jumps from < 0.05 to > 0.95
+                loopWrapped = (lastMasterPlayheadPos < 0.05f && currentMasterPos > 0.95f);
+            }
+
+            if (loopWrapped)
+            {
+                antiClickCountdown = ANTI_CLICK_SAMPLES;
+            }
+            lastMasterPlayheadPos = currentMasterPos;
+
+            // Apply anti-click filter if active
+            if (antiClickCountdown > 0)
+            {
+                float* leftData = buffer.getWritePointer(0);
+                float* rightData = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
+
+                // One-pole low-pass filter coefficient
+                // Higher = more filtering (cuts more highs). ~0.3 is gentle, ~0.7 is aggressive
+                // We use a coefficient that ramps down as the countdown decreases
+                for (int i = 0; i < numSamples && antiClickCountdown > 0; ++i)
+                {
+                    // Ramp coefficient from ~0.5 (start) to ~0.1 (end) for smooth transition
+                    float filterStrength = static_cast<float>(antiClickCountdown) / static_cast<float>(ANTI_CLICK_SAMPLES);
+                    float coeff = 0.1f + filterStrength * 0.4f;  // Range: 0.1 to 0.5
+
+                    // Apply one-pole LP: y[n] = coeff * x[n] + (1 - coeff) * y[n-1]
+                    // But we want to blend between filtered and original based on strength
+                    float filteredL = coeff * leftData[i] + (1.0f - coeff) * antiClickFilterL;
+                    antiClickFilterL = filteredL;
+
+                    // Blend between original and filtered based on filter strength
+                    leftData[i] = leftData[i] * (1.0f - filterStrength * 0.5f) + filteredL * (filterStrength * 0.5f);
+
+                    if (rightData)
+                    {
+                        float filteredR = coeff * rightData[i] + (1.0f - coeff) * antiClickFilterR;
+                        antiClickFilterR = filteredR;
+                        rightData[i] = rightData[i] * (1.0f - filterStrength * 0.5f) + filteredR * (filterStrength * 0.5f);
+                    }
+
+                    --antiClickCountdown;
+                }
+            }
+        }
+
         // Copy separated buffers to output parameters if provided
         // This allows PluginProcessor to apply degrade only to loop playback
         if (loopPlaybackBuffer != nullptr)
@@ -1201,6 +1261,13 @@ private:
     juce::AudioBuffer<float> layerBuffer;
     juce::AudioBuffer<float> dummyBuffer;
     juce::AudioBuffer<float> loopOnlyBuffer;  // Loop playback only, no input (for Blooper-style effects)
+
+    // Anti-click filter state - briefly ducks high frequencies at loop boundary
+    float lastMasterPlayheadPos = 0.0f;  // For detecting loop boundary crossing
+    int antiClickCountdown = 0;          // Samples remaining in anti-click mode
+    float antiClickFilterL = 0.0f;       // One-pole LP filter state (left)
+    float antiClickFilterR = 0.0f;       // One-pole LP filter state (right)
+    static constexpr int ANTI_CLICK_SAMPLES = 64;  // ~1.3ms at 48kHz - very brief
 
     LoopBuffer::State getCurrentState() const
     {
