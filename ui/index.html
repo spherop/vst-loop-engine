@@ -172,15 +172,13 @@
                                     <span class="transport-icon">&#10005;</span>
                                     <span class="transport-label">CLR</span>
                                 </button>
-                                <!-- Small UNDO/REDO buttons -->
-                                <div class="flex flex-col gap-0.5">
-                                    <button id="undo-btn" class="transport-btn-mini" title="Undo last layer">
-                                        <span class="mini-icon">&#8617;</span>
-                                    </button>
-                                    <button id="redo-btn" class="transport-btn-mini" title="Redo layer">
-                                        <span class="mini-icon">&#8618;</span>
-                                    </button>
-                                </div>
+                                <!-- UNDO/REDO square buttons -->
+                                <button id="undo-btn" class="transport-btn-square" title="Undo last layer">
+                                    <span class="transport-icon-square">&#8617;</span>
+                                </button>
+                                <button id="redo-btn" class="transport-btn-square" title="Redo layer">
+                                    <span class="transport-icon-square">&#8618;</span>
+                                </button>
                                 <!-- Divider -->
                                 <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
                                 <!-- Loop Length Selector - Stacked layout -->
@@ -212,24 +210,20 @@
                                 <!-- Divider -->
                                 <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
                                 <!-- Tempo Sync Controls -->
-                                <div class="flex items-center gap-2">
+                                <div class="flex items-center gap-1">
                                     <!-- BPM Display -->
                                     <div class="flex items-center gap-1">
                                         <span class="font-mono text-sm font-bold text-fd-accent" id="bpm-display"
                                               style="text-shadow: 0 0 10px rgba(255, 107, 53, 0.3);">120</span>
                                         <span class="font-display text-[6px] text-fd-text-dim">BPM</span>
                                     </div>
-                                    <!-- HOST toggle with integrated LED -->
-                                    <button class="host-sync-btn" id="host-sync-btn" title="Sync looper to host transport">
-                                        <span class="host-sync-led-inline" id="host-sync-led"></span>
-                                        <span class="host-label">HOST</span>
-                                    </button>
-                                    <!-- SYNC and division stacked vertically -->
+                                    <!-- HOST toggle and division stacked vertically -->
                                     <div class="flex flex-col gap-0.5">
-                                        <button class="toggle-btn-mini" id="tempo-sync-toggle">
-                                            <span class="toggle-label-mini">SYNC</span>
+                                        <button class="tempo-sync-btn" id="host-sync-btn" title="Sync looper to host transport">
+                                            <span class="tempo-sync-led" id="host-sync-led"></span>
+                                            <span class="tempo-sync-label">HOST</span>
                                         </button>
-                                        <select class="note-select-mini" id="note-value-select">
+                                        <select class="tempo-division-select" id="note-value-select" disabled>
                                             <option value="0">1/4</option>
                                             <option value="1" selected>1/8</option>
                                             <option value="2">1/8T</option>
@@ -239,14 +233,6 @@
                                         </select>
                                     </div>
                                 </div>
-                            </div>
-                            <!-- Right side: Loop time display (smaller) and crossfade button -->
-                            <div class="flex items-center gap-2">
-                                <span id="loop-time-display" class="font-mono text-xs font-bold text-fd-text"
-                                      style="text-shadow: 0 0 6px rgba(79, 195, 247, 0.2);">0.0s</span>
-                                <button class="xfade-settings-btn" id="xfade-settings-btn" title="Loop crossfade settings">
-                                    <span class="xfade-icon">&#8734;</span>
-                                </button>
                             </div>
                         </div>
                     </section>
@@ -287,8 +273,8 @@
 
                     <!-- Layer Controls (fixed at bottom) -->
                     <section class="section-card bg-fd-card rounded-lg border border-fd-border p-2 flex-shrink-0">
-                        <div class="flex justify-center items-center">
-                            <!-- Layer Indicators -->
+                        <div class="flex justify-between items-center">
+                            <!-- Layer Indicators (left) -->
                             <div class="flex items-center gap-2">
                                 <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
                                 <div class="layer-indicators flex gap-2">
@@ -315,6 +301,14 @@
                                     <span class="font-mono text-[8px] text-fd-text-dim w-[24px]" id="layer-pan-value">C</span>
                                 </div>
                             </div>
+                            <!-- Loop time + Crossfade (right) -->
+                            <div class="flex items-center gap-2">
+                                <span id="loop-time-display" class="font-mono text-[10px] font-bold text-fd-text"
+                                      style="text-shadow: 0 0 6px rgba(79, 195, 247, 0.2);">0.0s</span>
+                                <button class="xfade-settings-btn" id="xfade-settings-btn" title="Loop crossfade settings">
+                                    <span class="xfade-icon">&#8734;</span>
+                                </button>
+                            </div>
                         </div>
                     </section>
 
@@ -323,7 +317,7 @@
                         <div class="flex justify-between items-end">
                             <!-- Version ticker (left) -->
                             <div class="flex items-center">
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v3.3.0</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v3.4.0</span>
                             </div>
 
                             <!-- Controls (center) -->

@@ -2076,6 +2076,7 @@ class HostSyncController {
     constructor() {
         this.btn = document.getElementById('host-sync-btn');
         this.led = document.getElementById('host-sync-led');
+        this.divisionSelect = document.getElementById('note-value-select');
         this.isEnabled = false;
         this.isHostPlaying = false;
         this.setHostSyncFn = getNativeFunction("setHostTransportSync");
@@ -2131,6 +2132,10 @@ class HostSyncController {
             this.btn.classList.toggle('active', this.isEnabled);
             this.btn.classList.toggle('playing', this.isEnabled && this.isHostPlaying);
         }
+        // Enable/disable division dropdown based on HOST sync state
+        if (this.divisionSelect) {
+            this.divisionSelect.disabled = !this.isEnabled;
+        }
     }
 
     // Poll for host playing state
@@ -2152,15 +2157,12 @@ class HostSyncController {
     }
 }
 
-// BPM Display and Tempo Sync Controller
+// BPM Display and Note Value Controller
 class BpmDisplayController {
     constructor() {
         this.bpmEl = document.getElementById('bpm-display');
-        this.syncBtn = document.getElementById('tempo-sync-toggle');
         this.noteSelect = document.getElementById('note-value-select');
-        this.isSyncEnabled = false;
 
-        this.setSyncFn = getNativeFunction("setTempoSync");
         this.setNoteFn = getNativeFunction("setTempoNote");
 
         this.setupEvents();
@@ -2168,10 +2170,6 @@ class BpmDisplayController {
     }
 
     setupEvents() {
-        if (this.syncBtn) {
-            this.syncBtn.addEventListener('click', () => this.toggleSync());
-        }
-
         if (this.noteSelect) {
             this.noteSelect.addEventListener('change', (e) => this.setNoteValue(parseInt(e.target.value)));
         }
@@ -2182,10 +2180,6 @@ class BpmDisplayController {
             const getStateFn = getNativeFunction("getTempoState");
             const state = await getStateFn();
             if (state) {
-                if (typeof state.syncEnabled !== 'undefined') {
-                    this.isSyncEnabled = state.syncEnabled;
-                    this.updateSyncUI();
-                }
                 if (typeof state.noteValue !== 'undefined' && this.noteSelect) {
                     this.noteSelect.value = state.noteValue.toString();
                 }
@@ -2201,27 +2195,6 @@ class BpmDisplayController {
     updateBpm(bpm) {
         if (this.bpmEl) {
             this.bpmEl.textContent = bpm.toFixed(1);
-        }
-    }
-
-    async toggleSync() {
-        this.isSyncEnabled = !this.isSyncEnabled;
-        this.updateSyncUI();
-
-        try {
-            await this.setSyncFn(this.isSyncEnabled);
-        } catch (e) {
-            console.error('Error setting tempo sync:', e);
-        }
-    }
-
-    updateSyncUI() {
-        if (this.syncBtn) {
-            this.syncBtn.classList.toggle('active', this.isSyncEnabled);
-            const label = this.syncBtn.querySelector('.toggle-label');
-            if (label) {
-                label.textContent = `Sync: ${this.isSyncEnabled ? 'On' : 'Off'}`;
-            }
         }
     }
 
