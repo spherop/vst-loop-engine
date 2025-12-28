@@ -34,7 +34,7 @@ LoopEngineProcessor::LoopEngineProcessor()
     // Texture (granular) parameters
     textureDensityParam = apvts.getRawParameterValue("textureDensity");
     textureScatterParam = apvts.getRawParameterValue("textureScatter");
-    textureMotionParam = apvts.getRawParameterValue("textureMotion");
+    textureShuffleIntensityParam = apvts.getRawParameterValue("textureShuffleIntensity");
     textureMixParam = apvts.getRawParameterValue("textureMix");
 }
 
@@ -242,13 +242,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         0.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // Texture Motion: controls per-grain variation
-    // 0% = stable grains; 100% = pitch drift, speed variation, reverse probability
+    // Texture Shuffle Intensity: controls how much grains are reshuffled
+    // 0% = normal scatter behavior; 100% = fully use shuffled positions
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"textureMotion", 1},
-        "Texture Motion",
+        juce::ParameterID{"textureShuffleIntensity", 1},
+        "Texture Shuffle",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
-        0.0f,
+        100.0f,  // Default to 100% so shuffle button has immediate effect
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
     // Texture Mix: dry/wet for texture section
@@ -430,7 +430,7 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     // Update texture (granular) parameters
     degradeProcessor.setTextureDensity(textureDensityParam->load() / 100.0f);  // Convert 0-100% to 0-1
     degradeProcessor.setTextureScatter(textureScatterParam->load() / 100.0f);  // Convert 0-100% to 0-1
-    degradeProcessor.setTextureMotion(textureMotionParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    degradeProcessor.setTextureShuffleIntensity(textureShuffleIntensityParam->load() / 100.0f);  // Convert 0-100% to 0-1
     degradeProcessor.setTextureMix(textureMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
 
     // Blooper-style degrade: only affects loop playback, not input

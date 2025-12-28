@@ -1779,10 +1779,11 @@ class LooperController {
             if (btn) btn.classList.remove('active');
         });
 
-        // Reset REC button styling (clear any layer color)
+        // Reset REC button styling (clear any layer color and special modes)
         if (this.recBtn) {
             this.recBtn.style.borderColor = '';
             this.recBtn.style.boxShadow = '';
+            this.recBtn.classList.remove('dub-plus-mode', 'dub-ready');
         }
         if (this.recLabel) {
             this.recLabel.style.color = '';
@@ -1798,35 +1799,34 @@ class LooperController {
                 break;
             case 'playing':
                 if (this.playBtn) this.playBtn.classList.add('active');
+                // Mark REC button as "ready to dub" (not actively recording) - gray styling via CSS
+                if (this.recBtn) this.recBtn.classList.add('dub-ready');
+                if (this.recLabel) this.recLabel.textContent = 'DUB';
                 // Check if clicking DUB will add a new layer (current layer has content)
+                // The + is shown via CSS pseudo-element on the icon, not in the label
                 const willAddLayer = this.layerContentStates[this.currentLayer - 1];
-                if (this.recLabel) this.recLabel.textContent = willAddLayer ? 'DUB+' : 'DUB';
-                // Color the DUB button to match the NEXT layer that will be recorded to
-                // When DUB+ is shown, clicking will record to highestLayer + 1
                 if (willAddLayer && this.highestLayer > 0) {
-                    // Next layer index (0-indexed): highestLayer is 1-indexed, so highestLayer = next layer's 0-index
-                    const nextLayerIdx = Math.min(this.highestLayer, 7);
-                    const nextLayerColor = this.layerColors[nextLayerIdx];
-                    if (this.recBtn) {
-                        this.recBtn.style.borderColor = nextLayerColor;
-                        this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
-                    }
-                    if (this.recLabel) {
-                        this.recLabel.style.color = nextLayerColor;
-                    }
+                    if (this.recBtn) this.recBtn.classList.add('dub-plus-mode');
+                } else {
+                    if (this.recBtn) this.recBtn.classList.remove('dub-plus-mode');
                 }
                 break;
             case 'overdubbing':
                 if (this.recBtn) this.recBtn.classList.add('active');
-                // During overdubbing, show DUB+ if we can add more layers, otherwise just DUB
-                const willAddLayerAfterOverdub = this.highestLayer < 7;  // Can still add if not at max
-                if (this.recLabel) this.recLabel.textContent = willAddLayerAfterOverdub ? 'DUB+' : 'DUB';
+                if (this.recLabel) this.recLabel.textContent = 'DUB';
+                // During overdubbing, show + in icon if we can add more layers
+                const willAddLayerAfterOverdub = this.highestLayer < 7;
                 // Color matches the layer currently being recorded to (currentLayer)
                 {
                     const currentLayerColor = this.layerColors[this.currentLayer];  // currentLayer is 1-indexed
                     if (this.recBtn) {
                         this.recBtn.style.borderColor = currentLayerColor;
                         this.recBtn.style.boxShadow = `0 0 8px ${currentLayerColor}60`;
+                        if (willAddLayerAfterOverdub) {
+                            this.recBtn.classList.add('dub-plus-mode');
+                        } else {
+                            this.recBtn.classList.remove('dub-plus-mode');
+                        }
                     }
                     if (this.recLabel) {
                         this.recLabel.style.color = currentLayerColor;
@@ -3585,10 +3585,22 @@ document.addEventListener('DOMContentLoaded', () => {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Texture Motion: 0% - 100%
-    new KnobController('textureMotion-knob', 'textureMotion', {
-        formatValue: (v) => `${Math.round(v * 100)}%`
-    });
+    // Reshuffle button - triggers grain position randomization
+    const reshuffleBtn = document.getElementById('reshuffle-btn');
+    if (reshuffleBtn) {
+        reshuffleBtn.addEventListener('click', () => {
+            // Add spinning animation
+            reshuffleBtn.classList.add('shuffling');
+
+            // Call native function to trigger shuffle
+            window.__JUCE__.backend.triggerTextureShuffle();
+
+            // Remove animation class after animation completes
+            setTimeout(() => {
+                reshuffleBtn.classList.remove('shuffling');
+            }, 300);
+        });
+    }
 
     // Texture Mix: 0% - 100%
     new KnobController('textureMix-knob', 'textureMix', {

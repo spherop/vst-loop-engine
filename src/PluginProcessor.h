@@ -118,7 +118,7 @@ private:
     // Texture (granular) parameters
     std::atomic<float>* textureDensityParam = nullptr;
     std::atomic<float>* textureScatterParam = nullptr;
-    std::atomic<float>* textureMotionParam = nullptr;
+    std::atomic<float>* textureShuffleIntensityParam = nullptr;
     std::atomic<float>* textureMixParam = nullptr;
 
     // Tempo sync state

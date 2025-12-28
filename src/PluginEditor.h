@@ -51,7 +51,7 @@ private:
     // Texture (granular) parameter relays
     juce::WebSliderRelay textureDensityRelay { "textureDensity" };
     juce::WebSliderRelay textureScatterRelay { "textureScatter" };
-    juce::WebSliderRelay textureMotionRelay { "textureMotion" };
+    juce::WebSliderRelay textureShuffleIntensityRelay { "textureShuffleIntensity" };
     juce::WebSliderRelay textureMixRelay { "textureMix" };
 
     juce::WebBrowserComponent webView;
@@ -89,7 +89,7 @@ private:
     // Texture (granular) parameter attachments
     juce::WebSliderParameterAttachment textureDensityAttachment;
     juce::WebSliderParameterAttachment textureScatterAttachment;
-    juce::WebSliderParameterAttachment textureMotionAttachment;
+    juce::WebSliderParameterAttachment textureShuffleIntensityAttachment;
     juce::WebSliderParameterAttachment textureMixAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);

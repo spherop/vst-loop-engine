@@ -414,6 +414,98 @@ html, body {
     50% { opacity: 0.5; }
 }
 
+/* DUB+ Mode - Plus sign integrated into record icon */
+.transport-btn.dub-plus-mode .transport-icon {
+    position: relative;
+}
+
+/* The plus sign overlaid on the record circle */
+.transport-btn.dub-plus-mode .transport-icon::after {
+    content: '+';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: 900;
+    color: #000;
+    text-shadow: none;
+    line-height: 1;
+}
+
+/* Pulsing glow for dub-plus-mode button */
+.transport-btn.dub-plus-mode {
+    animation: glow-plus 1.2s ease-in-out infinite;
+}
+
+@keyframes glow-plus {
+    0%, 100% {
+        filter: brightness(1);
+    }
+    50% {
+        filter: brightness(1.15);
+    }
+}
+
+/* DUB Ready Mode - Not recording, gray and dim */
+/* Shows hollow circle to indicate "ready but not active" */
+.transport-btn.rec.dub-ready {
+    background: linear-gradient(180deg, #151515 0%, #0a0a0a 100%);
+    border-color: #444 !important;
+    box-shadow: none !important;
+}
+
+.transport-btn.rec.dub-ready .transport-icon {
+    /* Hollow circle effect - dim gray outline */
+    color: transparent;
+    -webkit-text-stroke: 1.5px #666;
+    text-stroke: 1.5px #666;
+    animation: none;
+    position: relative;
+}
+
+/* Plus sign in hollow circle for dub-ready + dub-plus-mode */
+.transport-btn.rec.dub-ready.dub-plus-mode .transport-icon::after {
+    content: '+';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 10px;
+    font-weight: 900;
+    color: #666;
+    text-shadow: none;
+    line-height: 1;
+    animation: pulse-plus-dim 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-plus-dim {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+}
+
+.transport-btn.rec.dub-ready .transport-label {
+    color: #666 !important;
+    opacity: 0.8;
+}
+
+/* When hovering dub-ready, preview the active state */
+.transport-btn.rec.dub-ready:hover {
+    border-color: #ef5350 !important;
+}
+
+.transport-btn.rec.dub-ready:hover .transport-icon {
+    -webkit-text-stroke-color: #ef5350;
+}
+
+.transport-btn.rec.dub-ready:hover .transport-label {
+    color: #ef5350 !important;
+}
+
+.transport-btn.rec.dub-ready.dub-plus-mode:hover .transport-icon::after {
+    color: #ef5350;
+}
+
 /* Play Button */
 .transport-btn.play:hover {
     border-color: #4caf50;
@@ -1656,6 +1748,72 @@ html, body {
 .degrade-knob .knob-indicator {
     background: linear-gradient(180deg, var(--degrade-accent) 0%, #81d4fa 50%, var(--degrade-accent) 100%);
     box-shadow: 0 0 6px var(--degrade-accent), 0 0 12px var(--degrade-accent-glow);
+}
+
+/* Reshuffle button - matches knob-small dimensions */
+.reshuffle-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    /* Match knob styling */
+    background:
+        radial-gradient(circle at 30% 30%, #3a3a3a 0%, #1a1a1a 70%),
+        linear-gradient(135deg, #2a2a2a 0%, #0a0a0a 100%);
+
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 8px rgba(0, 0, 0, 0.5),
+        0 0 0 2px #1a1a1a,
+        0 0 0 3px #2a2a2a;
+
+    transition: all 0.15s ease;
+}
+
+.reshuffle-btn:hover {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 8px rgba(0, 0, 0, 0.5),
+        0 0 0 2px #1a1a1a,
+        0 0 0 4px var(--degrade-accent);
+}
+
+.reshuffle-btn:active {
+    transform: scale(0.95);
+    box-shadow:
+        inset 0 2px 8px rgba(0, 0, 0, 0.5),
+        0 2px 4px rgba(0, 0, 0, 0.5),
+        0 0 0 2px #1a1a1a,
+        0 0 0 4px var(--degrade-accent),
+        0 0 15px var(--degrade-accent-glow);
+}
+
+.reshuffle-icon {
+    font-size: 18px;
+    color: var(--degrade-accent);
+    text-shadow: 0 0 6px var(--degrade-accent-glow);
+    transition: transform 0.3s ease;
+}
+
+.reshuffle-btn:active .reshuffle-icon {
+    transform: rotate(180deg);
+}
+
+/* Shuffle animation on click */
+@keyframes shuffle-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.reshuffle-btn.shuffling .reshuffle-icon {
+    animation: shuffle-spin 0.3s ease-out;
 }
 
 .degrade-section {

@@ -45,7 +45,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(degradeMixRelay)
                   .withOptionsFrom(textureDensityRelay)
                   .withOptionsFrom(textureScatterRelay)
-                  .withOptionsFrom(textureMotionRelay)
+                  .withOptionsFrom(textureShuffleIntensityRelay)
                   .withOptionsFrom(textureMixRelay)
                   .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
                   {
@@ -371,6 +371,12 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("lpQ", degrade.getCurrentLPQ());
                       complete(juce::var(result.get()));
                   })
+                  .withNativeFunction("triggerTextureShuffle", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      // Trigger a new random shuffle for grain positions
+                      processorRef.getDegradeProcessor().triggerTextureShuffle();
+                      complete({});
+                  })
                   .withNativeFunction("clearLayer", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
@@ -591,8 +597,8 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
       textureScatterAttachment(*processorRef.getAPVTS().getParameter("textureScatter"),
                                textureScatterRelay,
                                processorRef.getAPVTS().undoManager),
-      textureMotionAttachment(*processorRef.getAPVTS().getParameter("textureMotion"),
-                              textureMotionRelay,
+      textureShuffleIntensityAttachment(*processorRef.getAPVTS().getParameter("textureShuffleIntensity"),
+                              textureShuffleIntensityRelay,
                               processorRef.getAPVTS().undoManager),
       textureMixAttachment(*processorRef.getAPVTS().getParameter("textureMix"),
                            textureMixRelay,
