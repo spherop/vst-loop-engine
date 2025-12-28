@@ -4,7 +4,7 @@
 // ============================================================
 // VERSION - Increment this with each build to verify changes
 // ============================================================
-const UI_VERSION = "1.7.6";
+const UI_VERSION = "2.1.0";
 console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
 
 // Promise handler for native function calls
@@ -640,14 +640,7 @@ class LooperController {
             this.updateLoopRegionShade();
 
             // Use the knob's resetToDefault method which handles JUCE sync properly
-            if (loopStartKnob) {
-                loopStartKnob.resetToDefault();
-                console.log('[SYNC] Reset loopStart knob to default');
-            }
-            if (loopEndKnob) {
-                loopEndKnob.resetToDefault();
-                console.log('[SYNC] Reset loopEnd knob to default');
-            }
+            // Note: loopStart/loopEnd knobs removed - now using drag handles
             if (loopSpeedKnob) {
                 loopSpeedKnob.resetToDefault();
                 console.log('[SYNC] Reset loopSpeed knob to default');
@@ -1803,9 +1796,7 @@ class LooperController {
             this.loopEnd = 1;
             this.updateLoopRegionShade();
 
-            // Reset the knobs to defaults
-            if (loopStartKnob) loopStartKnob.resetToDefault();
-            if (loopEndKnob) loopEndKnob.resetToDefault();
+            // Note: loopStart/loopEnd knobs removed - now using drag handles
 
             // Also reset layer content states
             this.layerContentStates = [false, false, false, false, false, false, false, false];
@@ -2075,8 +2066,7 @@ class LooperController {
 let looperController = null;
 
 // Store loop knob controllers for direct reset
-let loopStartKnob = null;
-let loopEndKnob = null;
+// loopStartKnob and loopEndKnob removed - now using drag handles on waveform
 let loopSpeedKnob = null;
 let loopPitchKnob = null;
 let loopFadeKnob = null;
@@ -2241,6 +2231,344 @@ class BpmDisplayController {
     }
 }
 
+// MicroLooper controller (MOOD-inspired always-listening micro-looper)
+class MicroLooperController {
+    constructor() {
+        // Transport buttons
+        this.playBtn = document.getElementById('micro-play-btn');
+        this.overdubBtn = document.getElementById('micro-overdub-btn');
+        this.freezeBtn = document.getElementById('micro-freeze-btn');
+        this.clearBtn = document.getElementById('micro-clear-btn');
+        this.reverseBtn = document.getElementById('micro-reverse-btn');
+
+        // Mode buttons
+        this.modeEnvBtn = document.getElementById('micro-mode-env');
+        this.modeTapeBtn = document.getElementById('micro-mode-tape');
+        this.modeStretchBtn = document.getElementById('micro-mode-stretch');
+
+        // Waveform visualization elements
+        this.waveformCanvas = document.getElementById('micro-waveform-canvas');
+        this.waveformCtx = this.waveformCanvas?.getContext('2d');
+        this.playhead = document.getElementById('micro-playhead');
+        this.bufferFill = document.getElementById('micro-buffer-fill');
+        this.modeDesc = document.getElementById('micro-mode-desc');
+
+        // Mode descriptions
+        this.modeDescriptions = {
+            0: 'ENV: Volume-ducked playback, speed controls pitch',
+            1: 'TAPE: Direct speed control with wow flutter',
+            2: 'STRETCH: Time stretch independent of pitch'
+        };
+
+        // State
+        this.isPlaying = false;
+        this.isOverdubbing = false;
+        this.isFrozen = false;
+        this.isReversed = false;
+        this.currentMode = 1; // 0=ENV, 1=TAPE, 2=STRETCH (default to TAPE)
+        this.waveformData = [];
+        this.playPosition = 0;
+        this.bufferFillAmount = 0;
+
+        // Native functions
+        this.playFn = getNativeFunction('microLooperPlay');
+        this.overdubFn = getNativeFunction('microLooperOverdub');
+        this.freezeFn = getNativeFunction('microLooperFreeze');
+        this.clearFn = getNativeFunction('microLooperClear');
+        this.setModeFn = getNativeFunction('setMicroLooperMode');
+        this.setReverseFn = getNativeFunction('setMicroLooperReverse');
+        this.getStateFn = getNativeFunction('getMicroLooperState');
+        this.getWaveformFn = getNativeFunction('getMicroLooperWaveform');
+
+        // Setup canvas
+        this.setupCanvas();
+        window.addEventListener('resize', () => this.setupCanvas());
+
+        this.setupEvents();
+        this.fetchInitialState();
+        this.startPolling();
+        this.updateModeDescription();
+        console.log('[MICROLOOP] Controller initialized');
+    }
+
+    setupCanvas() {
+        if (!this.waveformCanvas) return;
+        const rect = this.waveformCanvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        this.waveformCanvas.width = rect.width * dpr;
+        this.waveformCanvas.height = rect.height * dpr;
+        if (this.waveformCtx) {
+            this.waveformCtx.scale(dpr, dpr);
+        }
+        this.canvasWidth = rect.width;
+        this.canvasHeight = rect.height;
+        this.drawWaveform();
+    }
+
+    setupEvents() {
+        // Play button
+        if (this.playBtn) {
+            this.playBtn.addEventListener('click', () => this.togglePlay());
+        }
+
+        // Overdub button
+        if (this.overdubBtn) {
+            this.overdubBtn.addEventListener('click', () => this.toggleOverdub());
+        }
+
+        // Freeze button
+        if (this.freezeBtn) {
+            this.freezeBtn.addEventListener('click', () => this.toggleFreeze());
+        }
+
+        // Clear button
+        if (this.clearBtn) {
+            this.clearBtn.addEventListener('click', () => this.clear());
+        }
+
+        // Reverse button
+        if (this.reverseBtn) {
+            this.reverseBtn.addEventListener('click', () => this.toggleReverse());
+        }
+
+        // Mode buttons
+        if (this.modeEnvBtn) {
+            this.modeEnvBtn.addEventListener('click', () => this.setMode(0));
+        }
+        if (this.modeTapeBtn) {
+            this.modeTapeBtn.addEventListener('click', () => this.setMode(1));
+        }
+        if (this.modeStretchBtn) {
+            this.modeStretchBtn.addEventListener('click', () => this.setMode(2));
+        }
+    }
+
+    async fetchInitialState() {
+        try {
+            const state = await this.getStateFn();
+            if (state) {
+                this.isPlaying = state.isPlaying || false;
+                this.isOverdubbing = state.isOverdubbing || false;
+                this.isFrozen = state.isFrozen || false;
+                this.updateUI();
+            }
+        } catch (e) {
+            console.log('Could not fetch initial micro looper state');
+        }
+    }
+
+    startPolling() {
+        // Poll for state updates every 100ms
+        setInterval(async () => {
+            try {
+                const state = await this.getStateFn();
+                if (state) {
+                    this.isPlaying = state.isPlaying || false;
+                    this.isOverdubbing = state.isOverdubbing || false;
+                    this.isFrozen = state.isFrozen || false;
+                    this.playPosition = state.playPosition || 0;
+                    this.bufferFillAmount = state.bufferFill || 0;
+                    if (state.mode !== undefined && state.mode !== this.currentMode) {
+                        this.currentMode = state.mode;
+                    }
+                    this.updateUI();
+                }
+            } catch (e) {
+                // Ignore polling errors
+            }
+        }, 100);
+
+        // Poll for waveform updates every 200ms (less frequent)
+        setInterval(() => this.fetchWaveform(), 200);
+    }
+
+    async togglePlay() {
+        try {
+            await this.playFn();
+            this.isPlaying = !this.isPlaying;
+            // Update play button icon
+            if (this.playBtn) {
+                const icon = this.playBtn.querySelector('.micro-icon');
+                if (icon) {
+                    icon.textContent = this.isPlaying ? '⏹' : '▶';
+                }
+            }
+            this.updateUI();
+            console.log(`[MICROLOOP] ${this.isPlaying ? 'Playing' : 'Stopped'}`);
+        } catch (e) {
+            console.error('Error toggling micro looper play:', e);
+        }
+    }
+
+    async toggleOverdub() {
+        try {
+            await this.overdubFn();
+            this.isOverdubbing = !this.isOverdubbing;
+            this.updateUI();
+            console.log(`[MICROLOOP] Overdub ${this.isOverdubbing ? 'ON' : 'OFF'}`);
+        } catch (e) {
+            console.error('Error toggling micro looper overdub:', e);
+        }
+    }
+
+    async toggleFreeze() {
+        try {
+            await this.freezeFn();
+            this.isFrozen = !this.isFrozen;
+            this.updateUI();
+            console.log(`[MICROLOOP] Freeze ${this.isFrozen ? 'ON' : 'OFF'}`);
+        } catch (e) {
+            console.error('Error toggling micro looper freeze:', e);
+        }
+    }
+
+    async clear() {
+        try {
+            await this.clearFn();
+            this.isPlaying = false;
+            this.isOverdubbing = false;
+            this.isFrozen = false;
+            // Reset play button icon
+            if (this.playBtn) {
+                const icon = this.playBtn.querySelector('.micro-icon');
+                if (icon) {
+                    icon.textContent = '▶';
+                }
+            }
+            this.updateUI();
+            console.log('[MICROLOOP] Cleared');
+        } catch (e) {
+            console.error('Error clearing micro looper:', e);
+        }
+    }
+
+    async toggleReverse() {
+        try {
+            this.isReversed = !this.isReversed;
+            await this.setReverseFn(this.isReversed);
+            this.updateUI();
+            console.log(`[MICROLOOP] Reverse ${this.isReversed ? 'ON' : 'OFF'}`);
+        } catch (e) {
+            console.error('Error toggling micro looper reverse:', e);
+            this.isReversed = !this.isReversed;
+        }
+    }
+
+    async setMode(mode) {
+        try {
+            this.currentMode = mode;
+            await this.setModeFn(mode);
+            this.updateModeButtons();
+            this.updateModeDescription();
+            const modeNames = ['ENV', 'TAPE', 'STRETCH'];
+            console.log(`[MICROLOOP] Mode: ${modeNames[mode]}`);
+        } catch (e) {
+            console.error('Error setting micro looper mode:', e);
+        }
+    }
+
+    updateModeButtons() {
+        // Update mode button states
+        if (this.modeEnvBtn) this.modeEnvBtn.classList.toggle('active', this.currentMode === 0);
+        if (this.modeTapeBtn) this.modeTapeBtn.classList.toggle('active', this.currentMode === 1);
+        if (this.modeStretchBtn) this.modeStretchBtn.classList.toggle('active', this.currentMode === 2);
+    }
+
+    updateModeDescription() {
+        if (this.modeDesc) {
+            this.modeDesc.textContent = this.modeDescriptions[this.currentMode] || '';
+            this.modeDesc.classList.toggle('active', this.isPlaying);
+        }
+    }
+
+    drawWaveform() {
+        if (!this.waveformCtx || !this.canvasWidth || !this.canvasHeight) return;
+
+        const ctx = this.waveformCtx;
+        const width = this.canvasWidth;
+        const height = this.canvasHeight;
+        const centerY = height / 2;
+
+        // Clear canvas
+        ctx.fillStyle = '#080808';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw center line
+        ctx.strokeStyle = '#1a1a1a';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, centerY);
+        ctx.lineTo(width, centerY);
+        ctx.stroke();
+
+        // Draw waveform if we have data
+        if (this.waveformData && this.waveformData.length > 0) {
+            const data = this.waveformData;
+            const stepWidth = width / data.length;
+
+            // Draw waveform bars
+            ctx.fillStyle = this.isPlaying ? '#66bb6a' : '#3d5c3e';
+
+            for (let i = 0; i < data.length; i++) {
+                const amplitude = Math.abs(data[i]);
+                const barHeight = amplitude * (height - 4);
+                const x = i * stepWidth;
+                const y = centerY - barHeight / 2;
+
+                ctx.fillRect(x, y, Math.max(1, stepWidth - 1), barHeight);
+            }
+        } else {
+            // Draw "no data" indicator
+            ctx.fillStyle = '#333';
+            ctx.font = '10px JetBrains Mono';
+            ctx.textAlign = 'center';
+            ctx.fillText('Listening...', width / 2, centerY + 4);
+        }
+    }
+
+    async fetchWaveform() {
+        try {
+            const waveform = await this.getWaveformFn(64);
+            if (waveform && Array.isArray(waveform)) {
+                this.waveformData = waveform;
+                this.drawWaveform();
+            }
+        } catch (e) {
+            // Ignore waveform fetch errors
+        }
+    }
+
+    updatePlayhead() {
+        if (this.playhead && this.canvasWidth) {
+            const leftPercent = this.playPosition * 100;
+            this.playhead.style.left = `${leftPercent}%`;
+            this.playhead.classList.toggle('visible', this.isPlaying && this.waveformData.length > 0);
+        }
+    }
+
+    updateBufferFill() {
+        if (this.bufferFill) {
+            this.bufferFill.style.width = `${this.bufferFillAmount * 100}%`;
+        }
+    }
+
+    updateUI() {
+        // Update transport button states
+        if (this.playBtn) this.playBtn.classList.toggle('active', this.isPlaying);
+        if (this.overdubBtn) this.overdubBtn.classList.toggle('active', this.isOverdubbing);
+        if (this.freezeBtn) this.freezeBtn.classList.toggle('active', this.isFrozen);
+        if (this.reverseBtn) this.reverseBtn.classList.toggle('active', this.isReversed);
+
+        // Update mode buttons
+        this.updateModeButtons();
+
+        // Update playhead and visualization
+        this.updatePlayhead();
+        this.updateBufferFill();
+        this.updateModeDescription();
+    }
+}
+
 // Degrade section controller with LEDs and filter visualization
 class DegradeController {
     constructor() {
@@ -2250,9 +2578,9 @@ class DegradeController {
 
         // Section LEDs
         this.lofiLed = document.getElementById('lofi-led');
-        this.textureLed = document.getElementById('texture-led');
+        this.microLoopLed = document.getElementById('microloop-led');
         this.filterLed = document.getElementById('filter-led');
-        console.log('[DEGRADE] Lofi LED:', this.lofiLed, 'Texture LED:', this.textureLed, 'Filter LED:', this.filterLed);
+        console.log('[DEGRADE] Lofi LED:', this.lofiLed, 'MicroLoop LED:', this.microLoopLed, 'Filter LED:', this.filterLed);
 
         // Individual filter toggle labels (now using labels instead of buttons)
         this.hpToggleLabel = document.getElementById('hp-toggle-label');
@@ -2278,7 +2606,7 @@ class DegradeController {
         // State
         this.masterEnabled = true;
         this.lofiEnabled = true;
-        this.textureEnabled = true;
+        this.microLoopEnabled = true;
         this.filterEnabled = true;
         this.hpEnabled = true;
         this.lpEnabled = true;
@@ -2286,7 +2614,7 @@ class DegradeController {
         // Native functions
         this.setMasterEnabledFn = getNativeFunction('setDegradeEnabled');
         this.setLofiEnabledFn = getNativeFunction('setDegradeLofiEnabled');
-        this.setTextureEnabledFn = getNativeFunction('setTextureEnabled');
+        this.setMicroLoopEnabledFn = getNativeFunction('setMicroLooperEnabled');
         this.setFilterEnabledFn = getNativeFunction('setDegradeFilterEnabled');
         this.setHPEnabledFn = getNativeFunction('setDegradeHPEnabled');
         this.setLPEnabledFn = getNativeFunction('setDegradeLPEnabled');
@@ -2333,10 +2661,10 @@ class DegradeController {
                 this.toggleLofi();
             });
         }
-        if (this.textureLed) {
-            this.textureLed.addEventListener('click', (e) => {
+        if (this.microLoopLed) {
+            this.microLoopLed.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.toggleTexture();
+                this.toggleMicroLoop();
             });
         }
         // Filter section LED toggle
@@ -2362,7 +2690,7 @@ class DegradeController {
                 // C++ returns 'enabled', we use 'masterEnabled' internally
                 this.masterEnabled = state.enabled !== false;
                 this.lofiEnabled = state.lofiEnabled !== false;
-                this.textureEnabled = state.textureEnabled !== false;
+                this.microLoopEnabled = state.microLooperEnabled !== false;
                 this.filterEnabled = state.filterEnabled !== false;
                 this.hpEnabled = state.hpEnabled !== false;
                 this.lpEnabled = state.lpEnabled !== false;
@@ -2456,15 +2784,15 @@ class DegradeController {
         }
     }
 
-    async toggleTexture() {
-        this.textureEnabled = !this.textureEnabled;
+    async toggleMicroLoop() {
+        this.microLoopEnabled = !this.microLoopEnabled;
         this.updateUI();
         try {
-            await this.setTextureEnabledFn(this.textureEnabled);
-            console.log(`[DEGRADE] Texture ${this.textureEnabled ? 'enabled' : 'disabled'}`);
+            await this.setMicroLoopEnabledFn(this.microLoopEnabled);
+            console.log(`[DEGRADE] MicroLoop ${this.microLoopEnabled ? 'enabled' : 'disabled'}`);
         } catch (e) {
-            console.error('Error toggling texture:', e);
-            this.textureEnabled = !this.textureEnabled;
+            console.error('Error toggling micro loop:', e);
+            this.microLoopEnabled = !this.microLoopEnabled;
             this.updateUI();
         }
     }
@@ -2479,8 +2807,8 @@ class DegradeController {
         if (this.lofiLed) {
             this.lofiLed.classList.toggle('active', this.lofiEnabled);
         }
-        if (this.textureLed) {
-            this.textureLed.classList.toggle('active', this.textureEnabled);
+        if (this.microLoopLed) {
+            this.microLoopLed.classList.toggle('active', this.microLoopEnabled);
         }
         if (this.filterLed) {
             this.filterLed.classList.toggle('active', this.filterEnabled);
@@ -3374,28 +3702,7 @@ document.addEventListener('DOMContentLoaded', () => {
     looperController = new LooperController();
 
     // Looper Knobs - with default values for reset
-
-    // Loop Start: 0% - 100%, default 0%
-    loopStartKnob = new KnobController('loopStart-knob', 'loopStart', {
-        formatValue: (v) => `${Math.round(v * 100)}%`,
-        defaultValue: 0,  // Default to 0%
-        onValueChange: (v) => {
-            if (looperController) {
-                looperController.setLoopStart(v);
-            }
-        }
-    });
-
-    // Loop End: 0% - 100%, default 100%
-    loopEndKnob = new KnobController('loopEnd-knob', 'loopEnd', {
-        formatValue: (v) => `${Math.round(v * 100)}%`,
-        defaultValue: 1,  // Default to 100%
-        onValueChange: (v) => {
-            if (looperController) {
-                looperController.setLoopEnd(v);
-            }
-        }
-    });
+    // Note: Loop Start/End knobs removed - now using drag handles on waveform
 
     // Loop Speed: 0.5x - 2.0x (center = 1.0x), default 1.0x
     // Speed maps to semitones: -12st (0.5x) to +12st (2.0x), where speed = 2^(semitones/12)
@@ -3635,37 +3942,45 @@ document.addEventListener('DOMContentLoaded', () => {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Texture Density: 0% - 100%
-    new KnobController('textureDensity-knob', 'textureDensity', {
+    // =========== MICRO LOOPER CONTROLS (MOOD-inspired) ===========
+
+    // Micro Clock: controls buffer length (0% = 16s, 100% = 0.5s)
+    new KnobController('microClock-knob', 'microClock', {
+        formatValue: (v) => {
+            // v is 0-1, maps to 0.5s (at 1) to 16s (at 0)
+            const seconds = 0.5 + (1 - v) * 15.5;
+            return seconds < 1 ? `${(seconds * 1000).toFixed(0)}ms` : `${seconds.toFixed(1)}s`;
+        }
+    });
+
+    // Micro Length: subset of loop (5% - 100%)
+    new KnobController('microLength-knob', 'microLength', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Texture Scatter: 0% - 100%
-    new KnobController('textureScatter-knob', 'textureScatter', {
+    // Micro Modify: mode-specific control (0% - 100%)
+    new KnobController('microModify-knob', 'microModify', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Reshuffle button - triggers grain position randomization
-    const reshuffleBtn = document.getElementById('reshuffle-btn');
-    if (reshuffleBtn) {
-        reshuffleBtn.addEventListener('click', () => {
-            // Add spinning animation
-            reshuffleBtn.classList.add('shuffling');
+    // Micro Speed: playback speed (0% = -2x, 50% = 1x, 100% = 2x)
+    new KnobController('microSpeed-knob', 'microSpeed', {
+        formatValue: (v) => {
+            // v is 0-1, maps to -2x to +2x with 0.5 = 1x
+            const speed = (v - 0.5) * 4;
+            if (Math.abs(speed) < 0.1) return '1.0x';
+            if (speed < 0) return `${(1 + speed).toFixed(1)}x`;
+            return `${(1 + speed).toFixed(1)}x`;
+        }
+    });
 
-            // Call native function to trigger shuffle
-            window.__JUCE__.backend.triggerTextureShuffle();
-
-            // Remove animation class after animation completes
-            setTimeout(() => {
-                reshuffleBtn.classList.remove('shuffling');
-            }, 300);
-        });
-    }
-
-    // Texture Mix: 0% - 100%
-    new KnobController('textureMix-knob', 'textureMix', {
+    // Micro Mix: 0% - 100%
+    new KnobController('microMix-knob', 'microMix', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
+
+    // Micro Looper controller (handles transport buttons, modes, etc.)
+    new MicroLooperController();
 
     // Degrade mix: 0% - 100%
     new KnobController('degradeMix-knob', 'degradeMix', {

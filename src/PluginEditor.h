@@ -48,11 +48,12 @@ private:
     juce::WebSliderRelay degradeVinylRelay { "degradeVinyl" };
     juce::WebSliderRelay degradeMixRelay { "degradeMix" };
 
-    // Texture (granular) parameter relays
-    juce::WebSliderRelay textureDensityRelay { "textureDensity" };
-    juce::WebSliderRelay textureScatterRelay { "textureScatter" };
-    juce::WebSliderRelay textureShuffleIntensityRelay { "textureShuffleIntensity" };
-    juce::WebSliderRelay textureMixRelay { "textureMix" };
+    // Micro looper parameter relays
+    juce::WebSliderRelay microClockRelay { "microClock" };
+    juce::WebSliderRelay microLengthRelay { "microLength" };
+    juce::WebSliderRelay microModifyRelay { "microModify" };
+    juce::WebSliderRelay microSpeedRelay { "microSpeed" };
+    juce::WebSliderRelay microMixRelay { "microMix" };
 
     juce::WebBrowserComponent webView;
 
@@ -86,11 +87,12 @@ private:
     juce::WebSliderParameterAttachment degradeVinylAttachment;
     juce::WebSliderParameterAttachment degradeMixAttachment;
 
-    // Texture (granular) parameter attachments
-    juce::WebSliderParameterAttachment textureDensityAttachment;
-    juce::WebSliderParameterAttachment textureScatterAttachment;
-    juce::WebSliderParameterAttachment textureShuffleIntensityAttachment;
-    juce::WebSliderParameterAttachment textureMixAttachment;
+    // Micro looper parameter attachments
+    juce::WebSliderParameterAttachment microClockAttachment;
+    juce::WebSliderParameterAttachment microLengthAttachment;
+    juce::WebSliderParameterAttachment microModifyAttachment;
+    juce::WebSliderParameterAttachment microSpeedAttachment;
+    juce::WebSliderParameterAttachment microMixAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
 

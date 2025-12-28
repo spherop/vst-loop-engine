@@ -86,6 +86,7 @@ public:
         fadeSmoothed.setCurrentAndTargetValue(1.0f);
         currentFadeMultiplier.store(1.0f);
         lastPlayheadPosition = 0.0f;
+        skipFirstBlock = false;
 
         // Reset pitch shifters
         blockPitchShifter.reset();
@@ -345,6 +346,10 @@ public:
         overdubFadeInCounter = 0;
         isOverdubFadingOut = false;
 
+        // Skip the first block to avoid capturing residual audio from the
+        // state transition (e.g., when transitioning from Recording to Playing+Overdub)
+        skipFirstBlock = true;
+
         // Mark as having content immediately so it gets processed
         // (the loopLength > 0 makes hasContent() true)
 
@@ -532,6 +537,16 @@ public:
         if (currentState == State::Playing && loopLength > 0)
         {
             processPlayingBlock(buffer);
+            return;
+        }
+
+        // Skip first block after starting overdub to avoid residual audio from state transitions
+        // (e.g., when transitioning from Recording to Playing+Overdub on a new layer)
+        if (currentState == State::Overdubbing && skipFirstBlock)
+        {
+            skipFirstBlock = false;
+            // Output silence for this block - playhead will advance on next block
+            buffer.clear();
             return;
         }
 
@@ -837,6 +852,7 @@ private:
     int overdubFadeInCounter = 0;   // Counts up from 0 to OVERDUB_FADE_SAMPLES when overdub starts
     int overdubFadeOutCounter = 0;  // Counts down from OVERDUB_FADE_SAMPLES to 0 when overdub ends
     bool isOverdubFadingOut = false;  // True during fade-out after overdub stops
+    bool skipFirstBlock = false;      // Skip first audio block to avoid residual audio from state transitions
 
     // Block-based pitch shifter (efficient, processes entire blocks)
     StereoBlockPitchShifter blockPitchShifter;

@@ -120,8 +120,12 @@ public:
                 wobbleAmountSmooth.getNextValue();
                 vinylAmountSmooth.getNextValue();
                 textureDensitySmooth.getNextValue();
-                textureScatterSmooth.getNextValue();
-                // textureShuffleIntensity is not smoothed - immediate response
+                textureSizeSmooth.getNextValue();
+                texturePitchSmooth.getNextValue();
+                texturePitchRndSmooth.getNextValue();
+                textureSpraySmooth.getNextValue();
+                textureSpreadSmooth.getNextValue();
+                textureReverseSmooth.getNextValue();
                 textureMixSmooth.getNextValue();
                 // Output is unchanged (dry signal)
                 continue;
@@ -206,32 +210,47 @@ public:
             }
 
             // ==== TEXTURE SECTION ====
-            // Multi-voice granular texture engine
+            // Multi-voice granular texture engine (enhanced)
             if (textureGain > 0.001f || textureEnabled.load())
             {
                 const float density = textureDensitySmooth.getNextValue();
-                const float scatter = textureScatterSmooth.getNextValue();
                 const float texMix = textureMixSmooth.getNextValue();
+                // Note: other texture params (size, pitch, spray, etc.) are consumed inside processTexture
 
                 if (texMix > 0.001f)
                 {
                     float preTextureL = wetL;
                     float preTextureR = wetR;
 
-                    processTexture(wetL, wetR, density, scatter);
+                    // processTexture reads all params internally from smoothed values
+                    processTexture(wetL, wetR, density, 0.0f);
 
                     // Apply texture mix and bypass crossfade
                     float effectiveTexMix = texMix * textureGain;
                     wetL = preTextureL * (1.0f - effectiveTexMix) + wetL * effectiveTexMix;
                     wetR = preTextureR * (1.0f - effectiveTexMix) + wetR * effectiveTexMix;
                 }
+                else
+                {
+                    // Consume smoothed values to keep them in sync
+                    textureSizeSmooth.getNextValue();
+                    texturePitchSmooth.getNextValue();
+                    texturePitchRndSmooth.getNextValue();
+                    textureSpraySmooth.getNextValue();
+                    textureSpreadSmooth.getNextValue();
+                    textureReverseSmooth.getNextValue();
+                }
             }
             else
             {
-                // Consume smoothed values to keep them in sync
+                // Consume all smoothed values to keep them in sync
                 textureDensitySmooth.getNextValue();
-                textureScatterSmooth.getNextValue();
-                // textureShuffleIntensity is not smoothed - immediate response
+                textureSizeSmooth.getNextValue();
+                texturePitchSmooth.getNextValue();
+                texturePitchRndSmooth.getNextValue();
+                textureSpraySmooth.getNextValue();
+                textureSpreadSmooth.getNextValue();
+                textureReverseSmooth.getNextValue();
                 textureMixSmooth.getNextValue();
             }
 
@@ -288,52 +307,105 @@ public:
         vinylAmountSmooth.setTargetValue(std::clamp(amount, 0.0f, 1.0f));
     }
 
-    // Texture controls (granular engine)
-    // Density: 0-1 maps to grain size 200ms->5ms and spawn rate 200ms->1ms
+    // ========================================
+    // TEXTURE CONTROLS (Enhanced Granular Engine)
+    // ========================================
+
+    // Density: How often grains spawn (0 = sparse ~5/sec, 1 = dense ~100/sec)
     void setTextureDensity(float normalized)
     {
         textureDensitySmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
     }
 
-    // Scatter: 0-1 maps from sequential reading to fully random position jumping
-    void setTextureScatter(float normalized)
+    // Size: Independent grain size in milliseconds (5ms - 500ms)
+    // 0 = 5ms (glitchy), 0.5 = ~100ms (default), 1 = 500ms (smooth/pad-like)
+    void setTextureSize(float normalized)
     {
-        textureScatterSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
+        textureSizeSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
     }
 
-    // Shuffle: Randomizes grain playback positions for frozen texture effect
-    // Intensity controls how much the shuffle affects grain positions
-    void setTextureShuffleIntensity(float normalized)
+    // Pitch: Base pitch shift in semitones (-24 to +24)
+    // 0 = -24st, 0.5 = 0st (no shift), 1 = +24st
+    void setTexturePitch(float normalized)
     {
-        textureShuffleIntensity = std::clamp(normalized, 0.0f, 1.0f);
+        texturePitchSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
     }
 
-    // Trigger a new shuffle - generates new random positions for grains
-    void triggerTextureShuffle()
+    // Pitch Randomization: How much pitch varies per grain (0-100%)
+    // 0 = all grains same pitch, 1 = ±1 octave random variation
+    void setTexturePitchRnd(float normalized)
     {
-        // Generate new shuffle seed
-        textureShuffleSeed = textureRandom.nextInt();
+        texturePitchRndSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
+    }
 
-        // Generate random offset table for deterministic shuffling
-        // Each grain will use its slot index to look up a consistent offset
-        for (int i = 0; i < NUM_TEXTURE_VOICES; ++i)
+    // Spray: Position jitter per grain - how far grains scatter from playhead
+    // 0 = all grains from same position, 1 = grains from anywhere in buffer
+    void setTextureSpray(float normalized)
+    {
+        textureSpraySmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
+    }
+
+    // Spread: Stereo spread of grain placement (0 = mono, 1 = full stereo)
+    void setTextureSpread(float normalized)
+    {
+        textureSpreadSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
+    }
+
+    // Reverse: Probability of each grain playing backwards (0-100%)
+    void setTextureReverse(float normalized)
+    {
+        textureReverseSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
+    }
+
+    // Position: Where in buffer to spawn grains (0 = newest audio, 1 = oldest)
+    void setTexturePosition(float normalized)
+    {
+        texturePosition = std::clamp(normalized, 0.0f, 1.0f);
+    }
+
+    // Freeze: Stop recording to buffer, only play back captured audio
+    void setTextureFrozen(bool frozen)
+    {
+        if (frozen && !textureFrozen.load())
         {
-            // Random offset as fraction of buffer (0 to 1)
-            textureShuffleOffsets[i] = textureRandom.nextFloat();
+            // Capture current position when freezing
+            textureFreezePos = textureWritePos;
+            DBG("Texture FREEZE engaged at position " + juce::String(textureFreezePos));
         }
-
-        DBG("Texture shuffle triggered, seed=" + juce::String(textureShuffleSeed));
+        else if (!frozen && textureFrozen.load())
+        {
+            DBG("Texture FREEZE released");
+        }
+        textureFrozen.store(frozen);
     }
 
-    bool isShuffleActive() const
-    {
-        return textureShuffleIntensity > 0.01f;
-    }
+    bool isTextureFrozen() const { return textureFrozen.load(); }
 
     // Texture mix: dry/wet for the texture section
     void setTextureMix(float normalized)
     {
         textureMixSmooth.setTargetValue(std::clamp(normalized, 0.0f, 1.0f));
+    }
+
+    // Legacy setters for compatibility (map old params to new)
+    void setTextureScatter(float normalized)
+    {
+        // Map old scatter to new spray parameter
+        setTextureSpray(normalized);
+    }
+
+    void setTextureShuffleIntensity(float normalized)
+    {
+        // Shuffle intensity now just triggers variation in position
+        // High intensity = more spray
+        // This is handled by the spray parameter now
+    }
+
+    void triggerTextureShuffle()
+    {
+        // Trigger a position jump - move to random spot in buffer
+        texturePosition = textureRandom.nextFloat();
+        DBG("Texture position randomized to " + juce::String(texturePosition * 100.0f, 1) + "%");
     }
 
     void setMix(float mix)
@@ -466,25 +538,27 @@ private:
     float vinylLowpassR = 0.0f;
 
     // ========================================
-    // GRANULAR TEXTURE ENGINE
+    // GRANULAR TEXTURE ENGINE (ENHANCED)
     // ========================================
-    // Multi-voice granular synthesizer for creating rich, evolving textures
-    // Inspired by Chase Bliss Mood MK2's granular approach
+    // Modern multi-voice granular synthesizer with comprehensive controls
+    // Inspired by Output Portal, Arturia Fragments, and Chase Bliss Mood
 
     // Grain structure - each voice has independent state
     struct Grain
     {
         bool active = false;
         float readPosL = 0.0f;       // Read position in left buffer
-        float readPosR = 0.0f;       // Read position in right buffer
+        float readPosR = 0.0f;       // Read position in right buffer (can differ for stereo spread)
         float grainLength = 0.0f;    // Total grain length in samples
         float progress = 0.0f;       // 0.0 to 1.0 within grain lifetime
-        float playbackRate = 1.0f;   // Per-grain speed variation (affects pitch)
+        float playbackRate = 1.0f;   // Per-grain pitch (ratio, 1.0 = normal)
         bool reverse = false;        // Per-grain reverse flag
+        float panL = 1.0f;           // Left channel gain for stereo placement
+        float panR = 1.0f;           // Right channel gain for stereo placement
     };
 
-    static constexpr int NUM_TEXTURE_VOICES = 6;
-    static constexpr int TEXTURE_BUFFER_SIZE = 262144;  // ~5.4s at 48kHz
+    static constexpr int NUM_TEXTURE_VOICES = 16;  // Increased from 6 to 16 for richer textures
+    static constexpr int TEXTURE_BUFFER_SIZE = 480000;  // ~10s at 48kHz for longer freeze/capture
 
     std::array<Grain, NUM_TEXTURE_VOICES> textureGrains;
     std::vector<float> textureBufferL, textureBufferR;
@@ -494,14 +568,21 @@ private:
     juce::Random textureRandom;
 
     // Smoothed texture parameters
-    juce::SmoothedValue<float> textureDensitySmooth;
-    juce::SmoothedValue<float> textureScatterSmooth;
-    juce::SmoothedValue<float> textureMixSmooth;
+    juce::SmoothedValue<float> textureDensitySmooth;    // Grain spawn rate
+    juce::SmoothedValue<float> textureSizeSmooth;       // Independent grain size (ms)
+    juce::SmoothedValue<float> texturePitchSmooth;      // Base pitch shift in semitones
+    juce::SmoothedValue<float> texturePitchRndSmooth;   // Pitch randomization amount
+    juce::SmoothedValue<float> textureSpraySmooth;      // Position jitter per grain
+    juce::SmoothedValue<float> textureSpreadSmooth;     // Stereo spread amount
+    juce::SmoothedValue<float> textureReverseSmooth;    // Probability of reverse grains
+    juce::SmoothedValue<float> textureMixSmooth;        // Dry/wet mix
 
-    // Shuffle system - randomizes grain positions on button press
-    float textureShuffleIntensity = 0.0f;  // 0 = no shuffle, 1 = full shuffle
-    int textureShuffleSeed = 0;             // Changes on each reshuffle
-    std::array<float, NUM_TEXTURE_VOICES> textureShuffleOffsets;  // Pre-computed random offsets
+    // Freeze mode - stops buffer writing to capture a moment
+    std::atomic<bool> textureFrozen { false };
+    int textureFreezePos = 0;  // Captured write position when frozen
+
+    // Position/playhead control - where in buffer grains are spawned
+    float texturePosition = 0.0f;  // 0-1 position in buffer (0 = newest, 1 = oldest)
 
     // Mix
     juce::SmoothedValue<float> mixSmooth;
@@ -856,41 +937,51 @@ private:
     }
 
     // ========================================
-    // TEXTURE ENGINE METHODS
+    // TEXTURE ENGINE METHODS (ENHANCED)
     // ========================================
 
     void initializeTexture(double sampleRate)
     {
-        // Allocate texture buffer (~5.4 seconds at 48kHz)
+        // Allocate texture buffer (~10 seconds at 48kHz)
         textureBufferL.resize(TEXTURE_BUFFER_SIZE, 0.0f);
         textureBufferR.resize(TEXTURE_BUFFER_SIZE, 0.0f);
         textureWritePos = 0;
         textureSpawnTimer = 0.0f;
         textureBufferFilled = 0;
+        textureFreezePos = 0;
 
         // Reset all grain voices
         for (auto& grain : textureGrains)
         {
             grain.active = false;
             grain.progress = 0.0f;
+            grain.panL = 1.0f;
+            grain.panR = 1.0f;
         }
 
-        // Initialize smoothed parameters
-        textureDensitySmooth.reset(sampleRate, 0.01);
-        textureScatterSmooth.reset(sampleRate, 0.01);
-        textureMixSmooth.reset(sampleRate, 0.01);
+        // Initialize ALL smoothed parameters with appropriate ramp times
+        textureDensitySmooth.reset(sampleRate, 0.02);
+        textureSizeSmooth.reset(sampleRate, 0.02);
+        texturePitchSmooth.reset(sampleRate, 0.02);
+        texturePitchRndSmooth.reset(sampleRate, 0.02);
+        textureSpraySmooth.reset(sampleRate, 0.02);
+        textureSpreadSmooth.reset(sampleRate, 0.02);
+        textureReverseSmooth.reset(sampleRate, 0.02);
+        textureMixSmooth.reset(sampleRate, 0.02);
 
-        textureDensitySmooth.setCurrentAndTargetValue(0.5f);
-        textureScatterSmooth.setCurrentAndTargetValue(0.0f);
-        textureMixSmooth.setCurrentAndTargetValue(0.5f);
+        // Set sensible default values
+        textureDensitySmooth.setCurrentAndTargetValue(0.3f);   // Medium density
+        textureSizeSmooth.setCurrentAndTargetValue(0.3f);      // ~50ms grains
+        texturePitchSmooth.setCurrentAndTargetValue(0.5f);     // No pitch shift (center)
+        texturePitchRndSmooth.setCurrentAndTargetValue(0.0f);  // No randomization
+        textureSpraySmooth.setCurrentAndTargetValue(0.2f);     // Some position jitter
+        textureSpreadSmooth.setCurrentAndTargetValue(0.5f);    // Medium stereo spread
+        textureReverseSmooth.setCurrentAndTargetValue(0.0f);   // No reverse
+        textureMixSmooth.setCurrentAndTargetValue(0.5f);       // 50% wet
 
-        // Initialize shuffle system
-        textureShuffleIntensity = 0.0f;
-        textureShuffleSeed = 0;
-        for (int i = 0; i < NUM_TEXTURE_VOICES; ++i)
-        {
-            textureShuffleOffsets[i] = textureRandom.nextFloat();
-        }
+        // Initialize other state
+        texturePosition = 0.0f;
+        textureFrozen.store(false);
     }
 
     // Linear interpolation helper
@@ -919,83 +1010,137 @@ private:
         return buffer[idx0] * (1.0f - frac) + buffer[idx1] * frac;
     }
 
-    // Spawn a new grain voice
-    void spawnGrain(float density, float scatter, int slotIndex)
+    // Spawn a new grain voice with enhanced parameters
+    void spawnGrainEnhanced(int slotIndex, float grainSizeMs, float basePitchRatio,
+                            float pitchRnd, float spray, float spread, float reverseProb)
     {
         Grain& grain = textureGrains[slotIndex];
 
-        // Calculate grain size based on density
-        // density 0 = 200ms grains, density 1 = 5ms grains
-        float grainSizeMs = lerp(200.0f, 5.0f, density);
+        // Calculate grain size in samples
         grain.grainLength = grainSizeMs * static_cast<float>(currentSampleRate) / 1000.0f;
         grain.grainLength = std::max(grain.grainLength, 48.0f);  // Minimum ~1ms at 48kHz
 
-        // Calculate read position based on scatter AND shuffle
+        // Calculate base read position
         const float filledSamples = static_cast<float>(std::min(textureBufferFilled, TEXTURE_BUFFER_SIZE));
-
-        // Base offset from write position
-        float minLookback = grain.grainLength + 100.0f;
-        float maxLookback = filledSamples * 0.95f;
-
-        // Non-linear scatter curve
-        float scatterCurve = scatter * scatter;
-        float baseLookback = lerp(minLookback, maxLookback, scatterCurve);
-
-        // Add random variation around the base lookback
-        float randomVariation = (textureRandom.nextFloat() * 2.0f - 1.0f) * baseLookback * 0.5f;
-        float totalLookback = std::clamp(baseLookback + randomVariation, minLookback, maxLookback);
-
-        // SHUFFLE: When active, use pre-computed random offsets to reposition grains
-        // This creates a "frozen" texture that persists until reshuffled
-        if (textureShuffleIntensity > 0.01f && filledSamples > minLookback * 2.0f)
+        if (filledSamples < grain.grainLength + 100.0f)
         {
-            // Use the slot's shuffle offset to determine a consistent read position
-            float shuffleOffset = textureShuffleOffsets[slotIndex];
-
-            // Map shuffle offset to buffer position
-            // Intensity controls blend between normal scatter and shuffled position
-            float shuffledLookback = minLookback + shuffleOffset * (maxLookback - minLookback);
-
-            // Blend between scattered and shuffled based on intensity
-            totalLookback = lerp(totalLookback, shuffledLookback, textureShuffleIntensity);
+            grain.active = false;
+            return;  // Not enough buffer content yet
         }
 
-        grain.readPosL = wrapBufferPos(static_cast<float>(textureWritePos) - totalLookback);
-        grain.readPosR = grain.readPosL;
+        // Determine reference position (write head or freeze position)
+        float refPos = textureFrozen.load()
+            ? static_cast<float>(textureFreezePos)
+            : static_cast<float>(textureWritePos);
 
-        // No pitch variation - grains play at unity pitch for cleaner shuffled texture
-        // The shuffle creates the variation through position, not pitch
-        grain.playbackRate = 1.0f;
+        // Base lookback based on position parameter (0 = newest, 1 = oldest)
+        float minLookback = grain.grainLength + 100.0f;
+        float maxLookback = filledSamples * 0.95f;
+        float baseLookback = lerp(minLookback, maxLookback, texturePosition);
 
-        // No reverse by default - can be added back as a separate control if desired
-        grain.reverse = false;
+        // Apply SPRAY - random position jitter
+        // spray 0 = no jitter, spray 1 = full buffer range jitter
+        float sprayRange = (maxLookback - minLookback) * spray;
+        float sprayOffset = (textureRandom.nextFloat() * 2.0f - 1.0f) * sprayRange * 0.5f;
+        float totalLookback = std::clamp(baseLookback + sprayOffset, minLookback, maxLookback);
+
+        // Set read position
+        float baseReadPos = wrapBufferPos(refPos - totalLookback);
+        grain.readPosL = baseReadPos;
+        grain.readPosR = baseReadPos;
+
+        // Apply STEREO SPREAD - offset right channel position
+        // spread 0 = mono (same pos), spread 1 = up to ±50ms offset
+        if (spread > 0.01f)
+        {
+            float spreadSamples = spread * 0.05f * static_cast<float>(currentSampleRate);  // Up to 50ms
+            float spreadOffset = (textureRandom.nextFloat() * 2.0f - 1.0f) * spreadSamples;
+            grain.readPosR = wrapBufferPos(baseReadPos + spreadOffset);
+
+            // Calculate stereo pan position (random placement in stereo field)
+            float pan = textureRandom.nextFloat() * spread;  // 0 to spread
+            pan = (textureRandom.nextFloat() < 0.5f) ? -pan : pan;  // Random left or right
+            // Pan law: constant power
+            float panAngle = (pan + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
+            grain.panL = std::cos(panAngle);
+            grain.panR = std::sin(panAngle);
+        }
+        else
+        {
+            grain.panL = 1.0f;
+            grain.panR = 1.0f;
+        }
+
+        // Apply PITCH with randomization
+        float pitchVariation = 0.0f;
+        if (pitchRnd > 0.01f)
+        {
+            // Random pitch variation: ±12 semitones at full randomization
+            float rndSemitones = (textureRandom.nextFloat() * 2.0f - 1.0f) * 12.0f * pitchRnd;
+            pitchVariation = std::pow(2.0f, rndSemitones / 12.0f);
+        }
+        else
+        {
+            pitchVariation = 1.0f;
+        }
+        grain.playbackRate = basePitchRatio * pitchVariation;
+
+        // Apply REVERSE probability
+        grain.reverse = (textureRandom.nextFloat() < reverseProb);
 
         grain.progress = 0.0f;
         grain.active = true;
     }
 
-    // Main texture processing method
-    void processTexture(float& left, float& right, float density, float scatter)
+    // Main texture processing method - ENHANCED version
+    void processTexture(float& left, float& right, float density, float /* scatter - now unused */)
     {
         if (textureBufferL.empty())
             return;
 
-        // Write input to circular buffer
-        textureBufferL[textureWritePos] = left;
-        textureBufferR[textureWritePos] = right;
+        // Get all smoothed parameter values
+        const float size = textureSizeSmooth.getNextValue();
+        const float pitch = texturePitchSmooth.getNextValue();
+        const float pitchRnd = texturePitchRndSmooth.getNextValue();
+        const float spray = textureSpraySmooth.getNextValue();
+        const float spread = textureSpreadSmooth.getNextValue();
+        const float reverseProb = textureReverseSmooth.getNextValue();
 
-        // Track how much buffer is filled (for scatter range calculation)
-        if (textureBufferFilled < TEXTURE_BUFFER_SIZE)
-            textureBufferFilled++;
+        // Only write to buffer if not frozen
+        if (!textureFrozen.load())
+        {
+            textureBufferL[textureWritePos] = left;
+            textureBufferR[textureWritePos] = right;
 
-        // At very low density, don't spawn grains - just passthrough
-        // This prevents the choppy effect when density is near 0
+            // Track how much buffer is filled
+            if (textureBufferFilled < TEXTURE_BUFFER_SIZE)
+                textureBufferFilled++;
+
+            // Advance write position
+            textureWritePos = (textureWritePos + 1) % TEXTURE_BUFFER_SIZE;
+        }
+
+        // At very low density, output silence (will be mixed with dry)
         if (density < 0.02f)
         {
-            // Advance write position and return original signal
-            textureWritePos = (textureWritePos + 1) % TEXTURE_BUFFER_SIZE;
-            return;  // left and right are unchanged
+            left = 0.0f;
+            right = 0.0f;
+            return;
         }
+
+        // Calculate grain size from size parameter
+        // size 0 = 5ms (glitchy), size 0.5 = ~100ms, size 1 = 500ms (smooth pads)
+        float grainSizeMs = lerp(5.0f, 500.0f, size * size);  // Quadratic curve for better control
+
+        // Calculate base pitch ratio from pitch parameter
+        // pitch 0 = -24st, pitch 0.5 = 0st, pitch 1 = +24st
+        float semitones = (pitch - 0.5f) * 48.0f;  // ±24 semitones
+        float basePitchRatio = std::pow(2.0f, semitones / 12.0f);
+
+        // Calculate spawn interval from density
+        // density 0 = sparse (spawn every ~200ms = 5 grains/sec)
+        // density 1 = dense (spawn every ~10ms = 100 grains/sec)
+        float intervalMs = lerp(200.0f, 10.0f, density);
 
         // Check if we should spawn a new grain
         textureSpawnTimer -= 1.0f;
@@ -1024,11 +1169,9 @@ private:
             if (slotToUse < 0)
                 slotToUse = oldestSlot;
 
-            spawnGrain(density, scatter, slotToUse);
+            spawnGrainEnhanced(slotToUse, grainSizeMs, basePitchRatio,
+                               pitchRnd, spray, spread, reverseProb);
 
-            // Calculate next spawn interval based on density
-            // density 0 = spawn every 200ms, density 1 = spawn every 1ms
-            float intervalMs = lerp(200.0f, 1.0f, density);
             textureSpawnTimer = intervalMs * static_cast<float>(currentSampleRate) / 1000.0f;
         }
 
@@ -1044,18 +1187,18 @@ private:
 
             activeCount++;
 
-            // Calculate Hann window envelope
+            // Calculate Hann window envelope (smooth, click-free)
             float window = 0.5f * (1.0f - std::cos(2.0f * juce::MathConstants<float>::pi * grain.progress));
 
             // Read from buffer with interpolation
             float sampleL = readBufferInterpolated(textureBufferL, grain.readPosL);
             float sampleR = readBufferInterpolated(textureBufferR, grain.readPosR);
 
-            // Apply window and accumulate
-            outputL += sampleL * window;
-            outputR += sampleR * window;
+            // Apply window and stereo pan
+            outputL += sampleL * window * grain.panL;
+            outputR += sampleR * window * grain.panR;
 
-            // Advance grain read position
+            // Advance grain read position based on pitch
             float increment = grain.playbackRate;
             if (grain.reverse)
                 increment = -increment;
@@ -1063,7 +1206,7 @@ private:
             grain.readPosL = wrapBufferPos(grain.readPosL + increment);
             grain.readPosR = wrapBufferPos(grain.readPosR + increment);
 
-            // Advance grain progress
+            // Advance grain progress (based on original grain length, not pitch-shifted)
             grain.progress += 1.0f / grain.grainLength;
 
             // Deactivate grain when finished
@@ -1072,12 +1215,7 @@ private:
         }
 
         // Apply gain compensation for volume consistency
-        // The Hann window has an average value of 0.5, and overlapping grains
-        // don't sum to unity without compensation. We apply:
-        // 1. Base gain of ~2.0 to compensate for Hann window averaging
-        // 2. Normalization by sqrt(activeCount) to prevent clipping with many grains
-        // 3. Additional boost factor to match dry signal level
-        float gainCompensation = 2.2f;  // Compensate for Hann window and grain overlap
+        float gainCompensation = 2.0f;  // Base compensation for Hann window
         if (activeCount > 1)
         {
             // Reduce gain as more grains overlap, but not as aggressively

@@ -31,11 +31,12 @@ LoopEngineProcessor::LoopEngineProcessor()
     degradeVinylParam = apvts.getRawParameterValue("degradeVinyl");
     degradeMixParam = apvts.getRawParameterValue("degradeMix");
 
-    // Texture (granular) parameters
-    textureDensityParam = apvts.getRawParameterValue("textureDensity");
-    textureScatterParam = apvts.getRawParameterValue("textureScatter");
-    textureShuffleIntensityParam = apvts.getRawParameterValue("textureShuffleIntensity");
-    textureMixParam = apvts.getRawParameterValue("textureMix");
+    // Micro looper parameters
+    microClockParam = apvts.getRawParameterValue("microClock");
+    microLengthParam = apvts.getRawParameterValue("microLength");
+    microModifyParam = apvts.getRawParameterValue("microModify");
+    microSpeedParam = apvts.getRawParameterValue("microSpeed");
+    microMixParam = apvts.getRawParameterValue("microMix");
 }
 
 LoopEngineProcessor::~LoopEngineProcessor()
@@ -222,39 +223,48 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         100.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // =========== TEXTURE (GRANULAR) PARAMETERS ===========
+    // =========== MICRO LOOPER PARAMETERS ===========
+    // MOOD-inspired always-listening micro-looper
 
-    // Texture Density: controls grain size and spawn rate
-    // 0% = long grains (200ms), slow spawn; 100% = short grains (5ms), fast spawn
+    // Clock: controls buffer length (like MOOD's sample rate control)
+    // 0% = 16 seconds (long, low pitch); 100% = 0.5 seconds (short, high pitch)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"textureDensity", 1},
-        "Texture Density",
+        juce::ParameterID{"microClock", 1},
+        "Micro Clock",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
         50.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // Texture Scatter: controls position randomness
-    // 0% = sequential reading; 100% = random jumps in buffer
+    // Length: subset of loop to play (0-100%)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"textureScatter", 1},
-        "Texture Scatter",
-        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
-        0.0f,
+        juce::ParameterID{"microLength", 1},
+        "Micro Length",
+        juce::NormalisableRange<float>(5.0f, 100.0f, 0.1f),
+        100.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // Texture Shuffle Intensity: controls how much grains are reshuffled
-    // 0% = normal scatter behavior; 100% = fully use shuffled positions
+    // Modify: mode-specific control
+    // ENV: envelope sensitivity; TAPE: scrub position; STRETCH: grain size
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"textureShuffleIntensity", 1},
-        "Texture Shuffle",
+        juce::ParameterID{"microModify", 1},
+        "Micro Modify",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
-        100.0f,  // Default to 100% so shuffle button has immediate effect
+        50.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
-    // Texture Mix: dry/wet for texture section
+    // Speed: playback speed control (for TAPE/STRETCH modes)
+    // 0% = -2x (reverse fast); 50% = 1x (normal); 100% = 2x (fast forward)
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
-        juce::ParameterID{"textureMix", 1},
-        "Texture Mix",
+        juce::ParameterID{"microSpeed", 1},
+        "Micro Speed",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // Mix: dry/wet for micro looper
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"microMix", 1},
+        "Micro Mix",
         juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
         50.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
@@ -324,6 +334,9 @@ void LoopEngineProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // Prepare degrade processor
     degradeProcessor.prepare(sampleRate, samplesPerBlock);
+
+    // Prepare micro looper
+    microLooper.prepare(sampleRate, samplesPerBlock);
 }
 
 void LoopEngineProcessor::releaseResources()
@@ -427,32 +440,61 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     degradeProcessor.setVinyl(degradeVinylParam->load() / 100.0f);  // Convert 0-100% to 0-1
     degradeProcessor.setMix(degradeMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
 
-    // Update texture (granular) parameters
-    degradeProcessor.setTextureDensity(textureDensityParam->load() / 100.0f);  // Convert 0-100% to 0-1
-    degradeProcessor.setTextureScatter(textureScatterParam->load() / 100.0f);  // Convert 0-100% to 0-1
-    degradeProcessor.setTextureShuffleIntensity(textureShuffleIntensityParam->load() / 100.0f);  // Convert 0-100% to 0-1
-    degradeProcessor.setTextureMix(textureMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    // Update micro looper parameters
+    microLooper.setClock(microClockParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    microLooper.setLength(microLengthParam->load() / 100.0f);  // Convert 5-100% to 0.05-1.0
+    microLooper.setModify(microModifyParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    microLooper.setSpeed(microSpeedParam->load() / 100.0f);  // Convert 0-100% to 0-1
+    microLooper.setMix(microMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
 
     // Blooper-style degrade: only affects loop playback, not input
     // Apply degrade ONLY to the loop playback buffer
     if (degradeProcessor.isEnabled())
     {
         degradeProcessor.processBlock(loopPlaybackBuffer);
+    }
 
-        // Reconstruct output: degraded loop + clean input
+    // Process through micro looper (always-listening buffer)
+    // The micro looper processes the combined signal (after looper and degrade)
+    if (microLooper.isEnabled())
+    {
+        // Combine loop playback with input for micro looper processing
+        juce::AudioBuffer<float> microLooperInput(buffer.getNumChannels(), numSamples);
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            float* dest = microLooperInput.getWritePointer(ch);
+            const float* loopData = loopPlaybackBuffer.getReadPointer(ch);
+            const float* inputData = inputPassthroughBuffer.getReadPointer(ch);
+            for (int i = 0; i < numSamples; ++i)
+            {
+                dest[i] = loopData[i] + inputData[i];
+            }
+        }
+
+        // Process through micro looper
+        microLooper.processBlock(microLooperInput);
+
+        // Copy result back to main buffer
+        for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+        {
+            buffer.copyFrom(ch, 0, microLooperInput, ch, 0, numSamples);
+        }
+    }
+    else
+    {
+        // No micro looper - reconstruct from loop + input
         const int numChannels = buffer.getNumChannels();
         for (int ch = 0; ch < numChannels; ++ch)
         {
             float* outputData = buffer.getWritePointer(ch);
-            const float* degradedLoopData = loopPlaybackBuffer.getReadPointer(ch);
+            const float* loopData = loopPlaybackBuffer.getReadPointer(ch);
             const float* cleanInputData = inputPassthroughBuffer.getReadPointer(ch);
             for (int i = 0; i < numSamples; ++i)
             {
-                outputData[i] = degradedLoopData[i] + cleanInputData[i];
+                outputData[i] = loopData[i] + cleanInputData[i];
             }
         }
     }
-    // If degrade is disabled, buffer already contains the correct mixed output from loopEngine
 
     // Get delay time - either from parameter or tempo sync
     const float delayTime = tempoSyncEnabled.load()
@@ -595,9 +637,9 @@ void LoopEngineProcessor::setDegradeLofiEnabled(bool enabled)
     degradeProcessor.setLofiEnabled(enabled);
 }
 
-void LoopEngineProcessor::setTextureEnabled(bool enabled)
+void LoopEngineProcessor::setMicroLooperEnabled(bool enabled)
 {
-    degradeProcessor.setTextureEnabled(enabled);
+    microLooper.setEnabled(enabled);
 }
 
 bool LoopEngineProcessor::getDegradeFilterEnabled() const
@@ -610,9 +652,9 @@ bool LoopEngineProcessor::getDegradeLofiEnabled() const
     return degradeProcessor.getLofiEnabled();
 }
 
-bool LoopEngineProcessor::getTextureEnabled() const
+bool LoopEngineProcessor::getMicroLooperEnabled() const
 {
-    return degradeProcessor.getTextureEnabled();
+    return microLooper.isEnabled();
 }
 
 void LoopEngineProcessor::setDegradeHPEnabled(bool enabled)

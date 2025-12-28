@@ -43,10 +43,11 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(degradeWobbleRelay)
                   .withOptionsFrom(degradeVinylRelay)
                   .withOptionsFrom(degradeMixRelay)
-                  .withOptionsFrom(textureDensityRelay)
-                  .withOptionsFrom(textureScatterRelay)
-                  .withOptionsFrom(textureShuffleIntensityRelay)
-                  .withOptionsFrom(textureMixRelay)
+                  .withOptionsFrom(microClockRelay)
+                  .withOptionsFrom(microLengthRelay)
+                  .withOptionsFrom(microModifyRelay)
+                  .withOptionsFrom(microSpeedRelay)
+                  .withOptionsFrom(microMixRelay)
                   .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().record();
@@ -354,11 +355,71 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.setDegradeLofiEnabled(static_cast<bool>(args[0]));
                       complete({});
                   })
-                  .withNativeFunction("setTextureEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  .withNativeFunction("setMicroLooperEnabled", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
-                          processorRef.setTextureEnabled(static_cast<bool>(args[0]));
+                          processorRef.setMicroLooperEnabled(static_cast<bool>(args[0]));
                       complete({});
+                  })
+                  .withNativeFunction("microLooperPlay", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getMicroLooper().togglePlay();
+                      complete({});
+                  })
+                  .withNativeFunction("microLooperOverdub", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getMicroLooper().toggleOverdub();
+                      complete({});
+                  })
+                  .withNativeFunction("microLooperFreeze", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getMicroLooper().toggleFreeze();
+                      complete({});
+                  })
+                  .withNativeFunction("microLooperClear", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getMicroLooper().clear();
+                      complete({});
+                  })
+                  .withNativeFunction("setMicroLooperMode", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getMicroLooper().setMode(static_cast<int>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setMicroLooperReverse", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getMicroLooper().setReverse(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("getMicroLooperState", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      auto& micro = processorRef.getMicroLooper();
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("enabled", micro.isEnabled());
+                      result->setProperty("isPlaying", micro.getIsPlaying());
+                      result->setProperty("isOverdubbing", micro.getIsOverdubbing());
+                      result->setProperty("isFrozen", micro.getIsFrozen());
+                      result->setProperty("playheadPos", micro.getPlayheadPosition());
+                      result->setProperty("recordPos", micro.getRecordPosition());
+                      result->setProperty("bufferFill", micro.getBufferFill());
+                      result->setProperty("mode", micro.getCurrentMode());
+                      complete(juce::var(result.get()));
+                  })
+                  .withNativeFunction("getMicroLooperWaveform", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      int numPoints = 64;  // Default
+                      if (args.size() > 0)
+                          numPoints = static_cast<int>(args[0]);
+
+                      auto waveform = processorRef.getMicroLooper().getWaveformData(numPoints);
+
+                      juce::Array<juce::var> waveformArray;
+                      for (float val : waveform)
+                          waveformArray.add(val);
+
+                      complete(waveformArray);
                   })
                   .withNativeFunction("setDegradeHPEnabled", [this](const juce::Array<juce::var>& args, auto complete)
                   {
@@ -378,7 +439,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("enabled", processorRef.getDegradeEnabled());
                       result->setProperty("filterEnabled", processorRef.getDegradeFilterEnabled());
                       result->setProperty("lofiEnabled", processorRef.getDegradeLofiEnabled());
-                      result->setProperty("textureEnabled", processorRef.getTextureEnabled());
+                      result->setProperty("microLooperEnabled", processorRef.getMicroLooperEnabled());
                       result->setProperty("hpEnabled", processorRef.getDegradeHPEnabled());
                       result->setProperty("lpEnabled", processorRef.getDegradeLPEnabled());
                       // Filter visualization data
@@ -388,12 +449,6 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("hpQ", degrade.getCurrentHPQ());
                       result->setProperty("lpQ", degrade.getCurrentLPQ());
                       complete(juce::var(result.get()));
-                  })
-                  .withNativeFunction("triggerTextureShuffle", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      // Trigger a new random shuffle for grain positions
-                      processorRef.getDegradeProcessor().triggerTextureShuffle();
-                      complete({});
                   })
                   .withNativeFunction("clearLayer", [this](const juce::Array<juce::var>& args, auto complete)
                   {
@@ -609,18 +664,21 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
       degradeMixAttachment(*processorRef.getAPVTS().getParameter("degradeMix"),
                            degradeMixRelay,
                            processorRef.getAPVTS().undoManager),
-      textureDensityAttachment(*processorRef.getAPVTS().getParameter("textureDensity"),
-                               textureDensityRelay,
-                               processorRef.getAPVTS().undoManager),
-      textureScatterAttachment(*processorRef.getAPVTS().getParameter("textureScatter"),
-                               textureScatterRelay,
-                               processorRef.getAPVTS().undoManager),
-      textureShuffleIntensityAttachment(*processorRef.getAPVTS().getParameter("textureShuffleIntensity"),
-                              textureShuffleIntensityRelay,
-                              processorRef.getAPVTS().undoManager),
-      textureMixAttachment(*processorRef.getAPVTS().getParameter("textureMix"),
-                           textureMixRelay,
-                           processorRef.getAPVTS().undoManager)
+      microClockAttachment(*processorRef.getAPVTS().getParameter("microClock"),
+                           microClockRelay,
+                           processorRef.getAPVTS().undoManager),
+      microLengthAttachment(*processorRef.getAPVTS().getParameter("microLength"),
+                            microLengthRelay,
+                            processorRef.getAPVTS().undoManager),
+      microModifyAttachment(*processorRef.getAPVTS().getParameter("microModify"),
+                            microModifyRelay,
+                            processorRef.getAPVTS().undoManager),
+      microSpeedAttachment(*processorRef.getAPVTS().getParameter("microSpeed"),
+                           microSpeedRelay,
+                           processorRef.getAPVTS().undoManager),
+      microMixAttachment(*processorRef.getAPVTS().getParameter("microMix"),
+                         microMixRelay,
+                         processorRef.getAPVTS().undoManager)
 {
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

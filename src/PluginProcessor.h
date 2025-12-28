@@ -5,6 +5,7 @@
 #include "DelayLine.h"
 #include "LoopEngine.h"
 #include "DegradeProcessor.h"
+#include "MicroLooper.h"
 
 class LoopEngineProcessor : public juce::AudioProcessor
 {
@@ -62,10 +63,13 @@ public:
     // Degrade section bypass
     void setDegradeFilterEnabled(bool enabled);
     void setDegradeLofiEnabled(bool enabled);
-    void setTextureEnabled(bool enabled);
+    void setMicroLooperEnabled(bool enabled);
     bool getDegradeFilterEnabled() const;
     bool getDegradeLofiEnabled() const;
-    bool getTextureEnabled() const;
+    bool getMicroLooperEnabled() const;
+
+    // Micro looper access
+    MicroLooper& getMicroLooper() { return microLooper; }
 
     // Individual filter bypass
     void setDegradeHPEnabled(bool enabled);
@@ -91,6 +95,7 @@ private:
     DelayLine delayLineR;
     LoopEngine loopEngine;
     DegradeProcessor degradeProcessor;
+    MicroLooper microLooper;
 
     // Parameter pointers for efficient access
     std::atomic<float>* delayTimeParam = nullptr;
@@ -115,11 +120,12 @@ private:
     std::atomic<float>* degradeVinylParam = nullptr;
     std::atomic<float>* degradeMixParam = nullptr;
 
-    // Texture (granular) parameters
-    std::atomic<float>* textureDensityParam = nullptr;
-    std::atomic<float>* textureScatterParam = nullptr;
-    std::atomic<float>* textureShuffleIntensityParam = nullptr;
-    std::atomic<float>* textureMixParam = nullptr;
+    // Micro looper parameters
+    std::atomic<float>* microClockParam = nullptr;
+    std::atomic<float>* microLengthParam = nullptr;
+    std::atomic<float>* microModifyParam = nullptr;
+    std::atomic<float>* microSpeedParam = nullptr;
+    std::atomic<float>* microMixParam = nullptr;
 
     // Tempo sync state
     std::atomic<bool> tempoSyncEnabled { false };

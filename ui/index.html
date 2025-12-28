@@ -141,9 +141,9 @@
                     <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-shrink-0">
                         <div class="flex justify-between items-center gap-3">
                             <!-- Left side: Input + Transport buttons -->
-                            <div class="flex items-center gap-3">
+                            <div class="flex items-center gap-2">
                                 <!-- Input Level Meter and Mute (vertical) -->
-                                <div class="input-monitor-v flex flex-col items-center gap-1 mr-2">
+                                <div class="input-monitor-v flex flex-col items-center gap-1 mr-1">
                                     <div class="input-meter-v-container" title="Input Level (L/R)">
                                         <div class="input-meter-v-track">
                                             <div id="input-meter-bar-l" class="input-meter-v-bar left"></div>
@@ -164,26 +164,23 @@
                                     <span class="transport-icon">&#9658;</span>
                                     <span class="transport-label">PLAY</span>
                                 </button>
-                                <button id="reverse-btn" class="transport-btn reverse">
-                                    <span class="transport-icon">&#8634;</span>
-                                    <span class="transport-label">REV</span>
-                                </button>
                                 <button id="loop-stop-btn" class="transport-btn stop">
                                     <span class="transport-icon">&#9632;</span>
                                     <span class="transport-label">STOP</span>
-                                </button>
-                                <button id="undo-btn" class="transport-btn undo">
-                                    <span class="transport-icon">&#8617;</span>
-                                    <span class="transport-label">UNDO</span>
-                                </button>
-                                <button id="redo-btn" class="transport-btn redo">
-                                    <span class="transport-icon">&#8618;</span>
-                                    <span class="transport-label">REDO</span>
                                 </button>
                                 <button id="clear-btn" class="transport-btn clear" title="Clear all layers">
                                     <span class="transport-icon">&#10005;</span>
                                     <span class="transport-label">CLR</span>
                                 </button>
+                                <!-- Small UNDO/REDO buttons -->
+                                <div class="flex flex-col gap-0.5">
+                                    <button id="undo-btn" class="transport-btn-mini" title="Undo last layer">
+                                        <span class="mini-icon">&#8617;</span>
+                                    </button>
+                                    <button id="redo-btn" class="transport-btn-mini" title="Redo layer">
+                                        <span class="mini-icon">&#8618;</span>
+                                    </button>
+                                </div>
                                 <!-- Divider -->
                                 <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
                                 <!-- Loop Length Selector - Stacked layout -->
@@ -211,6 +208,32 @@
                                             <span class="font-display text-[6px] text-fd-text-dim">BEAT</span>
                                         </div>
                                     </div>
+                                </div>
+                                <!-- Divider -->
+                                <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
+                                <!-- Tempo Sync Controls -->
+                                <div class="flex items-center gap-2">
+                                    <!-- Host Transport Sync LED -->
+                                    <div class="flex items-center gap-1">
+                                        <span class="host-sync-led" id="host-sync-led" title="Sync looper to host transport"></span>
+                                        <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">HOST</span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <span class="font-mono text-sm font-bold text-fd-accent" id="bpm-display"
+                                              style="text-shadow: 0 0 10px rgba(255, 107, 53, 0.3);">120</span>
+                                        <span class="font-display text-[6px] text-fd-text-dim">BPM</span>
+                                    </div>
+                                    <button class="toggle-btn-small" id="tempo-sync-toggle">
+                                        <span class="toggle-label font-display">SYNC</span>
+                                    </button>
+                                    <select class="note-select" id="note-value-select">
+                                        <option value="0">1/4</option>
+                                        <option value="1" selected>1/8</option>
+                                        <option value="2">1/8T</option>
+                                        <option value="3">1/16</option>
+                                        <option value="4">1/16T</option>
+                                        <option value="5">1/32</option>
+                                    </select>
                                 </div>
                             </div>
                             <!-- Right side: Loop time display (prominent) -->
@@ -294,150 +317,153 @@
 
                     <!-- Loop Controls (fixed at bottom) -->
                     <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-shrink-0">
-                        <div class="flex justify-center items-end gap-6">
-                            <!-- START -->
-                            <div class="flex flex-col items-center gap-1">
-                                <div class="knob knob-small" id="loopStart-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-[9px] text-white" id="loopStart-value">0%</span>
-                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">START</span>
+                        <div class="flex justify-between items-end">
+                            <!-- Version ticker (left) -->
+                            <div class="flex items-center">
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v3.2.0</span>
                             </div>
 
-                            <!-- END -->
-                            <div class="flex flex-col items-center gap-1">
-                                <div class="knob knob-small" id="loopEnd-knob">
-                                    <div class="knob-indicator"></div>
+                            <!-- Controls (center) -->
+                            <div class="flex items-end gap-6">
+                                <!-- REVERSE -->
+                                <div class="flex flex-col items-center gap-1">
+                                    <button id="reverse-btn" class="loop-control-btn reverse">
+                                        <span class="loop-control-icon">&#8634;</span>
+                                    </button>
+                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">REV</span>
                                 </div>
-                                <span class="font-mono text-[9px] text-white" id="loopEnd-value">100%</span>
-                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">END</span>
+
+                                <!-- SPEED -->
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small" id="loopSpeed-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <select class="speed-select" id="speed-preset-select">
+                                        <option value="0.25">-24st (¼x)</option>
+                                        <option value="0.2649">-23st</option>
+                                        <option value="0.2806">-22st</option>
+                                        <option value="0.2973">-21st</option>
+                                        <option value="0.3150">-20st</option>
+                                        <option value="0.3337">-19st</option>
+                                        <option value="0.3536">-18st</option>
+                                        <option value="0.3746">-17st</option>
+                                        <option value="0.3969">-16st</option>
+                                        <option value="0.4204">-15st</option>
+                                        <option value="0.4454">-14st</option>
+                                        <option value="0.4719">-13st</option>
+                                        <option value="0.5">-12st (½x)</option>
+                                        <option value="0.5297">-11st</option>
+                                        <option value="0.5612">-10st</option>
+                                        <option value="0.5946">-9st</option>
+                                        <option value="0.6300">-8st</option>
+                                        <option value="0.6674">-7st</option>
+                                        <option value="0.7071">-6st</option>
+                                        <option value="0.7492">-5st</option>
+                                        <option value="0.7937">-4st</option>
+                                        <option value="0.8409">-3st</option>
+                                        <option value="0.8909">-2st</option>
+                                        <option value="0.9439">-1st</option>
+                                        <option value="1.0" selected>0st (1x)</option>
+                                        <option value="1.0595">+1st</option>
+                                        <option value="1.1225">+2st</option>
+                                        <option value="1.1892">+3st</option>
+                                        <option value="1.2599">+4st</option>
+                                        <option value="1.3348">+5st</option>
+                                        <option value="1.4142">+6st</option>
+                                        <option value="1.4983">+7st</option>
+                                        <option value="1.5874">+8st</option>
+                                        <option value="1.6818">+9st</option>
+                                        <option value="1.7818">+10st</option>
+                                        <option value="1.8877">+11st</option>
+                                        <option value="2.0">+12st (2x)</option>
+                                        <option value="2.1189">+13st</option>
+                                        <option value="2.2449">+14st</option>
+                                        <option value="2.3784">+15st</option>
+                                        <option value="2.5198">+16st</option>
+                                        <option value="2.6697">+17st</option>
+                                        <option value="2.8284">+18st</option>
+                                        <option value="2.9966">+19st</option>
+                                        <option value="3.1748">+20st</option>
+                                        <option value="3.3636">+21st</option>
+                                        <option value="3.5636">+22st</option>
+                                        <option value="3.7755">+23st</option>
+                                        <option value="4.0">+24st (4x)</option>
+                                    </select>
+                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">SPEED</span>
+                                </div>
+
+                                <!-- PITCH -->
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small" id="loopPitch-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <select class="pitch-select" id="pitch-select">
+                                        <option value="-24">-24st (-2 oct)</option>
+                                        <option value="-23">-23st</option>
+                                        <option value="-22">-22st</option>
+                                        <option value="-21">-21st</option>
+                                        <option value="-20">-20st</option>
+                                        <option value="-19">-19st</option>
+                                        <option value="-18">-18st</option>
+                                        <option value="-17">-17st</option>
+                                        <option value="-16">-16st</option>
+                                        <option value="-15">-15st</option>
+                                        <option value="-14">-14st</option>
+                                        <option value="-13">-13st</option>
+                                        <option value="-12">-12st (-1 oct)</option>
+                                        <option value="-11">-11st</option>
+                                        <option value="-10">-10st</option>
+                                        <option value="-9">-9st</option>
+                                        <option value="-8">-8st</option>
+                                        <option value="-7">-7st</option>
+                                        <option value="-6">-6st</option>
+                                        <option value="-5">-5st</option>
+                                        <option value="-4">-4st</option>
+                                        <option value="-3">-3st</option>
+                                        <option value="-2">-2st</option>
+                                        <option value="-1">-1st</option>
+                                        <option value="0" selected>0st</option>
+                                        <option value="1">+1st</option>
+                                        <option value="2">+2st</option>
+                                        <option value="3">+3st</option>
+                                        <option value="4">+4st</option>
+                                        <option value="5">+5st</option>
+                                        <option value="6">+6st</option>
+                                        <option value="7">+7st</option>
+                                        <option value="8">+8st</option>
+                                        <option value="9">+9st</option>
+                                        <option value="10">+10st</option>
+                                        <option value="11">+11st</option>
+                                        <option value="12">+12st (+1 oct)</option>
+                                        <option value="13">+13st</option>
+                                        <option value="14">+14st</option>
+                                        <option value="15">+15st</option>
+                                        <option value="16">+16st</option>
+                                        <option value="17">+17st</option>
+                                        <option value="18">+18st</option>
+                                        <option value="19">+19st</option>
+                                        <option value="20">+20st</option>
+                                        <option value="21">+21st</option>
+                                        <option value="22">+22st</option>
+                                        <option value="23">+23st</option>
+                                        <option value="24">+24st (+2 oct)</option>
+                                    </select>
+                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">PITCH</span>
+                                </div>
+
+                                <!-- FADE -->
+                                <div class="flex flex-col items-center gap-1">
+                                    <div class="knob knob-small" id="loopFade-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[9px] text-white" id="loopFade-value">100%</span>
+                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">FADE</span>
+                                </div>
                             </div>
 
-                            <!-- SPEED -->
-                            <div class="flex flex-col items-center gap-1">
-                                <div class="knob knob-small" id="loopSpeed-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <select class="speed-select" id="speed-preset-select">
-                                    <option value="0.25">-24st (¼x)</option>
-                                    <option value="0.2649">-23st</option>
-                                    <option value="0.2806">-22st</option>
-                                    <option value="0.2973">-21st</option>
-                                    <option value="0.3150">-20st</option>
-                                    <option value="0.3337">-19st</option>
-                                    <option value="0.3536">-18st</option>
-                                    <option value="0.3746">-17st</option>
-                                    <option value="0.3969">-16st</option>
-                                    <option value="0.4204">-15st</option>
-                                    <option value="0.4454">-14st</option>
-                                    <option value="0.4719">-13st</option>
-                                    <option value="0.5">-12st (½x)</option>
-                                    <option value="0.5297">-11st</option>
-                                    <option value="0.5612">-10st</option>
-                                    <option value="0.5946">-9st</option>
-                                    <option value="0.6300">-8st</option>
-                                    <option value="0.6674">-7st</option>
-                                    <option value="0.7071">-6st</option>
-                                    <option value="0.7492">-5st</option>
-                                    <option value="0.7937">-4st</option>
-                                    <option value="0.8409">-3st</option>
-                                    <option value="0.8909">-2st</option>
-                                    <option value="0.9439">-1st</option>
-                                    <option value="1.0" selected>0st (1x)</option>
-                                    <option value="1.0595">+1st</option>
-                                    <option value="1.1225">+2st</option>
-                                    <option value="1.1892">+3st</option>
-                                    <option value="1.2599">+4st</option>
-                                    <option value="1.3348">+5st</option>
-                                    <option value="1.4142">+6st</option>
-                                    <option value="1.4983">+7st</option>
-                                    <option value="1.5874">+8st</option>
-                                    <option value="1.6818">+9st</option>
-                                    <option value="1.7818">+10st</option>
-                                    <option value="1.8877">+11st</option>
-                                    <option value="2.0">+12st (2x)</option>
-                                    <option value="2.1189">+13st</option>
-                                    <option value="2.2449">+14st</option>
-                                    <option value="2.3784">+15st</option>
-                                    <option value="2.5198">+16st</option>
-                                    <option value="2.6697">+17st</option>
-                                    <option value="2.8284">+18st</option>
-                                    <option value="2.9966">+19st</option>
-                                    <option value="3.1748">+20st</option>
-                                    <option value="3.3636">+21st</option>
-                                    <option value="3.5636">+22st</option>
-                                    <option value="3.7755">+23st</option>
-                                    <option value="4.0">+24st (4x)</option>
-                                </select>
-                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">SPEED</span>
-                            </div>
-
-                            <!-- PITCH -->
-                            <div class="flex flex-col items-center gap-1">
-                                <div class="knob knob-small" id="loopPitch-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <select class="pitch-select" id="pitch-select">
-                                    <option value="-24">-24st (-2 oct)</option>
-                                    <option value="-23">-23st</option>
-                                    <option value="-22">-22st</option>
-                                    <option value="-21">-21st</option>
-                                    <option value="-20">-20st</option>
-                                    <option value="-19">-19st</option>
-                                    <option value="-18">-18st</option>
-                                    <option value="-17">-17st</option>
-                                    <option value="-16">-16st</option>
-                                    <option value="-15">-15st</option>
-                                    <option value="-14">-14st</option>
-                                    <option value="-13">-13st</option>
-                                    <option value="-12">-12st (-1 oct)</option>
-                                    <option value="-11">-11st</option>
-                                    <option value="-10">-10st</option>
-                                    <option value="-9">-9st</option>
-                                    <option value="-8">-8st</option>
-                                    <option value="-7">-7st</option>
-                                    <option value="-6">-6st</option>
-                                    <option value="-5">-5st</option>
-                                    <option value="-4">-4st</option>
-                                    <option value="-3">-3st</option>
-                                    <option value="-2">-2st</option>
-                                    <option value="-1">-1st</option>
-                                    <option value="0" selected>0st</option>
-                                    <option value="1">+1st</option>
-                                    <option value="2">+2st</option>
-                                    <option value="3">+3st</option>
-                                    <option value="4">+4st</option>
-                                    <option value="5">+5st</option>
-                                    <option value="6">+6st</option>
-                                    <option value="7">+7st</option>
-                                    <option value="8">+8st</option>
-                                    <option value="9">+9st</option>
-                                    <option value="10">+10st</option>
-                                    <option value="11">+11st</option>
-                                    <option value="12">+12st (+1 oct)</option>
-                                    <option value="13">+13st</option>
-                                    <option value="14">+14st</option>
-                                    <option value="15">+15st</option>
-                                    <option value="16">+16st</option>
-                                    <option value="17">+17st</option>
-                                    <option value="18">+18st</option>
-                                    <option value="19">+19st</option>
-                                    <option value="20">+20st</option>
-                                    <option value="21">+21st</option>
-                                    <option value="22">+22st</option>
-                                    <option value="23">+23st</option>
-                                    <option value="24">+24st (+2 oct)</option>
-                                </select>
-                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">PITCH</span>
-                            </div>
-
-                            <!-- FADE -->
-                            <div class="flex flex-col items-center gap-1">
-                                <div class="knob knob-small" id="loopFade-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-[9px] text-white" id="loopFade-value">100%</span>
-                                <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">FADE</span>
+                            <!-- Diagnostics toggle (right) -->
+                            <div class="flex items-center">
+                                <button class="text-[8px] text-fd-text-dim hover:text-fd-accent transition-colors" id="diag-toggle" title="Toggle audio diagnostics">📊</button>
                             </div>
                         </div>
                     </section>
@@ -500,46 +526,93 @@
                             </div>
                         </div>
 
-                        <!-- TEXTURE Section -->
+                        <!-- MICRO LOOP Section (MOOD-inspired always-listening micro-looper) -->
                         <div class="p-3 border-b border-fd-border">
-                            <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center justify-between mb-2">
                                 <div class="flex items-center gap-2">
-                                    <div class="section-led degrade-led" id="texture-led"></div>
-                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">TEXTURE</span>
+                                    <div class="section-led degrade-led" id="microloop-led"></div>
+                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">MICRO LOOPER</span>
                                 </div>
-                            </div>
-                            <!-- DENSITY and SCATTER knobs + RESHUFFLE button -->
-                            <div class="grid grid-cols-3 gap-3 mb-3">
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="textureDensity-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[9px] text-white" id="textureDensity-value">50%</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">DENSITY</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="textureScatter-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[9px] text-white" id="textureScatter-value">0%</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">SCATTER</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-1">
-                                    <button class="reshuffle-btn" id="reshuffle-btn" title="Randomize grain positions">
-                                        <span class="reshuffle-icon">⟳</span>
+                                <div class="flex items-center gap-1">
+                                    <button class="micro-transport-btn" id="micro-play-btn" title="Play/Stop captured loop">
+                                        <span class="micro-icon">▶</span>
                                     </button>
-                                    <span class="font-display text-[7px] text-fd-text-dim">RESHUFFLE</span>
+                                    <button class="micro-transport-btn" id="micro-overdub-btn" title="Overdub on loop">
+                                        <span class="micro-icon">◉</span>
+                                    </button>
+                                    <button class="micro-transport-btn" id="micro-freeze-btn" title="Freeze buffer">
+                                        <span class="micro-icon">❄</span>
+                                    </button>
+                                    <button class="micro-transport-btn" id="micro-clear-btn" title="Clear buffer">
+                                        <span class="micro-icon">✕</span>
+                                    </button>
                                 </div>
                             </div>
-                            <!-- MIX knob centered below -->
-                            <div class="flex justify-center">
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="textureMix-knob">
+
+                            <!-- Waveform visualization with playhead -->
+                            <div class="micro-waveform-container mb-2">
+                                <canvas id="micro-waveform-canvas" class="micro-waveform-canvas"></canvas>
+                                <div class="micro-playhead" id="micro-playhead"></div>
+                                <div class="micro-buffer-fill" id="micro-buffer-fill"></div>
+                            </div>
+
+                            <!-- Mode selector -->
+                            <div class="flex justify-center gap-1 mb-2">
+                                <button class="micro-mode-btn" id="micro-mode-env" data-mode="0" title="Envelope mode - input ducks when you play">ENV</button>
+                                <button class="micro-mode-btn active" id="micro-mode-tape" data-mode="1" title="Tape mode - variable speed playback">TAPE</button>
+                                <button class="micro-mode-btn" id="micro-mode-stretch" data-mode="2" title="Stretch mode - time-stretch without pitch change">STR</button>
+                            </div>
+
+                            <!-- Mode description -->
+                            <div class="text-center mb-2">
+                                <span class="font-mono text-[8px] text-fd-text-dim" id="micro-mode-desc">TAPE: Speed control with tape-like wow</span>
+                            </div>
+
+                            <!-- Row 1: Core micro-loop controls -->
+                            <div class="grid grid-cols-5 gap-2 mb-2">
+                                <div class="flex flex-col items-center gap-0.5">
+                                    <div class="knob knob-tiny degrade-knob" id="microClock-knob">
                                         <div class="knob-indicator"></div>
                                     </div>
-                                    <span class="font-mono text-[9px] text-white" id="textureMix-value">50%</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">MIX</span>
+                                    <span class="font-mono text-[8px] text-white" id="microClock-value">8.0s</span>
+                                    <span class="font-display text-[6px] text-fd-text-dim">CLOCK</span>
                                 </div>
+                                <div class="flex flex-col items-center gap-0.5">
+                                    <div class="knob knob-tiny degrade-knob" id="microLength-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[8px] text-white" id="microLength-value">100%</span>
+                                    <span class="font-display text-[6px] text-fd-text-dim">LENGTH</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-0.5">
+                                    <div class="knob knob-tiny degrade-knob" id="microSpeed-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[8px] text-white" id="microSpeed-value">1.0x</span>
+                                    <span class="font-display text-[6px] text-fd-text-dim">SPEED</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-0.5">
+                                    <div class="knob knob-tiny degrade-knob" id="microModify-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[8px] text-white" id="microModify-value">50%</span>
+                                    <span class="font-display text-[6px] text-fd-text-dim">MODIFY</span>
+                                </div>
+                                <div class="flex flex-col items-center gap-0.5">
+                                    <div class="knob knob-tiny degrade-knob" id="microMix-knob">
+                                        <div class="knob-indicator"></div>
+                                    </div>
+                                    <span class="font-mono text-[8px] text-white" id="microMix-value">50%</span>
+                                    <span class="font-display text-[6px] text-fd-text-dim">MIX</span>
+                                </div>
+                            </div>
+
+                            <!-- Row 2: Reverse toggle -->
+                            <div class="flex justify-center items-center">
+                                <button class="micro-reverse-btn" id="micro-reverse-btn" title="Reverse playback direction">
+                                    <span class="reverse-icon">⟲</span>
+                                    <span class="reverse-label">REVERSE</span>
+                                </button>
                             </div>
                         </div>
 
@@ -669,71 +742,33 @@
 
         </main>
 
-        <!-- Footer - Tempo Sync -->
-        <footer class="py-2 px-4 border-t border-fd-border bg-fd-surface/50">
-            <div class="flex items-center justify-between">
-                <!-- Version ticker + Diagnostics toggle -->
-                <div class="flex items-center gap-2">
-                    <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v1.9.5</span>
-                    <button class="text-[8px] text-fd-text-dim hover:text-fd-accent transition-colors" id="diag-toggle" title="Toggle audio diagnostics">📊</button>
-                </div>
-                <!-- Diagnostic Panel (hidden by default) -->
-                <div id="diag-panel" class="hidden absolute bottom-10 left-2 bg-fd-card border border-fd-border rounded p-2 text-[9px] font-mono z-50 shadow-lg" style="min-width: 280px;">
-                    <div class="flex justify-between items-center mb-2">
-                        <span class="font-bold text-fd-accent">AUDIO DIAGNOSTICS</span>
-                        <button class="text-fd-text-dim hover:text-white" id="diag-reset">Reset</button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-fd-text">
-                        <span>Pre-Clip Peak L:</span><span id="diag-preclip-l" class="text-right">0.00</span>
-                        <span>Pre-Clip Peak R:</span><span id="diag-preclip-r" class="text-right">0.00</span>
-                        <span>Loop Output L:</span><span id="diag-loop-l" class="text-right">0.00</span>
-                        <span>Loop Output R:</span><span id="diag-loop-r" class="text-right">0.00</span>
-                        <span class="text-yellow-400">Clip Events:</span><span id="diag-clips" class="text-right text-yellow-400">0</span>
-                    </div>
-                    <div class="mt-2 pt-2 border-t border-fd-border">
-                        <span class="text-fd-text-dim">Layer Clips:</span>
-                        <div class="flex gap-1 mt-1" id="diag-layer-clips">
-                            <span class="px-1 bg-fd-surface rounded">1:0</span>
-                            <span class="px-1 bg-fd-surface rounded">2:0</span>
-                            <span class="px-1 bg-fd-surface rounded">3:0</span>
-                            <span class="px-1 bg-fd-surface rounded">4:0</span>
-                            <span class="px-1 bg-fd-surface rounded">5:0</span>
-                            <span class="px-1 bg-fd-surface rounded">6:0</span>
-                            <span class="px-1 bg-fd-surface rounded">7:0</span>
-                            <span class="px-1 bg-fd-surface rounded">8:0</span>
-                        </div>
-                    </div>
-                </div>
-                <!-- Tempo controls -->
-                <div class="flex items-center gap-4">
-                    <!-- Host Transport Sync LED -->
-                    <div class="flex items-center gap-1">
-                        <span class="host-sync-led" id="host-sync-led" title="Sync looper to host transport"></span>
-                        <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">HOST</span>
-                    </div>
-                    <div class="w-[1px] h-3 bg-fd-border"></div>
-                    <div class="flex items-center gap-1">
-                        <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">BPM</span>
-                        <span class="font-mono text-sm font-bold text-fd-accent" id="bpm-display"
-                              style="text-shadow: 0 0 10px rgba(255, 107, 53, 0.3);">120.0</span>
-                    </div>
-                    <div class="w-[1px] h-3 bg-fd-border"></div>
-                    <button class="toggle-btn-small" id="tempo-sync-toggle">
-                        <span class="toggle-label font-display">SYNC</span>
-                    </button>
-                    <select class="note-select" id="note-value-select">
-                        <option value="0">1/4</option>
-                        <option value="1" selected>1/8</option>
-                        <option value="2">1/8T</option>
-                        <option value="3">1/16</option>
-                        <option value="4">1/16T</option>
-                        <option value="5">1/32</option>
-                    </select>
-                </div>
-                <!-- Spacer -->
-                <div class="w-12"></div>
+        <!-- Diagnostic Panel (floating, attached to main) -->
+        <div id="diag-panel" class="hidden absolute bottom-16 left-4 bg-fd-card border border-fd-border rounded p-2 text-[9px] font-mono z-50 shadow-lg" style="min-width: 280px;">
+            <div class="flex justify-between items-center mb-2">
+                <span class="font-bold text-fd-accent">AUDIO DIAGNOSTICS</span>
+                <button class="text-fd-text-dim hover:text-white" id="diag-reset">Reset</button>
             </div>
-        </footer>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-fd-text">
+                <span>Pre-Clip Peak L:</span><span id="diag-preclip-l" class="text-right">0.00</span>
+                <span>Pre-Clip Peak R:</span><span id="diag-preclip-r" class="text-right">0.00</span>
+                <span>Loop Output L:</span><span id="diag-loop-l" class="text-right">0.00</span>
+                <span>Loop Output R:</span><span id="diag-loop-r" class="text-right">0.00</span>
+                <span class="text-yellow-400">Clip Events:</span><span id="diag-clips" class="text-right text-yellow-400">0</span>
+            </div>
+            <div class="mt-2 pt-2 border-t border-fd-border">
+                <span class="text-fd-text-dim">Layer Clips:</span>
+                <div class="flex gap-1 mt-1" id="diag-layer-clips">
+                    <span class="px-1 bg-fd-surface rounded">1:0</span>
+                    <span class="px-1 bg-fd-surface rounded">2:0</span>
+                    <span class="px-1 bg-fd-surface rounded">3:0</span>
+                    <span class="px-1 bg-fd-surface rounded">4:0</span>
+                    <span class="px-1 bg-fd-surface rounded">5:0</span>
+                    <span class="px-1 bg-fd-surface rounded">6:0</span>
+                    <span class="px-1 bg-fd-surface rounded">7:0</span>
+                    <span class="px-1 bg-fd-surface rounded">8:0</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Crossfade Settings Panel (positioned relative to button) -->

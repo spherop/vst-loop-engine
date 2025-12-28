@@ -385,6 +385,77 @@ html, body {
     color: #888;
 }
 
+/* Mini transport buttons (UNDO/REDO stacked) */
+.transport-btn-mini {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 20px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.transport-btn-mini .mini-icon {
+    font-size: 12px;
+    color: #555;
+    transition: all 0.12s ease;
+}
+
+.transport-btn-mini:hover {
+    border-color: #555;
+    background: linear-gradient(180deg, #1f1f1f 0%, #141414 100%);
+}
+
+.transport-btn-mini:hover .mini-icon {
+    color: var(--looper-accent);
+}
+
+.transport-btn-mini:active {
+    transform: scale(0.95);
+}
+
+/* Loop control button (for REV in loop controls section) */
+.loop-control-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.loop-control-icon {
+    font-size: 18px;
+    color: #555;
+    transition: all 0.12s ease;
+}
+
+.loop-control-btn:hover {
+    border-color: var(--looper-accent);
+}
+
+.loop-control-btn:hover .loop-control-icon {
+    color: var(--looper-accent);
+}
+
+.loop-control-btn.active {
+    background: linear-gradient(180deg, #1a2a1a 0%, #0f1a0f 100%);
+    border-color: var(--looper-accent);
+}
+
+.loop-control-btn.active .loop-control-icon {
+    color: var(--looper-accent);
+    text-shadow: 0 0 6px var(--looper-accent-glow);
+}
+
 /* Record Button */
 .transport-btn.rec:hover {
     border-color: #ef5350;
@@ -401,7 +472,7 @@ html, body {
 }
 
 .transport-btn.rec.active .transport-icon {
-    color: #ff7875;
+    color: #ef5350;  /* Match border color */
     animation: pulse-rec 1s ease-in-out infinite;
 }
 
@@ -416,29 +487,26 @@ html, body {
 
 /* DUB+ Mode - Replace circle with circled plus symbol */
 .transport-btn.dub-plus-mode .transport-icon {
-    /* Hide the original circle character */
+    /* Hide the original circle character but keep size fixed */
     font-size: 0;
+    line-height: 18px;
+    min-height: 18px;
 }
 
-/* Show circled plus via ::before pseudo-element */
+/* Show circled plus via ::before pseudo-element - match original icon size exactly */
 .transport-btn.dub-plus-mode .transport-icon::before {
     content: '⊕';
-    font-size: 20px;
+    font-size: 18px;
     display: block;
+    line-height: 18px;
+    height: 18px;
 }
 
-/* Pulsing glow for dub-plus-mode button */
-.transport-btn.dub-plus-mode {
-    animation: glow-plus 1.2s ease-in-out infinite;
-}
+/* No animation for dub-plus-mode - removed glow-plus keyframes */
 
-@keyframes glow-plus {
-    0%, 100% {
-        filter: brightness(1);
-    }
-    50% {
-        filter: brightness(1.15);
-    }
+/* DUB+ Mode when actively recording - icon matches border color */
+.transport-btn.rec.active.dub-plus-mode .transport-icon::before {
+    color: #ef5350;  /* Match border color */
 }
 
 /* DUB Ready Mode - Not recording, gray and dim */
@@ -457,7 +525,7 @@ html, body {
     animation: none;
 }
 
-/* Circled plus in dub-ready + dub-plus-mode (gray, pulsing) */
+/* Circled plus in dub-ready + dub-plus-mode (gray, no animation) */
 .transport-btn.rec.dub-ready.dub-plus-mode .transport-icon {
     /* Reset the stroke for the circled plus */
     -webkit-text-stroke: 0;
@@ -469,12 +537,8 @@ html, body {
     font-size: 18px;
     color: #666;
     display: block;
-    animation: pulse-plus-dim 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse-plus-dim {
-    0%, 100% { opacity: 0.6; }
-    50% { opacity: 1; }
+    line-height: 18px;
+    height: 18px;
 }
 
 .transport-btn.rec.dub-ready .transport-label {
@@ -1823,6 +1887,46 @@ html, body {
     animation: shuffle-spin 0.3s ease-out;
 }
 
+/* Texture Freeze button */
+.texture-freeze-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid #333;
+    background: #1a1a1a;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.texture-freeze-btn:hover {
+    border-color: var(--degrade-accent);
+    background: #222;
+}
+
+.texture-freeze-btn.active {
+    background: var(--degrade-accent);
+    border-color: var(--degrade-accent);
+    box-shadow: 0 0 10px var(--degrade-accent-glow);
+}
+
+.texture-freeze-btn .freeze-icon {
+    font-size: 14px;
+    color: #666;
+    transition: all 0.15s ease;
+}
+
+.texture-freeze-btn:hover .freeze-icon {
+    color: var(--degrade-accent);
+}
+
+.texture-freeze-btn.active .freeze-icon {
+    color: #0a0a0a;
+    text-shadow: none;
+}
+
 .degrade-section {
     transition: border-color 0.2s ease;
 }
@@ -2471,4 +2575,248 @@ html, body {
     font-weight: 600;
     color: var(--looper-accent);
     text-align: right;
+}
+
+/* ============================================
+   MICRO LOOPER SECTION (MOOD-inspired)
+   ============================================ */
+
+/* Micro looper transport buttons */
+.micro-transport-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid #333;
+    background: #1a1a1a;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.micro-transport-btn:hover {
+    border-color: var(--degrade-accent);
+    background: #222;
+}
+
+.micro-transport-btn.active {
+    background: var(--degrade-accent);
+    border-color: var(--degrade-accent);
+    box-shadow: 0 0 8px var(--degrade-accent-glow);
+}
+
+.micro-icon {
+    font-size: 10px;
+    color: #666;
+    transition: all 0.15s ease;
+    line-height: 1;
+}
+
+.micro-transport-btn:hover .micro-icon {
+    color: var(--degrade-accent);
+}
+
+.micro-transport-btn.active .micro-icon {
+    color: #0a0a0a;
+}
+
+/* Play button specific states */
+#micro-play-btn.active {
+    background: #4caf50;
+    border-color: #4caf50;
+    box-shadow: 0 0 8px rgba(76, 175, 80, 0.4);
+}
+
+#micro-play-btn.active .micro-icon {
+    color: #0a0a0a;
+}
+
+#micro-play-btn:hover .micro-icon {
+    color: #4caf50;
+}
+
+/* Overdub button specific states */
+#micro-overdub-btn.active {
+    background: #ef5350;
+    border-color: #ef5350;
+    box-shadow: 0 0 8px rgba(239, 83, 80, 0.4);
+    animation: micro-pulse 1s ease-in-out infinite;
+}
+
+@keyframes micro-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+#micro-overdub-btn.active .micro-icon {
+    color: #fff;
+}
+
+#micro-overdub-btn:hover .micro-icon {
+    color: #ef5350;
+}
+
+/* Freeze button specific */
+#micro-freeze-btn.active {
+    background: #29b6f6;
+    border-color: #29b6f6;
+    box-shadow: 0 0 8px rgba(41, 182, 246, 0.4);
+}
+
+#micro-freeze-btn.active .micro-icon {
+    color: #0a0a0a;
+}
+
+#micro-freeze-btn:hover .micro-icon {
+    color: #29b6f6;
+}
+
+/* Clear button hover */
+#micro-clear-btn:hover {
+    border-color: #f44336;
+}
+
+#micro-clear-btn:hover .micro-icon {
+    color: #f44336;
+}
+
+/* Mode selector buttons */
+.micro-mode-btn {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #555;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-transform: uppercase;
+}
+
+.micro-mode-btn:hover {
+    border-color: var(--degrade-accent);
+    color: var(--degrade-accent);
+}
+
+.micro-mode-btn.active {
+    background: linear-gradient(180deg, var(--degrade-accent) 0%, var(--degrade-accent-dim) 100%);
+    border-color: var(--degrade-accent);
+    color: #0a0a0a;
+    box-shadow: 0 0 8px var(--degrade-accent-glow);
+}
+
+/* Reverse toggle button */
+.micro-reverse-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    background: transparent;
+    border: 1px solid #333;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.micro-reverse-btn:hover {
+    border-color: var(--degrade-accent);
+}
+
+.micro-reverse-btn.active {
+    background: rgba(102, 187, 106, 0.15);
+    border-color: var(--degrade-accent);
+}
+
+.micro-reverse-btn .reverse-icon {
+    font-size: 12px;
+    color: #555;
+    transition: all 0.15s ease;
+}
+
+.micro-reverse-btn .reverse-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #555;
+    transition: all 0.15s ease;
+}
+
+.micro-reverse-btn:hover .reverse-icon,
+.micro-reverse-btn:hover .reverse-label {
+    color: var(--degrade-accent);
+}
+
+.micro-reverse-btn.active .reverse-icon,
+.micro-reverse-btn.active .reverse-label {
+    color: var(--degrade-accent);
+    text-shadow: 0 0 6px var(--degrade-accent-glow);
+}
+
+/* ============================================
+   MICRO LOOPER WAVEFORM VISUALIZATION
+   ============================================ */
+
+.micro-waveform-container {
+    position: relative;
+    width: 100%;
+    height: 48px;
+    background: linear-gradient(180deg, #0a0a0a 0%, #080808 100%);
+    border: 1px solid #2a2a2a;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.micro-waveform-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.micro-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--degrade-accent);
+    box-shadow: 0 0 6px var(--degrade-accent-glow);
+    left: 0;
+    pointer-events: none;
+    transition: left 0.03s linear;
+    opacity: 0;
+}
+
+.micro-playhead.visible {
+    opacity: 1;
+}
+
+.micro-buffer-fill {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0%;
+    background: rgba(102, 187, 106, 0.1);
+    border-right: 1px solid rgba(102, 187, 106, 0.3);
+    pointer-events: none;
+    transition: width 0.05s linear;
+}
+
+/* Mode description text */
+.micro-mode-desc {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: #555;
+    text-align: center;
+    min-height: 12px;
+    transition: color 0.15s ease;
+}
+
+.micro-mode-desc.active {
+    color: var(--degrade-accent);
 }
