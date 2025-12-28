@@ -1809,6 +1809,14 @@ class LooperController {
 
             // Also reset layer content states
             this.layerContentStates = [false, false, false, false, false, false, false, false];
+
+            // CRITICAL: Reset waveform smoothing buffers to prevent memory accumulation
+            // These buffers grow with each recording and must be cleared on reset
+            this.smoothedLayerWaveforms = null;
+            this.lastWaveformData = null;
+            this.lastLayerWaveforms = null;
+            this.lastLayerMutes = null;
+            this._loggedLayerColors = false;
         } catch (e) {
             console.error('Error clearing:', e);
         }

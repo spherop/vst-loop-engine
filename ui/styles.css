@@ -414,23 +414,17 @@ html, body {
     50% { opacity: 0.5; }
 }
 
-/* DUB+ Mode - Plus sign integrated into record icon */
+/* DUB+ Mode - Replace circle with circled plus symbol */
 .transport-btn.dub-plus-mode .transport-icon {
-    position: relative;
+    /* Hide the original circle character */
+    font-size: 0;
 }
 
-/* The plus sign overlaid on the record circle */
-.transport-btn.dub-plus-mode .transport-icon::after {
-    content: '+';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -55%);  /* Slight upward adjustment for optical centering */
-    font-size: 12px;
-    font-weight: 900;
-    color: #000;
-    text-shadow: none;
-    line-height: 1;
+/* Show circled plus via ::before pseudo-element */
+.transport-btn.dub-plus-mode .transport-icon::before {
+    content: '⊕';
+    font-size: 20px;
+    display: block;
 }
 
 /* Pulsing glow for dub-plus-mode button */
@@ -461,21 +455,20 @@ html, body {
     -webkit-text-stroke: 1.5px #666;
     text-stroke: 1.5px #666;
     animation: none;
-    position: relative;
 }
 
-/* Plus sign in hollow circle for dub-ready + dub-plus-mode */
-.transport-btn.rec.dub-ready.dub-plus-mode .transport-icon::after {
-    content: '+';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -55%);  /* Slight upward adjustment for optical centering */
-    font-size: 10px;
-    font-weight: 900;
+/* Circled plus in dub-ready + dub-plus-mode (gray, pulsing) */
+.transport-btn.rec.dub-ready.dub-plus-mode .transport-icon {
+    /* Reset the stroke for the circled plus */
+    -webkit-text-stroke: 0;
+    text-stroke: 0;
+}
+
+.transport-btn.rec.dub-ready.dub-plus-mode .transport-icon::before {
+    content: '⊕';
+    font-size: 18px;
     color: #666;
-    text-shadow: none;
-    line-height: 1;
+    display: block;
     animation: pulse-plus-dim 1.5s ease-in-out infinite;
 }
 
@@ -498,12 +491,12 @@ html, body {
     -webkit-text-stroke-color: #ef5350;
 }
 
-.transport-btn.rec.dub-ready:hover .transport-label {
-    color: #ef5350 !important;
+.transport-btn.rec.dub-ready.dub-plus-mode:hover .transport-icon::before {
+    color: #ef5350;
 }
 
-.transport-btn.rec.dub-ready.dub-plus-mode:hover .transport-icon::after {
-    color: #ef5350;
+.transport-btn.rec.dub-ready:hover .transport-label {
+    color: #ef5350 !important;
 }
 
 /* Play Button */

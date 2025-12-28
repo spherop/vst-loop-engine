@@ -233,6 +233,10 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   })
                   .withNativeFunction("getLoopState", [this](const juce::Array<juce::var>&, auto complete)
                   {
+                      static int64_t callCount = 0;
+                      static double totalWaveformTime = 0.0;
+                      auto startTime = juce::Time::getHighResolutionTicks();
+
                       const auto& loopEngine = processorRef.getLoopEngine();
 
                       juce::DynamicObject::Ptr result = new juce::DynamicObject();
@@ -245,6 +249,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("isReversed", loopEngine.getIsReversed());
 
                       // Get combined waveform data (100 points for visualization)
+                      auto waveformStartTime = juce::Time::getHighResolutionTicks();
                       auto waveformData = loopEngine.getWaveformData(100);
                       juce::Array<juce::var> waveformArray;
                       for (float val : waveformData)
@@ -262,6 +267,19 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           layerWaveformArrays.add(layerArray);
                       }
                       result->setProperty("layerWaveforms", layerWaveformArrays);
+
+                      auto waveformEndTime = juce::Time::getHighResolutionTicks();
+                      double waveformMs = juce::Time::highResolutionTicksToSeconds(waveformEndTime - waveformStartTime) * 1000.0;
+                      totalWaveformTime += waveformMs;
+                      callCount++;
+
+                      // Log every 100 calls (5 seconds at 50ms polling)
+                      if (callCount % 100 == 0)
+                      {
+                          double avgMs = totalWaveformTime / 100.0;
+                          DBG("getLoopState: waveform gen avg=" + juce::String(avgMs, 2) + "ms, layers=" + juce::String(loopEngine.getHighestLayer() + 1) + ", loopLen=" + juce::String(loopEngine.getLoopLengthSeconds(), 1) + "s");
+                          totalWaveformTime = 0.0;
+                      }
 
                       // Get mute states for each layer
                       auto muteStates = loopEngine.getLayerMuteStates();

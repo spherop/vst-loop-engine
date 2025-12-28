@@ -91,6 +91,12 @@ public:
         blockPitchShifter.reset();
         phaseVocoder.reset();
         initGrains();
+
+        // Invalidate waveform cache
+        waveformCacheDirty = true;
+        cachedWaveform.clear();
+        cachedPeakLevel = 0.0f;
+        lastCachedWriteHead = 0;
     }
 
     // Copy content from another LoopBuffer (for layer shuffling)
@@ -121,6 +127,9 @@ public:
         blockPitchShifter.reset();
         phaseVocoder.reset();
         initGrains();
+
+        // Invalidate waveform cache since content changed
+        waveformCacheDirty = true;
 
         DBG("LoopBuffer::copyFrom() - Copied " + juce::String(loopLength) + " samples");
     }
@@ -293,6 +302,9 @@ public:
             // Apply crossfade at loop boundary for seamless looping
             // Pass true for initial recording (needs fade-in at start)
             applyCrossfade(true);
+
+            // Mark waveform cache as dirty to regenerate with final content
+            waveformCacheDirty = true;
         }
     }
 
@@ -362,6 +374,7 @@ public:
             isOverdubFadingOut = false;
             overdubFadeOutCounter = 0;
             state.store(State::Playing);
+            waveformCacheDirty = true;  // Regenerate waveform with new overdub content
             DBG("stopOverdubImmediate() - immediate switch to Playing");
         }
     }
@@ -501,13 +514,9 @@ public:
         if (loopLength <= 0)
             return 0.0f;
 
-        float maxVal = 0.0f;
-        for (int i = 0; i < loopLength; ++i)
-        {
-            float val = std::abs(bufferL[i]) + std::abs(bufferR[i]);
-            maxVal = std::max(maxVal, val * 0.5f);
-        }
-        return maxVal;
+        // Use cached peak level if available, update cache if dirty
+        updateWaveformCacheIfNeeded();
+        return cachedPeakLevel;
     }
 
     // Process audio
@@ -756,58 +765,22 @@ public:
     // ALWAYS applies current fade multiplier so waveform visually reflects faded audio
     std::vector<float> getWaveformData(int numPoints) const
     {
-        std::vector<float> waveform(numPoints, 0.0f);
+        // During playback, use cached waveform for efficiency
+        // During recording/overdubbing, update cache more frequently
+        updateWaveformCacheIfNeeded();
 
-        // Determine the length to visualize
-        int visualLength = loopLength;
-        if (state.load() == State::Recording)
-        {
-            // During recording, show what we've recorded so far
-            // Use target length if set, otherwise use current writeHead position
-            if (targetLoopLength > 0)
-            {
-                visualLength = targetLoopLength;  // Show full target length
-            }
-            else
-            {
-                visualLength = writeHead;  // Show recorded portion
-            }
-        }
-
-        if (visualLength <= 0)
-            return waveform;
-
-        const int samplesPerPoint = visualLength / numPoints;
-        if (samplesPerPoint <= 0)
-            return waveform;
-
-        // For recording with target length, only show samples up to writeHead
-        const int maxSampleToShow = (state.load() == State::Recording) ? writeHead : visualLength;
-
-        // ALWAYS apply fade multiplier to waveform display so it visually reflects faded audio
-        // This ensures the waveform shrinks/grows with the audio level even after overdubbing stops
+        // Apply current fade multiplier to cached waveform
         const float fadeMultiplier = currentFadeMultiplier.load();
+        std::vector<float> result(numPoints, 0.0f);
 
-        for (int i = 0; i < numPoints; ++i)
+        // Copy cached waveform with fade applied
+        size_t copyLen = std::min(static_cast<size_t>(numPoints), cachedWaveform.size());
+        for (size_t i = 0; i < copyLen; ++i)
         {
-            float maxVal = 0.0f;
-            const int startSample = i * samplesPerPoint;
-            const int endSample = std::min(startSample + samplesPerPoint, maxSampleToShow);
-
-            // Only process if we have samples in this range
-            if (startSample < maxSampleToShow)
-            {
-                for (int j = startSample; j < endSample; ++j)
-                {
-                    float val = std::abs(bufferL[j]) + std::abs(bufferR[j]);
-                    maxVal = std::max(maxVal, val * 0.5f);
-                }
-            }
-            // Apply fade multiplier to visual representation
-            waveform[i] = std::min(maxVal * fadeMultiplier, 1.0f);
+            result[i] = std::min(cachedWaveform[i] * fadeMultiplier, 1.0f);
         }
 
-        return waveform;
+        return result;
     }
 
     // Get recording progress (0-1) for UI
@@ -874,8 +847,93 @@ private:
     std::vector<float> pitchOutputL;
     std::vector<float> pitchOutputR;
 
+    // Waveform cache for efficient UI updates
+    // Only regenerated when buffer content changes (during recording/overdubbing)
+    static constexpr int WAVEFORM_CACHE_POINTS = 100;
+    mutable std::vector<float> cachedWaveform;
+    mutable float cachedPeakLevel = 0.0f;
+    mutable bool waveformCacheDirty = true;
+    mutable int lastCachedWriteHead = 0;  // Track writeHead changes during recording
+
     // Legacy sample-by-sample phase vocoder (kept for compatibility)
     StereoPhaseVocoder phaseVocoder;
+
+    // Update waveform cache if needed (called from getWaveformData and getBufferPeakLevel)
+    void updateWaveformCacheIfNeeded() const
+    {
+        bool needsUpdate = false;
+        State currentState = state.load();
+
+        // During recording/overdubbing, ALWAYS regenerate for live animated waveform
+        // This is polled at ~50ms intervals from the UI, giving smooth animation
+        // The waveform is only 100 points, so this is efficient enough
+        if (currentState == State::Recording || currentState == State::Overdubbing)
+        {
+            // Always update during recording - this is the "beautiful animated rendering"
+            needsUpdate = true;
+            lastCachedWriteHead = writeHead;
+        }
+        else if (waveformCacheDirty || cachedWaveform.empty())
+        {
+            // During playback, only update if cache is dirty or empty
+            // Cache gets dirty at loop boundaries when fade multiplier changes
+            needsUpdate = true;
+        }
+
+        if (!needsUpdate)
+            return;
+
+        // Determine visual length
+        int visualLength = loopLength;
+        if (currentState == State::Recording)
+        {
+            visualLength = (targetLoopLength > 0) ? targetLoopLength : writeHead;
+        }
+
+        if (visualLength <= 0)
+        {
+            cachedWaveform.clear();
+            cachedWaveform.resize(WAVEFORM_CACHE_POINTS, 0.0f);
+            cachedPeakLevel = 0.0f;
+            waveformCacheDirty = false;
+            return;
+        }
+
+        // Regenerate waveform cache (without fade - fade applied at read time)
+        cachedWaveform.clear();
+        cachedWaveform.resize(WAVEFORM_CACHE_POINTS, 0.0f);
+
+        const int samplesPerPoint = visualLength / WAVEFORM_CACHE_POINTS;
+        if (samplesPerPoint <= 0)
+        {
+            waveformCacheDirty = false;
+            return;
+        }
+
+        const int maxSampleToShow = (currentState == State::Recording) ? writeHead : visualLength;
+        float peakLevel = 0.0f;
+
+        for (int i = 0; i < WAVEFORM_CACHE_POINTS; ++i)
+        {
+            float maxVal = 0.0f;
+            const int startSample = i * samplesPerPoint;
+            const int endSample = std::min(startSample + samplesPerPoint, maxSampleToShow);
+
+            if (startSample < maxSampleToShow)
+            {
+                for (int j = startSample; j < endSample; ++j)
+                {
+                    float val = std::abs(bufferL[j]) + std::abs(bufferR[j]);
+                    maxVal = std::max(maxVal, val * 0.5f);
+                }
+            }
+            cachedWaveform[i] = maxVal;
+            peakLevel = std::max(peakLevel, maxVal);
+        }
+
+        cachedPeakLevel = peakLevel;
+        waveformCacheDirty = false;
+    }
 
     void initGrains()
     {
@@ -1190,6 +1248,7 @@ private:
                 overdubGain = 0.0f;
                 isOverdubFadingOut = false;
                 state.store(State::Playing);
+                waveformCacheDirty = true;  // Regenerate waveform with new overdub content
                 DBG("Overdub fade-out complete, now Playing");
             }
         }
