@@ -1205,6 +1205,11 @@ class LooperController {
                 }
                 // Update fill gradient
                 this.volumeSlider.style.setProperty('--volume-fill', `${e.target.value}%`);
+                // Update the layer button's volume CSS variable for dimming effect
+                const layerBtn = this.layerBtns.find(btn => parseInt(btn.dataset.layer) === this.selectedLayer);
+                if (layerBtn) {
+                    layerBtn.style.setProperty('--layer-volume', vol);
+                }
                 try {
                     await this.setLayerVolumeFn(this.selectedLayer, vol);
                 } catch (err) {
@@ -1269,6 +1274,11 @@ class LooperController {
 
     async sendPanToBackend() {
         const panNorm = this.panKnobValue / 100;  // -1 to 1
+        // Update the layer button's pan CSS variable for gradient effect
+        const layerBtn = this.layerBtns.find(btn => parseInt(btn.dataset.layer) === this.selectedLayer);
+        if (layerBtn) {
+            layerBtn.style.setProperty('--layer-pan', panNorm);
+        }
         try {
             await this.setLayerPanFn(this.selectedLayer, panNorm);
         } catch (err) {
@@ -1933,7 +1943,7 @@ class LooperController {
         this.currentLayer = currentLayer;
         this.highestLayer = highestLayer;
 
-        this.layerBtns.forEach(btn => {
+        this.layerBtns.forEach(async btn => {
             const layer = parseInt(btn.dataset.layer);
             const idx = layer - 1;  // 0-indexed
             btn.classList.remove('active', 'has-content');
@@ -1956,6 +1966,18 @@ class LooperController {
                 btn.style.background = layerColor;
                 btn.style.borderColor = layerColor;
                 btn.style.color = '#0a0a0a';
+
+                // Fetch and set volume/pan CSS variables for visual feedback
+                try {
+                    const vol = await this.getLayerVolumeFn(layer);
+                    const pan = await this.getLayerPanFn(layer);
+                    btn.style.setProperty('--layer-volume', vol);
+                    btn.style.setProperty('--layer-pan', pan);
+                } catch (e) {
+                    // Default to full volume, center pan if fetch fails
+                    btn.style.setProperty('--layer-volume', '1');
+                    btn.style.setProperty('--layer-pan', '0');
+                }
 
                 // Add glow if this is also the active layer
                 if (layer === currentLayer) {
@@ -3812,12 +3834,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Pitch value display element (combined % + chromatic)
     const pitchValueEl = document.getElementById('loopPitch-value');
 
-    // Helper to update pitch display (combined format: "50% 0st")
+    // Helper to update pitch display (combined format: "100% 0st")
+    // Shows pitch ratio as percentage (100% = no shift, 200% = octave up, 50% = octave down)
     const updatePitchDisplay = (normalized) => {
         const semitones = normalized * 24 - 12;
         const roundedSt = Math.round(semitones);
         const sign = roundedSt >= 0 ? '+' : '';
-        const pct = Math.round(normalized * 100);
+        // Calculate pitch ratio: 2^(semitones/12) gives the frequency ratio
+        const pitchRatio = Math.pow(2, semitones / 12);
+        const pct = Math.round(pitchRatio * 100);
         if (pitchValueEl) {
             pitchValueEl.innerHTML = `${pct}% <span class="text-fd-text-dim">${sign}${roundedSt}st</span>`;
         }
