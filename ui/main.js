@@ -2074,6 +2074,7 @@ let loopFadeKnob = null;
 // Host Transport Sync Controller
 class HostSyncController {
     constructor() {
+        this.btn = document.getElementById('host-sync-btn');
         this.led = document.getElementById('host-sync-led');
         this.isEnabled = false;
         this.isHostPlaying = false;
@@ -2091,11 +2092,11 @@ class HostSyncController {
             if (state) {
                 if (typeof state.hostTransportSync !== 'undefined') {
                     this.isEnabled = state.hostTransportSync;
-                    this.updateLed();
+                    this.updateUI();
                 }
                 if (typeof state.hostPlaying !== 'undefined') {
                     this.isHostPlaying = state.hostPlaying;
-                    this.updateLed();
+                    this.updateUI();
                 }
             }
         } catch (e) {
@@ -2104,14 +2105,15 @@ class HostSyncController {
     }
 
     setupEvents() {
-        if (this.led) {
-            this.led.addEventListener('click', () => this.toggle());
+        // Click on button toggles
+        if (this.btn) {
+            this.btn.addEventListener('click', () => this.toggle());
         }
     }
 
     async toggle() {
         this.isEnabled = !this.isEnabled;
-        this.updateLed();
+        this.updateUI();
 
         try {
             await this.setHostSyncFn(this.isEnabled);
@@ -2119,14 +2121,15 @@ class HostSyncController {
         } catch (e) {
             console.error('Error toggling host sync:', e);
             this.isEnabled = !this.isEnabled;
-            this.updateLed();
+            this.updateUI();
         }
     }
 
-    updateLed() {
-        if (this.led) {
-            this.led.classList.toggle('active', this.isEnabled);
-            this.led.classList.toggle('playing', this.isEnabled && this.isHostPlaying);
+    updateUI() {
+        // Update button state
+        if (this.btn) {
+            this.btn.classList.toggle('active', this.isEnabled);
+            this.btn.classList.toggle('playing', this.isEnabled && this.isHostPlaying);
         }
     }
 
@@ -2139,7 +2142,7 @@ class HostSyncController {
                 if (state && typeof state.hostPlaying !== 'undefined') {
                     if (state.hostPlaying !== this.isHostPlaying) {
                         this.isHostPlaying = state.hostPlaying;
-                        this.updateLed();
+                        this.updateUI();
                     }
                 }
             } catch (e) {
@@ -3203,6 +3206,13 @@ class CrossfadeSettingsController {
             }
         });
 
+        // Reposition panel on window resize
+        window.addEventListener('resize', () => {
+            if (this.panel && !this.panel.classList.contains('hidden')) {
+                this.repositionPanel();
+            }
+        });
+
         // LED toggle for enable/disable
         if (this.enableToggle) {
             this.enableToggle.addEventListener('click', () => this.toggleEnabled());
@@ -3238,39 +3248,42 @@ class CrossfadeSettingsController {
         }
     }
 
+    repositionPanel() {
+        if (!this.panel || !this.openBtn) return;
+
+        const btnRect = this.openBtn.getBoundingClientRect();
+        const panelRect = this.panel.getBoundingClientRect();
+        const viewportHeight = window.innerHeight;
+        const viewportWidth = window.innerWidth;
+
+        // Default position: right of button, vertically centered above it
+        let left = btnRect.right + 8;
+        let top = btnRect.top - panelRect.height + 30;  // Anchor near bottom of panel to button
+
+        // Adjust if panel goes off right edge
+        if (left + panelRect.width > viewportWidth) {
+            left = btnRect.left - panelRect.width - 8;  // Show on left instead
+        }
+
+        // Adjust if panel goes off bottom
+        if (top + panelRect.height > viewportHeight - 10) {
+            top = viewportHeight - panelRect.height - 10;
+        }
+
+        // Adjust if panel goes off top
+        if (top < 10) {
+            top = 10;
+        }
+
+        this.panel.style.left = `${left}px`;
+        this.panel.style.top = `${top}px`;
+    }
+
     open() {
         if (this.panel && this.openBtn) {
             // First unhide to get actual dimensions
             this.panel.classList.remove('hidden');
-
-            // Position panel to the right of the button
-            const btnRect = this.openBtn.getBoundingClientRect();
-            const panelRect = this.panel.getBoundingClientRect();
-            const viewportHeight = window.innerHeight;
-            const viewportWidth = window.innerWidth;
-
-            // Default position: right of button, vertically centered above it
-            let left = btnRect.right + 8;
-            let top = btnRect.top - panelRect.height + 30;  // Anchor near bottom of panel to button
-
-            // Adjust if panel goes off right edge
-            if (left + panelRect.width > viewportWidth) {
-                left = btnRect.left - panelRect.width - 8;  // Show on left instead
-            }
-
-            // Adjust if panel goes off bottom
-            if (top + panelRect.height > viewportHeight - 10) {
-                top = viewportHeight - panelRect.height - 10;
-            }
-
-            // Adjust if panel goes off top
-            if (top < 10) {
-                top = 10;
-            }
-
-            this.panel.style.left = `${left}px`;
-            this.panel.style.top = `${top}px`;
-
+            this.repositionPanel();
             this.openBtn.classList.add('active');
             this.startVisualizerAnimation();
         }
@@ -3292,6 +3305,7 @@ class CrossfadeSettingsController {
     }
 
     updateEnabledUI() {
+        // Update the toggle button in the panel
         if (this.enableToggle) {
             const label = this.enableToggle.querySelector('.led-label');
             if (this.enabled) {
@@ -3301,6 +3315,10 @@ class CrossfadeSettingsController {
                 this.enableToggle.classList.remove('active');
                 if (label) label.textContent = 'OFF';
             }
+        }
+        // Also update the main crossfade icon to illuminate when enabled
+        if (this.openBtn) {
+            this.openBtn.classList.toggle('enabled', this.enabled);
         }
     }
 

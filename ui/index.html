@@ -188,7 +188,7 @@
                                     <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">LEN</span>
                                     <div class="flex flex-col gap-0.5">
                                         <div class="flex items-center gap-1">
-                                            <select class="bars-select" id="bars-select" title="Bars (0 = free mode)">
+                                            <select class="len-select" id="bars-select" title="Bars (0 = free mode)">
                                                 <option value="0">FREE</option>
                                                 <option value="1">1</option>
                                                 <option value="2">2</option>
@@ -199,7 +199,7 @@
                                             <span class="font-display text-[6px] text-fd-text-dim">BAR</span>
                                         </div>
                                         <div class="flex items-center gap-1">
-                                            <select class="beats-select" id="beats-select" title="Additional beats">
+                                            <select class="len-select" id="beats-select" title="Additional beats">
                                                 <option value="0">+0</option>
                                                 <option value="1">+1</option>
                                                 <option value="2">+2</option>
@@ -213,33 +213,40 @@
                                 <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
                                 <!-- Tempo Sync Controls -->
                                 <div class="flex items-center gap-2">
-                                    <!-- Host Transport Sync LED -->
-                                    <div class="flex items-center gap-1">
-                                        <span class="host-sync-led" id="host-sync-led" title="Sync looper to host transport"></span>
-                                        <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">HOST</span>
-                                    </div>
+                                    <!-- BPM Display -->
                                     <div class="flex items-center gap-1">
                                         <span class="font-mono text-sm font-bold text-fd-accent" id="bpm-display"
                                               style="text-shadow: 0 0 10px rgba(255, 107, 53, 0.3);">120</span>
                                         <span class="font-display text-[6px] text-fd-text-dim">BPM</span>
                                     </div>
-                                    <button class="toggle-btn-small" id="tempo-sync-toggle">
-                                        <span class="toggle-label font-display">SYNC</span>
+                                    <!-- HOST toggle with integrated LED -->
+                                    <button class="host-sync-btn" id="host-sync-btn" title="Sync looper to host transport">
+                                        <span class="host-sync-led-inline" id="host-sync-led"></span>
+                                        <span class="host-label">HOST</span>
                                     </button>
-                                    <select class="note-select" id="note-value-select">
-                                        <option value="0">1/4</option>
-                                        <option value="1" selected>1/8</option>
-                                        <option value="2">1/8T</option>
-                                        <option value="3">1/16</option>
-                                        <option value="4">1/16T</option>
-                                        <option value="5">1/32</option>
-                                    </select>
+                                    <!-- SYNC and division stacked vertically -->
+                                    <div class="flex flex-col gap-0.5">
+                                        <button class="toggle-btn-mini" id="tempo-sync-toggle">
+                                            <span class="toggle-label-mini">SYNC</span>
+                                        </button>
+                                        <select class="note-select-mini" id="note-value-select">
+                                            <option value="0">1/4</option>
+                                            <option value="1" selected>1/8</option>
+                                            <option value="2">1/8T</option>
+                                            <option value="3">1/16</option>
+                                            <option value="4">1/16T</option>
+                                            <option value="5">1/32</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
-                            <!-- Right side: Loop time display (prominent) -->
+                            <!-- Right side: Loop time display (smaller) and crossfade button -->
                             <div class="flex items-center gap-2">
-                                <span id="loop-time-display" class="font-mono text-lg font-bold text-fd-accent"
-                                      style="text-shadow: 0 0 10px rgba(79, 195, 247, 0.3);">0.0s</span>
+                                <span id="loop-time-display" class="font-mono text-xs font-bold text-fd-text"
+                                      style="text-shadow: 0 0 6px rgba(79, 195, 247, 0.2);">0.0s</span>
+                                <button class="xfade-settings-btn" id="xfade-settings-btn" title="Loop crossfade settings">
+                                    <span class="xfade-icon">&#8734;</span>
+                                </button>
                             </div>
                         </div>
                     </section>
@@ -307,10 +314,6 @@
                                     </div>
                                     <span class="font-mono text-[8px] text-fd-text-dim w-[24px]" id="layer-pan-value">C</span>
                                 </div>
-                                <!-- Crossfade Settings Button -->
-                                <button class="xfade-settings-btn ml-2" id="xfade-settings-btn" title="Loop crossfade settings">
-                                    <span class="xfade-icon">&#8734;</span>
-                                </button>
                             </div>
                         </div>
                     </section>
@@ -320,7 +323,7 @@
                         <div class="flex justify-between items-end">
                             <!-- Version ticker (left) -->
                             <div class="flex items-center">
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v3.2.0</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v3.3.0</span>
                             </div>
 
                             <!-- Controls (center) -->
@@ -818,26 +821,6 @@
                 <label class="xfade-label">Depth (%)</label>
                 <input type="range" id="xfade-filter-depth" min="0" max="100" value="0" class="xfade-slider">
                 <span class="xfade-value" id="xfade-filter-depth-val">0</span>
-            </div>
-        </div>
-
-        <!-- Smear Fill (blends audio across boundary) -->
-        <div class="xfade-section">
-            <div class="xfade-section-label">SMEAR FILL</div>
-            <div class="xfade-param-row">
-                <label class="xfade-label">Amount (%)</label>
-                <input type="range" id="xfade-smear-amount" min="0" max="100" value="0" class="xfade-slider xfade-slider-smear">
-                <span class="xfade-value" id="xfade-smear-amount-val">0</span>
-            </div>
-            <div class="xfade-param-row">
-                <label class="xfade-label">Attack (%)</label>
-                <input type="range" id="xfade-smear-attack" min="1" max="50" value="10" class="xfade-slider xfade-slider-smear">
-                <span class="xfade-value" id="xfade-smear-attack-val">10</span>
-            </div>
-            <div class="xfade-param-row">
-                <label class="xfade-label">Length (%)</label>
-                <input type="range" id="xfade-smear-length" min="25" max="200" value="100" class="xfade-slider xfade-slider-smear">
-                <span class="xfade-value" id="xfade-smear-length-val">100</span>
             </div>
         </div>
 

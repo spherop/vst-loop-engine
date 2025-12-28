@@ -1381,6 +1381,187 @@ html, body {
     color: #ccc;
 }
 
+/* Unified LEN select dropdowns */
+.len-select {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    color: #4fc3f7;
+    background: linear-gradient(180deg, #161616 0%, #0a0a0a 100%);
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 3px 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    width: 52px;  /* Fixed width for both dropdowns */
+    text-align: center;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 10 10'%3E%3Cpath fill='%234fc3f7' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+}
+
+.len-select:hover {
+    border-color: var(--looper-accent);
+}
+
+.len-select:focus {
+    outline: none;
+    border-color: var(--looper-accent);
+    box-shadow: 0 0 8px var(--looper-accent-glow);
+}
+
+.len-select option {
+    background: #1a1a1a;
+    color: #ccc;
+}
+
+/* Mini toggle button (stacked SYNC) */
+.toggle-btn-mini {
+    padding: 3px 8px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    width: 38px;
+}
+
+.toggle-btn-mini:hover {
+    border-color: #ff6b35;
+}
+
+.toggle-btn-mini.active {
+    background: linear-gradient(180deg, #2a1a10 0%, #1a0f08 100%);
+    border-color: #ff6b35;
+}
+
+.toggle-label-mini {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #555;
+    text-transform: uppercase;
+}
+
+.toggle-btn-mini:hover .toggle-label-mini,
+.toggle-btn-mini.active .toggle-label-mini {
+    color: #ff6b35;
+}
+
+/* Mini note select (stacked with SYNC) */
+.note-select-mini {
+    padding: 3px 16px 3px 6px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 3px;
+    color: #888;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 10 10'%3E%3Cpath fill='%23ff6b35' d='M5 7L1 3h8z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 4px center;
+    width: 38px;
+}
+
+.note-select-mini:hover {
+    border-color: #ff6b35;
+    color: #ff6b35;
+}
+
+.note-select-mini:focus {
+    outline: none;
+    border-color: #ff6b35;
+}
+
+.note-select-mini option {
+    background: #1a1a1a;
+    color: #ccc;
+}
+
+/* HOST sync button with integrated LED */
+.host-sync-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.host-sync-btn:hover {
+    border-color: #4caf50;
+}
+
+.host-sync-btn.active {
+    background: linear-gradient(180deg, #1a2a1a 0%, #0d1a0d 100%);
+    border-color: #4caf50;
+}
+
+.host-sync-led-inline {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #2a2a2a;
+    border: 1px solid #333;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+    transition: all 0.15s ease;
+}
+
+.host-sync-btn.active .host-sync-led-inline {
+    background: radial-gradient(circle at 30% 30%, #7dcd80 0%, #4caf50 50%, #3d8b40 100%);
+    border-color: #4caf50;
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,0.3),
+        0 0 6px #4caf50,
+        0 0 10px rgba(76, 175, 80, 0.4);
+}
+
+/* Host is playing - pulsing LED */
+.host-sync-btn.active.playing .host-sync-led-inline {
+    animation: host-led-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes host-led-pulse {
+    0%, 100% {
+        box-shadow:
+            inset 0 1px 2px rgba(255,255,255,0.3),
+            0 0 6px #4caf50,
+            0 0 10px rgba(76, 175, 80, 0.4);
+    }
+    50% {
+        box-shadow:
+            inset 0 1px 2px rgba(255,255,255,0.4),
+            0 0 10px #4caf50,
+            0 0 20px rgba(76, 175, 80, 0.6);
+    }
+}
+
+.host-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #555;
+    text-transform: uppercase;
+    transition: color 0.15s ease;
+}
+
+.host-sync-btn:hover .host-label,
+.host-sync-btn.active .host-label {
+    color: #6aba6a;
+}
+
 /* ============================================
    PITCH SELECT DROPDOWN
    ============================================ */
@@ -2337,10 +2518,20 @@ html, body {
     background: linear-gradient(180deg, #1a2a2a 0%, #0d1a1a 100%);
 }
 
+/* Crossfade enabled state - illuminated icon */
+.xfade-settings-btn.enabled {
+    border-color: var(--looper-accent);
+}
+
+.xfade-settings-btn.enabled .xfade-icon {
+    color: var(--looper-accent);
+    text-shadow: 0 0 8px var(--looper-accent-glow);
+}
+
 .xfade-icon {
     font-size: 16px;
     color: #666;
-    transition: color 0.15s ease;
+    transition: all 0.15s ease;
 }
 
 .xfade-settings-btn:hover .xfade-icon,
