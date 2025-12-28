@@ -1032,6 +1032,27 @@ class LooperController {
             });
         }
 
+        // Loop region drag (move both start and end together)
+        this.loopRegion = document.getElementById('loop-region');
+        if (this.loopRegion) {
+            this.loopRegion.addEventListener('mousedown', (e) => {
+                // Only drag if clicking on the region itself, not the handles
+                if (e.target === this.loopRegion) {
+                    e.stopPropagation();
+                    const regionWidth = this.loopEnd - this.loopStart;
+                    // Only allow dragging if region is smaller than full width
+                    if (regionWidth < 0.99) {
+                        this.draggingHandle = 'region';
+                        this.regionDragWidth = regionWidth;
+                        const rect = this.waveformContainer.getBoundingClientRect();
+                        this.regionDragStartX = (e.clientX - rect.left) / rect.width;
+                        this.regionDragStartLoopStart = this.loopStart;
+                        document.body.style.cursor = 'grab';
+                    }
+                }
+            });
+        }
+
         // Handle drag movement
         document.addEventListener('mousemove', (e) => {
             if (!this.draggingHandle || !this.waveformContainer) return;
@@ -1052,6 +1073,27 @@ class LooperController {
                 normalizedPos = Math.max(normalizedPos, minEnd);
                 this.setLoopEnd(normalizedPos);
                 this.sendLoopEndToJuce(normalizedPos);
+            } else if (this.draggingHandle === 'region') {
+                // Move the entire region while maintaining width
+                document.body.style.cursor = 'grabbing';
+                const delta = normalizedPos - this.regionDragStartX;
+                let newStart = this.regionDragStartLoopStart + delta;
+                let newEnd = newStart + this.regionDragWidth;
+
+                // Clamp to valid range
+                if (newStart < 0) {
+                    newStart = 0;
+                    newEnd = this.regionDragWidth;
+                }
+                if (newEnd > 1) {
+                    newEnd = 1;
+                    newStart = 1 - this.regionDragWidth;
+                }
+
+                this.setLoopStart(newStart);
+                this.setLoopEnd(newEnd);
+                this.sendLoopStartToJuce(newStart);
+                this.sendLoopEndToJuce(newEnd);
             }
         });
 
@@ -1059,6 +1101,9 @@ class LooperController {
         document.addEventListener('mouseup', () => {
             if (this.draggingHandle) {
                 this.draggingHandle = null;
+                this.regionDragWidth = null;
+                this.regionDragStartX = null;
+                this.regionDragStartLoopStart = null;
                 document.body.style.cursor = '';
             }
         });
@@ -1297,12 +1342,19 @@ class LooperController {
             this.loopRegionShade.style.setProperty('--loop-end', `${this.loopEnd * 100}%`);
         }
 
-        // Update handle positions using percentage for responsiveness
-        if (this.loopStartHandle) {
-            this.loopStartHandle.style.left = `${this.loopStart * 100}%`;
-        }
-        if (this.loopEndHandle) {
-            this.loopEndHandle.style.left = `${this.loopEnd * 100}%`;
+        // Update the draggable loop region position via CSS variables
+        // The handles are positioned relative to the loop-region edges via CSS
+        if (this.loopRegion) {
+            this.loopRegion.style.setProperty('--loop-start', `${this.loopStart * 100}%`);
+            this.loopRegion.style.setProperty('--loop-end', `${this.loopEnd * 100}%`);
+
+            // Add/remove full-width class to control cursor
+            const regionWidth = this.loopEnd - this.loopStart;
+            if (regionWidth >= 0.99) {
+                this.loopRegion.classList.add('full-width');
+            } else {
+                this.loopRegion.classList.remove('full-width');
+            }
         }
     }
 
