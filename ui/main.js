@@ -171,7 +171,8 @@ class KnobController {
             return;
         }
 
-        this.indicator = this.element.querySelector('.knob-indicator');
+        // Support both .knob-indicator (line) and .knob-dot (dot) styles
+        this.indicator = this.element.querySelector('.knob-indicator') || this.element.querySelector('.knob-dot');
         this.valueDisplay = document.getElementById(`${paramName}-value`);
         this.paramName = paramName;
 
@@ -333,12 +334,24 @@ class KnobController {
         this.value = normalizedValue;
         const angle = this.minAngle + (this.maxAngle - this.minAngle) * normalizedValue;
         if (this.indicator) {
-            // translateY(-100%) moves indicator up so bottom is at center
-            // rotate() then spins around that bottom point (the knob center)
-            this.indicator.style.transform = `translateY(-100%) rotate(${angle}deg)`;
+            // Different transform for dot vs line indicator styles
+            if (this.indicator.classList.contains('knob-dot')) {
+                // Dot style: rotate around knob center using CSS transform-origin
+                // translateX(-50%) centers the dot, rotate spins around transform-origin
+                this.indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+            } else {
+                // Line style: translateY(-100%) moves indicator up so bottom is at center
+                // rotate() then spins around that bottom point (the knob center)
+                this.indicator.style.transform = `translateY(-100%) rotate(${angle}deg)`;
+            }
         }
         if (this.valueDisplay) {
-            this.valueDisplay.textContent = this.formatValue(normalizedValue);
+            const formattedValue = this.formatValue(normalizedValue);
+            // Only update textContent if formatValue returns a non-empty string
+            // (allows formatValue to handle innerHTML updates directly for complex displays)
+            if (formattedValue) {
+                this.valueDisplay.textContent = formattedValue;
+            }
         }
         // Call value change callback if provided
         if (this.onValueChange) {
@@ -3701,55 +3714,70 @@ document.addEventListener('DOMContentLoaded', () => {
     const speedToSemitone = (speed) => 12 * Math.log2(speed);
     const semitoneToSpeed = (st) => Math.pow(2, st / 12);
 
+    // Speed value display element (combined % + chromatic)
+    const speedValueEl = document.getElementById('loopSpeed-value');
+
+    // Helper to update speed display (combined format: "100% 0st")
+    const updateSpeedDisplay = (normalized) => {
+        const speed = 0.5 * Math.pow(4, normalized);  // 0.5 * 4^v gives 0.5 to 2.0
+        const semitones = speedToSemitone(speed);
+        const roundedSt = Math.round(semitones);
+        const sign = roundedSt >= 0 ? '+' : '';
+        const pct = Math.round(speed * 100);
+        if (speedValueEl) {
+            speedValueEl.innerHTML = `${pct}% <span class="text-fd-text-dim">${sign}${roundedSt}st</span>`;
+        }
+    };
+
     loopSpeedKnob = new KnobController('loopSpeed-knob', 'loopSpeed', {
         formatValue: (v) => {
-            // Map 0-1 to 0.5-2.0 speed ratio (exponential)
-            // At v=0: 0.5x (-12st), at v=0.5: 1.0x (0st), at v=1: 2.0x (+12st)
-            const speed = 0.5 * Math.pow(4, v);  // 0.5 * 4^v gives 0.5 to 2.0
-            const semitones = speedToSemitone(speed);
-            const roundedSt = Math.round(semitones);
-            const sign = roundedSt >= 0 ? '+' : '';
-            // Show semitone when close to chromatic value, otherwise show multiplier
-            if (Math.abs(semitones - roundedSt) < 0.1) {
-                if (roundedSt === -12) return '-12st (½x)';
-                if (roundedSt === 12) return '+12st (2x)';
-                if (roundedSt === 0) return '0st (1x)';
-                return `${sign}${roundedSt}st`;
-            }
-            return `${speed.toFixed(2)}x`;
+            updateSpeedDisplay(v);
+            return '';
         },
         defaultValue: 0.5  // Default to 1.0x speed (0 semitones)
     });
 
-    // Speed preset dropdown - sets speed based on musical intervals
+    // Initialize speed display immediately
+    updateSpeedDisplay(0.5);
+
+    // Speed preset dropdown - fixed position menu
     const speedPresetSelect = document.getElementById('speed-preset-select');
     const speedState = getSliderState('loopSpeed');
+    const speedKnobEl = document.getElementById('loopSpeed-knob');
+
+    // Helper to show chromatic menu at fixed position
+    const showChromaticMenu = (selectEl, anchorEl) => {
+        const rect = anchorEl.getBoundingClientRect();
+        selectEl.style.top = `${rect.bottom + 4}px`;
+        selectEl.style.left = `${rect.right - selectEl.offsetWidth}px`;
+        selectEl.classList.add('open');
+        selectEl.focus();
+        selectEl.size = Math.min(selectEl.options.length, 12);  // Show multiple options
+    };
+
+    const hideChromaticMenu = (selectEl) => {
+        selectEl.classList.remove('open');
+        selectEl.size = 1;
+    };
 
     if (speedPresetSelect) {
         speedPresetSelect.addEventListener('change', (e) => {
             const speedValue = parseFloat(e.target.value);
             if (!isNaN(speedValue) && speedValue > 0) {
-                // Convert speed to normalized value: v = log2(speed/0.5) / log2(4)
-                // Since speed = 0.5 * 4^v, then v = log2(speed/0.5) / 2
                 const normalized = Math.log2(speedValue / 0.5) / 2;
                 const clamped = Math.max(0, Math.min(1, normalized));
-
-                // Update the knob AND send to JUCE
                 if (loopSpeedKnob) {
                     loopSpeedKnob.setValue(clamped);
                     loopSpeedKnob.sendToJuce();
                 }
-
-                console.log(`[SPEED] Preset selected: ${speedValue}x (normalized: ${clamped.toFixed(3)})`);
             }
+            hideChromaticMenu(speedPresetSelect);
         });
 
-        // When knob/parameter changes, update dropdown to nearest chromatic value
         speedState.valueChangedEvent.addListener(() => {
             const normalized = speedState.getNormalisedValue();
-            // Convert normalized to speed: 0.5 * 4^v
+            updateSpeedDisplay(normalized);
             const speed = 0.5 * Math.pow(4, normalized);
-            // Find closest dropdown option
             let closestOption = speedPresetSelect.options[0];
             let closestDiff = Infinity;
             for (let opt of speedPresetSelect.options) {
@@ -3760,60 +3788,100 @@ document.addEventListener('DOMContentLoaded', () => {
                     closestOption = opt;
                 }
             }
-            // Only update if reasonably close to a chromatic value
             if (closestDiff < 0.02) {
                 speedPresetSelect.value = closestOption.value;
             }
         });
+
+        // Cmd/Ctrl+click on knob shows fixed dropdown
+        if (speedKnobEl) {
+            speedKnobEl.addEventListener('click', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showChromaticMenu(speedPresetSelect, speedKnobEl);
+                }
+            });
+        }
+
+        speedPresetSelect.addEventListener('blur', () => {
+            setTimeout(() => hideChromaticMenu(speedPresetSelect), 150);
+        });
     }
 
+    // Pitch value display element (combined % + chromatic)
+    const pitchValueEl = document.getElementById('loopPitch-value');
+
+    // Helper to update pitch display (combined format: "50% 0st")
+    const updatePitchDisplay = (normalized) => {
+        const semitones = normalized * 24 - 12;
+        const roundedSt = Math.round(semitones);
+        const sign = roundedSt >= 0 ? '+' : '';
+        const pct = Math.round(normalized * 100);
+        if (pitchValueEl) {
+            pitchValueEl.innerHTML = `${pct}% <span class="text-fd-text-dim">${sign}${roundedSt}st</span>`;
+        }
+    };
+
     // Loop Pitch: -12 to +12 semitones (center = 0)
-    // The C++ parameter sends scaled values (-12 to +12)
-    // Shift+drag enables chromatic mode (1 semitone steps)
     loopPitchKnob = new KnobController('loopPitch-knob', 'loopPitch', {
         formatValue: (v) => {
-            // v is normalized 0-1, but we need to show the actual semitone value
-            // The SliderState will have received properties from C++ with start=-12, end=12
-            const state = getSliderState('loopPitch');
-            const start = state?.properties?.start ?? -12;
-            const end = state?.properties?.end ?? 12;
-            const semitones = v * (end - start) + start;
-            const sign = semitones >= 0 ? '+' : '';
-            // Show integer when value is close to a whole semitone
-            const isWhole = Math.abs(semitones - Math.round(semitones)) < 0.05;
-            const display = isWhole ? Math.round(semitones) : semitones.toFixed(1);
-            return `${sign}${display} st`;
+            updatePitchDisplay(v);
+            return '';
         },
-        defaultValue: 0.5,  // Default to 0 semitones (no pitch shift)
-        shiftStep: 1,       // 1 semitone step when Shift is held
-        stepRange: { start: -12, end: 12 }  // Full range is 24 semitones
+        defaultValue: 0.5,
+        shiftStep: 1,
+        stepRange: { start: -12, end: 12 }
     });
 
-    // Pitch dropdown for direct semitone selection
+    // Initialize pitch display immediately
+    updatePitchDisplay(0.5);
+
+    // Pitch dropdown - fixed position menu
     const pitchSelect = document.getElementById('pitch-select');
     const pitchState = getSliderState('loopPitch');
+    const pitchKnobEl = document.getElementById('loopPitch-knob');
 
     if (pitchSelect) {
-        // When dropdown changes, update the knob and parameter
         pitchSelect.addEventListener('change', (e) => {
             const semitones = parseInt(e.target.value);
-            // Convert semitones (-12 to +12) to normalized (0 to 1)
             const normalized = (semitones + 12) / 24;
             loopPitchKnob.setValue(normalized);
             loopPitchKnob.sendToJuce();
+            hideChromaticMenu(pitchSelect);
         });
 
-        // When knob/parameter changes, update dropdown to nearest semitone
         pitchState.valueChangedEvent.addListener(() => {
             const normalized = pitchState.getNormalisedValue();
+            updatePitchDisplay(normalized);
             const semitones = Math.round(normalized * 24 - 12);
             pitchSelect.value = semitones.toString();
+        });
+
+        // Cmd/Ctrl+click on knob shows fixed dropdown
+        if (pitchKnobEl) {
+            pitchKnobEl.addEventListener('click', (e) => {
+                if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showChromaticMenu(pitchSelect, pitchKnobEl);
+                }
+            });
+        }
+
+        pitchSelect.addEventListener('blur', () => {
+            setTimeout(() => hideChromaticMenu(pitchSelect), 150);
         });
     }
 
     // Loop Fade: 0% (play once) to 100% (infinite loop)
+    const fadeValueEl = document.getElementById('loopFade-value');
     loopFadeKnob = new KnobController('loopFade-knob', 'loopFade', {
-        formatValue: (v) => `${Math.round(v * 100)}%`,
+        formatValue: (v) => {
+            const pct = `${Math.round(v * 100)}%`;
+            if (fadeValueEl) fadeValueEl.textContent = pct;
+            return '';
+        },
         defaultValue: 1.0  // Default to 100% (no fade - infinite loop)
     });
 

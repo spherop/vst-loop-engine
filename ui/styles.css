@@ -99,6 +99,55 @@ html, body {
     height: 52px;
 }
 
+/* Loop control knobs - larger with indented dot indicator */
+.knob-loop {
+    width: 58px;
+    height: 58px;
+    background:
+        radial-gradient(circle at 50% 50%, #252525 0%, #1a1a1a 40%, #0f0f0f 100%),
+        linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 50%);
+    border: 2px solid #333;
+    border-radius: 50%;
+    box-shadow:
+        inset 0 4px 8px rgba(0, 0, 0, 0.6),
+        inset 0 -2px 4px rgba(255, 255, 255, 0.03),
+        0 2px 8px rgba(0, 0, 0, 0.4);
+    cursor: grab;
+    position: relative;
+}
+
+.knob-loop:hover {
+    border-color: var(--looper-accent);
+    box-shadow:
+        inset 0 4px 8px rgba(0, 0, 0, 0.6),
+        inset 0 -2px 4px rgba(255, 255, 255, 0.03),
+        0 0 12px rgba(74, 222, 128, 0.3);
+}
+
+/* Indented dot indicator for loop knobs */
+.knob-dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background: radial-gradient(circle at 30% 30%, #444 0%, #222 100%);
+    border-radius: 50%;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    transform-origin: 50% 21px;
+    box-shadow:
+        inset 0 1px 3px rgba(0, 0, 0, 0.8),
+        0 1px 1px rgba(255, 255, 255, 0.05);
+    transition: background 0.15s ease;
+}
+
+.knob-loop:hover .knob-dot {
+    background: radial-gradient(circle at 30% 30%, var(--looper-accent) 0%, #1a3a1a 100%);
+    box-shadow:
+        inset 0 1px 3px rgba(0, 0, 0, 0.6),
+        0 0 4px var(--looper-accent-glow);
+}
+
 .knob-small {
     width: 38px;
     height: 38px;
@@ -385,36 +434,36 @@ html, body {
     color: #888;
 }
 
-/* Square transport buttons (UNDO/REDO) - same height as other transport buttons */
-.transport-btn-square {
+/* Stacked UNDO/REDO buttons - two small squares that together equal transport button height */
+.transport-btn-stacked {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 48px;
-    height: 48px;
+    width: 24px;
+    height: 24px;
     background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
     border: 1px solid #333;
-    border-radius: 6px;
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.12s ease;
 }
 
-.transport-icon-square {
-    font-size: 20px;
+.transport-icon-stacked {
+    font-size: 14px;
     color: #555;
     transition: all 0.12s ease;
 }
 
-.transport-btn-square:hover {
+.transport-btn-stacked:hover {
     border-color: #555;
     background: linear-gradient(180deg, #1f1f1f 0%, #141414 100%);
 }
 
-.transport-btn-square:hover .transport-icon-square {
+.transport-btn-stacked:hover .transport-icon-stacked {
     color: var(--looper-accent);
 }
 
-.transport-btn-square:active {
+.transport-btn-stacked:active {
     transform: scale(0.95);
 }
 
@@ -454,6 +503,67 @@ html, body {
 .loop-control-btn.active .loop-control-icon {
     color: var(--looper-accent);
     text-shadow: 0 0 6px var(--looper-accent-glow);
+}
+
+/* Large loop control button (REVERSE - matches knob-loop height for label alignment) */
+.loop-control-btn-large {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 58px;
+    height: 58px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.loop-control-icon-large {
+    font-size: 26px;
+    color: #555;
+    transition: all 0.12s ease;
+}
+
+.loop-control-btn-large:hover {
+    border-color: var(--looper-accent);
+}
+
+.loop-control-btn-large:hover .loop-control-icon-large {
+    color: var(--looper-accent);
+}
+
+.loop-control-btn-large.active {
+    background: linear-gradient(180deg, #1a2a1a 0%, #0f1a0f 100%);
+    border-color: var(--looper-accent);
+}
+
+.loop-control-btn-large.active .loop-control-icon-large {
+    color: var(--looper-accent);
+    text-shadow: 0 0 8px var(--looper-accent-glow);
+}
+
+/* Diagnostics toggle button */
+.diag-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: #555;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: none;
+    background: none;
+    padding: 0;
+}
+
+.diag-toggle-btn:hover {
+    color: var(--looper-accent);
+}
+
+.diag-toggle-btn.active {
+    color: var(--looper-accent);
 }
 
 /* Record Button */
@@ -668,17 +778,18 @@ html, body {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
+    height: 48px;
 }
 
 .input-meter-v-container {
     display: flex;
     gap: 2px;
-    padding: 3px;
+    padding: 2px;
     background: #0a0a0a;
     border: 1px solid #333;
     border-radius: 3px;
-    height: 48px;
+    flex: 1;
 }
 
 .input-meter-v-track {
@@ -718,7 +829,8 @@ html, body {
 /* Vertical mute button */
 .input-mute-btn-v {
     width: 22px;
-    height: 16px;
+    height: 14px;
+    flex-shrink: 0;
     border-radius: 3px;
     background: linear-gradient(180deg, #2a4a2a 0%, #1a3a1a 100%);
     border: 1px solid #4a7a4a;
@@ -2539,6 +2651,49 @@ html, body {
     display: none;
     opacity: 0;
     transform: translateX(-10px) scale(0.95);
+}
+
+/* ============================================
+   CHROMATIC MENU (Fixed position dropdown)
+   ============================================ */
+
+.chromatic-menu {
+    position: fixed;
+    display: none;
+    z-index: 9999;
+    background: linear-gradient(180deg, #1e1e1e 0%, #141414 100%);
+    border: 1px solid #444;
+    border-radius: 6px;
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.6),
+        0 0 1px rgba(255, 255, 255, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    padding: 4px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #ddd;
+    max-height: 300px;
+    overflow-y: auto;
+    min-width: 120px;
+}
+
+.chromatic-menu.open {
+    display: block;
+}
+
+.chromatic-menu option {
+    padding: 6px 12px;
+    cursor: pointer;
+}
+
+.chromatic-menu option:hover,
+.chromatic-menu option:focus {
+    background: var(--looper-accent);
+    color: #000;
+}
+
+.chromatic-menu option:checked {
+    background: rgba(74, 222, 128, 0.2);
 }
 
 .xfade-panel-header {
