@@ -548,7 +548,6 @@ class LooperController {
         this.setupZoomControls();
         this.setupRecordingOverlay();
         this.setupLayerSpread();
-        this.setupLayerMixer();
         this.startStatePolling();
 
         // Sync UI with current C++ state on open
@@ -1102,111 +1101,8 @@ class LooperController {
         }
     }
 
-    setupLayerMixer() {
-        this.volumeSlider = document.getElementById('layer-volume-slider');
-        this.volumeValue = document.getElementById('layer-volume-value');
-        this.panKnob = document.getElementById('layer-pan-knob');
-        this.panKnobIndicator = this.panKnob ? this.panKnob.querySelector('.knob-indicator') : null;
-        this.panValue = document.getElementById('layer-pan-value');
-
-        // Pan knob state
-        this.panKnobValue = 0;  // -100 to 100 (center = 0)
-        this.panDragging = false;
-        this.panLastY = 0;
-
-        // Volume slider
-        if (this.volumeSlider) {
-            this.volumeSlider.addEventListener('input', async (e) => {
-                const vol = parseInt(e.target.value) / 100;
-                // Update numeric display
-                if (this.volumeValue) {
-                    this.volumeValue.textContent = e.target.value;
-                }
-                // Update fill gradient
-                this.volumeSlider.style.setProperty('--volume-fill', `${e.target.value}%`);
-                // Update the layer button's volume CSS variable for dimming effect
-                const layerBtn = this.layerBtns.find(btn => parseInt(btn.dataset.layer) === this.selectedLayer);
-                if (layerBtn) {
-                    layerBtn.style.setProperty('--layer-volume', vol);
-                }
-                try {
-                    await this.setLayerVolumeFn(this.selectedLayer, vol);
-                } catch (err) {
-                    console.error('Error setting layer volume:', err);
-                }
-            });
-            // Initialize fill
-            this.volumeSlider.style.setProperty('--volume-fill', '100%');
-        }
-
-        // Pan knob - custom mini-knob handler (not using full KnobController)
-        if (this.panKnob) {
-            this.panKnob.addEventListener('mousedown', (e) => {
-                this.panDragging = true;
-                this.panLastY = e.clientY;
-                this.panKnob.classList.add('active');
-                e.preventDefault();
-            });
-
-            document.addEventListener('mousemove', (e) => {
-                if (!this.panDragging) return;
-                const deltaY = this.panLastY - e.clientY;
-                const sensitivity = 1.5;
-                this.panKnobValue = Math.max(-100, Math.min(100, this.panKnobValue + deltaY * sensitivity));
-                this.updatePanKnobUI();
-                this.sendPanToBackend();
-                this.panLastY = e.clientY;
-            });
-
-            document.addEventListener('mouseup', () => {
-                if (this.panDragging) {
-                    this.panDragging = false;
-                    this.panKnob.classList.remove('active');
-                }
-            });
-
-            // Initialize knob rotation
-            this.updatePanKnobUI();
-        }
-
-        // Initialize with layer 1 selected
-        this.selectLayer(1);
-    }
-
-    updatePanKnobUI() {
-        // Pan goes from -100 to 100, map to -135 to 135 degrees
-        const angle = (this.panKnobValue / 100) * 135;
-        if (this.panKnobIndicator) {
-            this.panKnobIndicator.style.transform = `translateY(-100%) rotate(${angle}deg)`;
-        }
-        // Update text display
-        if (this.panValue) {
-            if (Math.abs(this.panKnobValue) < 5) {
-                this.panValue.textContent = 'C';
-            } else if (this.panKnobValue < 0) {
-                this.panValue.textContent = `L${Math.abs(Math.round(this.panKnobValue))}`;
-            } else {
-                this.panValue.textContent = `R${Math.round(this.panKnobValue)}`;
-            }
-        }
-    }
-
-    async sendPanToBackend() {
-        const panNorm = this.panKnobValue / 100;  // -1 to 1
-        // Update the layer button's pan CSS variable for gradient effect
-        const layerBtn = this.layerBtns.find(btn => parseInt(btn.dataset.layer) === this.selectedLayer);
-        if (layerBtn) {
-            layerBtn.style.setProperty('--layer-pan', panNorm);
-        }
-        try {
-            await this.setLayerPanFn(this.selectedLayer, panNorm);
-        } catch (err) {
-            console.error('Error setting layer pan:', err);
-        }
-    }
-
-    // Select a layer for editing (volume/pan) - shows white outline
-    async selectLayer(layer) {
+    // Select a layer for editing - shows white outline
+    selectLayer(layer) {
         this.selectedLayer = layer;
 
         // Update visual selection on layer buttons
@@ -1214,28 +1110,6 @@ class LooperController {
             const btnLayer = parseInt(btn.dataset.layer);
             btn.classList.toggle('selected', btnLayer === layer);
         });
-
-        // Load this layer's current volume and pan
-        try {
-            const vol = await this.getLayerVolumeFn(layer);
-            const panVal = await this.getLayerPanFn(layer);
-
-            // Update volume slider and display
-            if (this.volumeSlider) {
-                const volPercent = Math.round(vol * 100);
-                this.volumeSlider.value = volPercent;
-                this.volumeSlider.style.setProperty('--volume-fill', `${volPercent}%`);
-                if (this.volumeValue) {
-                    this.volumeValue.textContent = volPercent;
-                }
-            }
-
-            // Update pan knob value and UI
-            this.panKnobValue = Math.round(panVal * 100);
-            this.updatePanKnobUI();
-        } catch (err) {
-            console.error('Error loading layer volume/pan:', err);
-        }
     }
 
     // Zoom methods
@@ -4489,8 +4363,6 @@ class MixerViewController {
                     channel.volume = vol;
                     try {
                         await this.setLayerVolumeFn(layerNum, vol);
-                        // Update the main layer controls if visible
-                        this.syncVolumeToLayerControls(layerNum, vol);
                     } catch (err) {
                         console.error(`[Mixer] Error setting layer ${layerNum} volume:`, err);
                     }
@@ -4627,21 +4499,6 @@ class MixerViewController {
                     this.syncMuteToLayerButton(layerNum, ch.muted);
                     this.syncSoloToLayerButton(layerNum, ch.solo);
                 } catch (err) { /* ignore */ }
-            }
-        }
-    }
-
-    syncVolumeToLayerControls(layerNum, vol) {
-        // If the looper's selected layer matches, update the volume slider
-        if (looperController && looperController.selectedLayer === layerNum) {
-            const volumeSlider = document.getElementById('layer-volume-slider');
-            const volumeValue = document.getElementById('layer-volume-value');
-            if (volumeSlider) {
-                volumeSlider.value = Math.round(vol * 100);
-                volumeSlider.style.setProperty('--volume-fill', `${Math.round(vol * 100)}%`);
-            }
-            if (volumeValue) {
-                volumeValue.textContent = Math.round(vol * 100);
             }
         }
     }
