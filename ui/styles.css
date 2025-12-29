@@ -4241,6 +4241,37 @@ html, body {
     background: linear-gradient(180deg, #66bb6a 0%, transparent 60%);
 }
 
+/* Animated level meter bar inside fader track */
+.fader-meter {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 0%;
+    background: linear-gradient(0deg,
+        #4caf50 0%,
+        #8bc34a 40%,
+        #cddc39 60%,
+        #ffeb3b 75%,
+        #ff9800 85%,
+        #f44336 95%);
+    border-radius: 2px;
+    opacity: 0.85;
+    transition: height 0.05s linear;
+    z-index: 1;
+    pointer-events: none;
+    box-shadow:
+        0 0 4px rgba(76, 175, 80, 0.4),
+        inset 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+/* Brighter meter when in red zone */
+.fader-meter.clipping {
+    box-shadow:
+        0 0 8px rgba(244, 67, 54, 0.6),
+        inset 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
 /* ============================================
    CHANNEL COLOR CODING (Layer Colors)
    ============================================ */

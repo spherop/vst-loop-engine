@@ -4359,6 +4359,7 @@ class MixerViewController {
             this.channels.push({
                 layer: i,
                 fader: document.getElementById(`fader-${i}`),
+                faderMeter: document.getElementById(`fader-meter-${i}`),
                 panKnob: document.getElementById(`pan-knob-${i}`),
                 panIndicator: document.querySelector(`#pan-knob-${i} .pan-indicator`),
                 muteBtn: document.getElementById(`mute-${i}`),
@@ -4742,6 +4743,37 @@ class MixerViewController {
         }
 
         channel.vuNeedle.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+
+        // Also update fader meter bar
+        // Map level to percentage height (0-100%)
+        // Use a similar dB scale: -48dB = 0%, 0dB = ~79% (fader pos 100), +3dB = 100%
+        if (channel.faderMeter) {
+            let meterHeight;
+            if (level <= 0.00001) {
+                meterHeight = 0;
+            } else {
+                // Convert linear to percentage based on fader scale
+                // Our fader: 0-100 = -inf to 0dB, 100-127 = 0dB to +3dB
+                // So 0dB (level=1.0) is at ~79% height (100/127)
+                // +3dB (level=1.41) is at 100%
+                const dbLevel = 20 * Math.log10(level);
+
+                if (dbLevel <= -48) {
+                    meterHeight = 0;
+                } else if (dbLevel <= 0) {
+                    // -48dB to 0dB maps to 0% to 79%
+                    meterHeight = ((dbLevel + 48) / 48) * 79;
+                } else {
+                    // 0dB to +6dB maps to 79% to 100%
+                    meterHeight = 79 + Math.min(dbLevel / 6, 1) * 21;
+                }
+            }
+
+            channel.faderMeter.style.height = `${meterHeight}%`;
+
+            // Add clipping class if in red zone (above 0dB)
+            channel.faderMeter.classList.toggle('clipping', level > 1.0);
+        }
     }
 
     // Convert fader position (0-127) to linear volume
