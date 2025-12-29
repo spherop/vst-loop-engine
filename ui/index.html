@@ -235,10 +235,29 @@
                         </div>
                     </section>
 
-                    <!-- Waveform Display (fills remaining space) -->
+                    <!-- Waveform/Mixer Display (fills remaining space) -->
                     <section class="section-card bg-fd-card rounded-lg border border-fd-border p-3 flex-1 flex flex-col min-h-0">
-                        <!-- Waveform with vertical spread slider -->
-                        <div class="waveform-wrapper flex gap-2">
+                        <!-- View Toggle Header -->
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <button class="view-toggle-btn active" id="waveform-view-btn" title="Waveform view">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M2 12h4l3-9 4 18 3-9h4"/>
+                                    </svg>
+                                </button>
+                                <button class="view-toggle-btn" id="mixer-view-btn" title="Mixer view">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="4" y="4" width="4" height="16" rx="1"/>
+                                        <rect x="10" y="8" width="4" height="12" rx="1"/>
+                                        <rect x="16" y="2" width="4" height="18" rx="1"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <span class="font-display text-[7px] font-bold tracking-[2px] text-fd-text-dim uppercase" id="view-label">WAVEFORM</span>
+                        </div>
+
+                        <!-- WAVEFORM VIEW -->
+                        <div class="waveform-wrapper flex gap-2 flex-1" id="waveform-view">
                             <div class="waveform-container flex-1" id="waveform-container">
                                 <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
                                 <!-- Loop region shading -->
@@ -265,6 +284,317 @@
                                 <span class="font-display text-[6px] font-bold tracking-[1px] text-fd-text-dim uppercase">SPR</span>
                                 <input type="range" id="layer-spread-slider" min="0" max="100" value="0"
                                        class="layer-spread-slider-v" title="Spread layers vertically" orient="vertical">
+                            </div>
+                        </div>
+
+                        <!-- MIXER VIEW -->
+                        <div class="mixer-view hidden flex-1" id="mixer-view">
+                            <div class="mixer-channels">
+                                <!-- Channel strips will be generated dynamically -->
+                                <div class="mixer-channel" data-layer="1">
+                                    <div class="channel-label">1</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-1"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-1" min="0" max="127" value="100" orient="vertical">
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob" id="pan-knob-1">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-1" title="Mute">M</button>
+                                        <button class="channel-solo" id="solo-1" title="Solo">S</button>
+                                    </div>
+                                </div>
+                                <div class="mixer-channel" data-layer="2">
+                                    <div class="channel-label">2</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-2"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-2" min="0" max="127" value="100" orient="vertical">
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob" id="pan-knob-2">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-2" title="Mute">M</button>
+                                        <button class="channel-solo" id="solo-2" title="Solo">S</button>
+                                    </div>
+                                </div>
+                                <div class="mixer-channel" data-layer="3">
+                                    <div class="channel-label">3</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-3"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-3" min="0" max="127" value="100" orient="vertical">
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob" id="pan-knob-3">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-3" title="Mute">M</button>
+                                        <button class="channel-solo" id="solo-3" title="Solo">S</button>
+                                    </div>
+                                </div>
+                                <div class="mixer-channel" data-layer="4">
+                                    <div class="channel-label">4</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-4"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-4" min="0" max="127" value="100" orient="vertical">
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob" id="pan-knob-4">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-4" title="Mute">M</button>
+                                        <button class="channel-solo" id="solo-4" title="Solo">S</button>
+                                    </div>
+                                </div>
+                                <div class="mixer-channel" data-layer="5">
+                                    <div class="channel-label">5</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-5"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-5" min="0" max="127" value="100" orient="vertical">
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob" id="pan-knob-5">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-5" title="Mute">M</button>
+                                        <button class="channel-solo" id="solo-5" title="Solo">S</button>
+                                    </div>
+                                </div>
+                                <div class="mixer-channel" data-layer="6">
+                                    <div class="channel-label">6</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-6"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-6" min="0" max="127" value="100" orient="vertical">
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob" id="pan-knob-6">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-6" title="Mute">M</button>
+                                        <button class="channel-solo" id="solo-6" title="Solo">S</button>
+                                    </div>
+                                </div>
+                                <div class="mixer-channel" data-layer="7">
+                                    <div class="channel-label">7</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-7"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-7" min="0" max="127" value="100" orient="vertical">
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob" id="pan-knob-7">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-7" title="Mute">M</button>
+                                        <button class="channel-solo" id="solo-7" title="Solo">S</button>
+                                    </div>
+                                </div>
+                                <div class="mixer-channel" data-layer="8">
+                                    <div class="channel-label">8</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-8"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-8" min="0" max="127" value="100" orient="vertical">
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob" id="pan-knob-8">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-8" title="Mute">M</button>
+                                        <button class="channel-solo" id="solo-8" title="Solo">S</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -321,7 +651,7 @@
                                         <path d="M7 16l4-8 4 6 4-10"/>
                                     </svg>
                                 </button>
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v6.0.4</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v6.1.6</span>
                             </div>
 
                             <!-- Controls (center) -->

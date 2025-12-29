@@ -4325,6 +4325,466 @@ class SaturationController {
     }
 }
 
+// ============================================
+// MIXER VIEW CONTROLLER
+// Vintage-style mixing console for layer mixing
+// ============================================
+class MixerViewController {
+    constructor() {
+        // View toggle elements
+        this.waveformViewBtn = document.getElementById('waveform-view-btn');
+        this.mixerViewBtn = document.getElementById('mixer-view-btn');
+        this.waveformView = document.getElementById('waveform-view');
+        this.mixerView = document.getElementById('mixer-view');
+        this.viewLabel = document.getElementById('view-label');
+
+        // Current view state
+        this.currentView = 'waveform';
+
+        // Layer colors for visual consistency
+        this.layerColors = [
+            '#4fc3f7',  // Layer 1: Cyan/Light blue
+            '#ff7043',  // Layer 2: Deep orange
+            '#66bb6a',  // Layer 3: Green
+            '#ab47bc',  // Layer 4: Purple
+            '#ffa726',  // Layer 5: Orange
+            '#26c6da',  // Layer 6: Teal
+            '#ec407a',  // Layer 7: Pink
+            '#9ccc65',  // Layer 8: Light green
+        ];
+
+        // Per-channel state
+        this.channels = [];
+        for (let i = 1; i <= 8; i++) {
+            this.channels.push({
+                layer: i,
+                fader: document.getElementById(`fader-${i}`),
+                panKnob: document.getElementById(`pan-knob-${i}`),
+                panIndicator: document.querySelector(`#pan-knob-${i} .pan-indicator`),
+                muteBtn: document.getElementById(`mute-${i}`),
+                soloBtn: document.getElementById(`solo-${i}`),
+                vuNeedle: document.getElementById(`vu-needle-${i}`),
+                channelEl: document.querySelector(`.mixer-channel[data-layer="${i}"]`),
+                volume: 1.0,
+                pan: 0,
+                muted: false,
+                solo: false,
+                hasContent: false,
+                panDragging: false,
+                panLastY: 0
+            });
+        }
+
+        // Native functions
+        this.setLayerVolumeFn = getNativeFunction('setLayerVolume');
+        this.setLayerPanFn = getNativeFunction('setLayerPan');
+        this.setLayerMutedFn = getNativeFunction('setLayerMuted');
+        this.getLayerContentFn = getNativeFunction('getLayerContentStates');
+        this.getLayerLevelsFn = getNativeFunction('getLayerLevels');
+
+        // Soloed layer tracking
+        this.soloedLayer = null;
+
+        this.setupViewToggle();
+        this.setupChannelControls();
+        this.startMeterPolling();
+        this.setupFaderSizing();
+
+        console.log('[Mixer] Initialized');
+    }
+
+    // Dynamically size faders based on container height
+    setupFaderSizing() {
+        const resizeFaders = () => {
+            const faderContainers = document.querySelectorAll('.channel-fader');
+            faderContainers.forEach(container => {
+                const height = container.clientHeight;
+                // Set the fader length (width before rotation) to match container height minus padding
+                const faderLength = Math.max(100, height - 20);
+                container.style.setProperty('--fader-length', `${faderLength}px`);
+            });
+        };
+
+        // Initial sizing after a short delay to ensure layout is complete
+        setTimeout(resizeFaders, 100);
+
+        // Resize on window resize
+        window.addEventListener('resize', resizeFaders);
+    }
+
+    setupViewToggle() {
+        if (this.waveformViewBtn) {
+            this.waveformViewBtn.addEventListener('click', () => this.showWaveformView());
+        }
+        if (this.mixerViewBtn) {
+            this.mixerViewBtn.addEventListener('click', () => this.showMixerView());
+        }
+    }
+
+    showWaveformView() {
+        this.currentView = 'waveform';
+        if (this.waveformView) this.waveformView.classList.remove('hidden');
+        if (this.mixerView) this.mixerView.classList.add('hidden');
+        if (this.waveformViewBtn) this.waveformViewBtn.classList.add('active');
+        if (this.mixerViewBtn) this.mixerViewBtn.classList.remove('active');
+        if (this.viewLabel) this.viewLabel.textContent = 'WAVEFORM';
+
+        // Trigger waveform canvas resize
+        window.dispatchEvent(new Event('resize'));
+    }
+
+    showMixerView() {
+        this.currentView = 'mixer';
+        if (this.waveformView) this.waveformView.classList.add('hidden');
+        if (this.mixerView) this.mixerView.classList.remove('hidden');
+        if (this.waveformViewBtn) this.waveformViewBtn.classList.remove('active');
+        if (this.mixerViewBtn) this.mixerViewBtn.classList.add('active');
+        if (this.viewLabel) this.viewLabel.textContent = 'MIXER';
+
+        // Sync mixer state from looper controller layer buttons
+        this.syncFromLayerButtons();
+
+        // Resize faders after view becomes visible
+        setTimeout(() => {
+            const faderContainers = document.querySelectorAll('.channel-fader');
+            faderContainers.forEach(container => {
+                const height = container.clientHeight;
+                const faderLength = Math.max(100, height - 20);
+                container.style.setProperty('--fader-length', `${faderLength}px`);
+            });
+        }, 50);
+    }
+
+    // Sync mixer channel states from the layer indicator buttons
+    syncFromLayerButtons() {
+        const layerBtns = document.querySelectorAll('.layer-btn');
+        layerBtns.forEach((btn, idx) => {
+            const channel = this.channels[idx];
+            if (channel && channel.channelEl) {
+                const hasContent = btn.classList.contains('has-content');
+                const isMuted = btn.classList.contains('muted');
+
+                channel.hasContent = hasContent;
+                channel.muted = isMuted;
+                channel.channelEl.classList.toggle('has-content', hasContent);
+                channel.channelEl.classList.toggle('muted', isMuted);
+                if (channel.muteBtn) {
+                    channel.muteBtn.classList.toggle('active', isMuted);
+                }
+            }
+        });
+    }
+
+    setupChannelControls() {
+        this.channels.forEach((channel, idx) => {
+            const layerNum = idx + 1;
+
+            // Fader control
+            // Fader range: 0-127 where 100 = 0dB (unity), 127 = +3dB, 0 = -inf
+            if (channel.fader) {
+                channel.fader.addEventListener('input', async (e) => {
+                    const faderValue = parseInt(e.target.value);
+                    const vol = this.faderToVolume(faderValue);
+                    channel.volume = vol;
+                    try {
+                        await this.setLayerVolumeFn(layerNum, vol);
+                        // Update the main layer controls if visible
+                        this.syncVolumeToLayerControls(layerNum, vol);
+                    } catch (err) {
+                        console.error(`[Mixer] Error setting layer ${layerNum} volume:`, err);
+                    }
+                });
+            }
+
+            // Pan knob control
+            if (channel.panKnob) {
+                channel.panKnob.addEventListener('mousedown', (e) => {
+                    channel.panDragging = true;
+                    channel.panLastY = e.clientY;
+                    channel.panKnob.classList.add('active');
+                    e.preventDefault();
+                });
+            }
+
+            // Mute button
+            if (channel.muteBtn) {
+                channel.muteBtn.addEventListener('click', async () => {
+                    channel.muted = !channel.muted;
+                    channel.muteBtn.classList.toggle('active', channel.muted);
+                    if (channel.channelEl) {
+                        channel.channelEl.classList.toggle('muted', channel.muted);
+                    }
+                    try {
+                        await this.setLayerMutedFn(layerNum, channel.muted);
+                        // Sync to layer buttons
+                        this.syncMuteToLayerButton(layerNum, channel.muted);
+                    } catch (err) {
+                        console.error(`[Mixer] Error setting layer ${layerNum} mute:`, err);
+                    }
+                });
+            }
+
+            // Solo button
+            if (channel.soloBtn) {
+                channel.soloBtn.addEventListener('click', async () => {
+                    await this.toggleSolo(layerNum);
+                });
+            }
+        });
+
+        // Global mouse events for pan knobs
+        document.addEventListener('mousemove', (e) => {
+            this.channels.forEach((channel, idx) => {
+                if (!channel.panDragging) return;
+
+                const deltaY = channel.panLastY - e.clientY;
+                const sensitivity = 2;
+                channel.pan = Math.max(-100, Math.min(100, channel.pan + deltaY * sensitivity));
+                this.updatePanKnobUI(channel);
+                this.sendPanToBackend(idx + 1, channel.pan);
+                channel.panLastY = e.clientY;
+            });
+        });
+
+        document.addEventListener('mouseup', () => {
+            this.channels.forEach(channel => {
+                if (channel.panDragging) {
+                    channel.panDragging = false;
+                    if (channel.panKnob) channel.panKnob.classList.remove('active');
+                }
+            });
+        });
+    }
+
+    updatePanKnobUI(channel) {
+        if (!channel.panIndicator) return;
+        // Pan goes from -100 to 100, map to -60 to 60 degrees (smaller range for mini knob)
+        const angle = (channel.pan / 100) * 60;
+        channel.panIndicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+    }
+
+    async sendPanToBackend(layerNum, panValue) {
+        const panNorm = panValue / 100;  // -1 to 1
+        try {
+            await this.setLayerPanFn(layerNum, panNorm);
+        } catch (err) {
+            console.error(`[Mixer] Error setting layer ${layerNum} pan:`, err);
+        }
+    }
+
+    async toggleSolo(targetLayer) {
+        const channel = this.channels[targetLayer - 1];
+        const wasAlreadySolo = this.soloedLayer === targetLayer;
+
+        if (wasAlreadySolo) {
+            // Unsolo: unmute all layers
+            this.soloedLayer = null;
+            for (let i = 0; i < this.channels.length; i++) {
+                const ch = this.channels[i];
+                ch.muted = false;
+                ch.solo = false;
+                if (ch.muteBtn) ch.muteBtn.classList.remove('active');
+                if (ch.soloBtn) ch.soloBtn.classList.remove('active');
+                if (ch.channelEl) {
+                    ch.channelEl.classList.remove('muted');
+                    ch.channelEl.classList.remove('solo');
+                }
+                try {
+                    await this.setLayerMutedFn(i + 1, false);
+                    this.syncMuteToLayerButton(i + 1, false);
+                    this.syncSoloToLayerButton(i + 1, false);
+                } catch (err) { /* ignore */ }
+            }
+        } else {
+            // Solo: mute all except target
+            this.soloedLayer = targetLayer;
+            for (let i = 0; i < this.channels.length; i++) {
+                const ch = this.channels[i];
+                const layerNum = i + 1;
+
+                if (layerNum === targetLayer) {
+                    ch.muted = false;
+                    ch.solo = true;
+                    if (ch.muteBtn) ch.muteBtn.classList.remove('active');
+                    if (ch.soloBtn) ch.soloBtn.classList.add('active');
+                    if (ch.channelEl) {
+                        ch.channelEl.classList.remove('muted');
+                        ch.channelEl.classList.add('solo');
+                    }
+                } else {
+                    ch.muted = true;
+                    ch.solo = false;
+                    if (ch.muteBtn) ch.muteBtn.classList.add('active');
+                    if (ch.soloBtn) ch.soloBtn.classList.remove('active');
+                    if (ch.channelEl) {
+                        ch.channelEl.classList.add('muted');
+                        ch.channelEl.classList.remove('solo');
+                    }
+                }
+                try {
+                    await this.setLayerMutedFn(layerNum, ch.muted);
+                    this.syncMuteToLayerButton(layerNum, ch.muted);
+                    this.syncSoloToLayerButton(layerNum, ch.solo);
+                } catch (err) { /* ignore */ }
+            }
+        }
+    }
+
+    syncVolumeToLayerControls(layerNum, vol) {
+        // If the looper's selected layer matches, update the volume slider
+        if (looperController && looperController.selectedLayer === layerNum) {
+            const volumeSlider = document.getElementById('layer-volume-slider');
+            const volumeValue = document.getElementById('layer-volume-value');
+            if (volumeSlider) {
+                volumeSlider.value = Math.round(vol * 100);
+                volumeSlider.style.setProperty('--volume-fill', `${Math.round(vol * 100)}%`);
+            }
+            if (volumeValue) {
+                volumeValue.textContent = Math.round(vol * 100);
+            }
+        }
+    }
+
+    syncMuteToLayerButton(layerNum, muted) {
+        const layerBtn = document.querySelector(`.layer-btn[data-layer="${layerNum}"]`);
+        if (layerBtn) {
+            layerBtn.classList.toggle('muted', muted);
+        }
+    }
+
+    syncSoloToLayerButton(layerNum, soloed) {
+        const layerBtn = document.querySelector(`.layer-btn[data-layer="${layerNum}"]`);
+        if (layerBtn) {
+            layerBtn.classList.toggle('soloed', soloed);
+        }
+    }
+
+    startMeterPolling() {
+        // Poll for layer levels to update VU meters
+        setInterval(async () => {
+            if (this.currentView !== 'mixer') return;
+
+            try {
+                // Check layer content states
+                if (this.getLayerContentFn) {
+                    const contentStates = await this.getLayerContentFn();
+                    if (contentStates && Array.isArray(contentStates)) {
+                        contentStates.forEach((hasContent, idx) => {
+                            const channel = this.channels[idx];
+                            if (channel && channel.channelEl) {
+                                channel.hasContent = hasContent;
+                                channel.channelEl.classList.toggle('has-content', hasContent);
+                            }
+                        });
+                    }
+                }
+
+                // Get layer audio levels for VU meters
+                if (this.getLayerLevelsFn) {
+                    const levels = await this.getLayerLevelsFn();
+                    if (levels && Array.isArray(levels)) {
+                        levels.forEach((level, idx) => {
+                            this.updateVUMeter(idx, level);
+                        });
+                    }
+                }
+            } catch (e) {
+                // Silently ignore polling errors
+            }
+        }, 50);  // 50ms for smooth VU meter animation
+    }
+
+    updateVUMeter(channelIdx, level) {
+        const channel = this.channels[channelIdx];
+        if (!channel || !channel.vuNeedle) return;
+
+        // VU meter behavior:
+        // - Needle rests at -45deg (left) when silent
+        // - Swings right as level increases
+        // - 0dB (level=1.0) is at approximately +5deg
+        // - Into red (+3dB) at +25deg
+        // - Max angle around +30deg
+
+        // Convert linear level to dB
+        const minDb = -48;  // Silence floor
+        const maxDb = 6;    // Clip/hot zone
+        let db = minDb;
+        if (level > 0.00001) {
+            db = 20 * Math.log10(level);
+            db = Math.max(minDb, Math.min(maxDb, db));
+        }
+
+        // Map dB to angle using VU-style ballistics
+        // VU meters have a logarithmic-ish response
+        // -48dB -> -45deg (fully left)
+        // -20dB -> -30deg
+        // -10dB -> -15deg
+        // -3dB  -> 0deg (unity reference)
+        // 0dB   -> +5deg
+        // +6dB  -> +25deg (into red)
+
+        // Simple piecewise linear mapping
+        let angle;
+        if (db <= -48) {
+            angle = -45;
+        } else if (db <= -20) {
+            // -48dB to -20dB: -45deg to -25deg
+            angle = -45 + (db + 48) * (20 / 28);
+        } else if (db <= -3) {
+            // -20dB to -3dB: -25deg to 0deg
+            angle = -25 + (db + 20) * (25 / 17);
+        } else if (db <= 0) {
+            // -3dB to 0dB: 0deg to +8deg
+            angle = (db + 3) * (8 / 3);
+        } else {
+            // 0dB to +6dB: +8deg to +25deg
+            angle = 8 + db * (17 / 6);
+        }
+
+        channel.vuNeedle.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+    }
+
+    // Convert fader position (0-127) to linear volume
+    // 0 = -inf (0.0), 100 = 0dB (1.0), 127 = +3dB (~1.41)
+    faderToVolume(faderValue) {
+        if (faderValue <= 0) return 0;
+        if (faderValue >= 127) return Math.pow(10, 3/20);  // +3dB
+
+        if (faderValue <= 100) {
+            // 0-100: logarithmic curve from -inf to 0dB
+            // Use an exponential curve for natural fader feel
+            // fader 100 = 1.0, fader 0 = 0
+            const normalized = faderValue / 100;
+            // Apply a curve: vol = normalized^2 gives a nice taper
+            // But we want more resolution at higher levels, so use a gentler curve
+            return Math.pow(normalized, 1.5);
+        } else {
+            // 100-127: linear from 0dB to +3dB
+            // 100 = 1.0 (0dB), 127 = 1.41 (+3dB)
+            const boost = (faderValue - 100) / 27;  // 0 to 1
+            const maxBoost = Math.pow(10, 3/20);    // ~1.41
+            return 1.0 + boost * (maxBoost - 1.0);
+        }
+    }
+
+    // Convert linear volume to fader position (0-127)
+    volumeToFader(volume) {
+        if (volume <= 0) return 0;
+
+        const maxBoost = Math.pow(10, 3/20);  // ~1.41 (+3dB)
+        if (volume >= maxBoost) return 127;
+
+        if (volume <= 1.0) {
+            // Inverse of the curve: fader = vol^(1/1.5) * 100
+            return Math.round(Math.pow(volume, 1/1.5) * 100);
+        } else {
+            // Above unity: linear mapping
+            const boost = (volume - 1.0) / (maxBoost - 1.0);
+            return Math.round(100 + boost * 27);
+        }
+    }
+}
+
 // Global BPM update function called from C++ timer
 window.updateBpmDisplay = function(bpm) {
     const bpmEl = document.getElementById('bpm-display');
@@ -4820,6 +5280,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Saturation controller
     new SaturationController();
+
+    // Mixer view controller
+    new MixerViewController();
 
     // Reverse toggle - setup handled in LooperController
     looperController.setupReverseButton();

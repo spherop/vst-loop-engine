@@ -1144,7 +1144,15 @@ html, body {
     line-height: 1;
 }
 
-/* Solo indicator */
+/* Solo indicator - the soloed layer glows yellow/gold */
+.layer-btn.soloed {
+    background: linear-gradient(180deg, #4a4010 0%, #2a2508 100%) !important;
+    border-color: #ffeb3b !important;
+    color: #ffeb3b !important;
+    box-shadow: 0 0 8px rgba(255, 235, 59, 0.4) !important;
+    text-decoration: none !important;
+}
+
 .layer-btn.soloed::before {
     content: 'S';
     position: absolute;
@@ -3775,4 +3783,605 @@ html, body {
 .delay-knob .knob-dot {
     background: #ff6b35;
     box-shadow: 0 0 6px rgba(255, 107, 53, 0.5);
+}
+
+/* ============================================
+   VIEW TOGGLE BUTTONS
+   ============================================ */
+
+.view-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 24px;
+    padding: 4px 6px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    color: #555;
+}
+
+.view-toggle-btn:hover {
+    border-color: #555;
+    color: #888;
+    background: linear-gradient(180deg, #222 0%, #1a1a1a 100%);
+}
+
+.view-toggle-btn.active {
+    border-color: var(--looper-accent);
+    color: var(--looper-accent);
+    background: linear-gradient(180deg, #1a2a30 0%, #102028 100%);
+    box-shadow: 0 0 8px var(--looper-accent-glow);
+}
+
+/* ============================================
+   MIXER VIEW - Vintage Console Style
+   ============================================ */
+
+.mixer-view {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: linear-gradient(180deg, #0c0c0c 0%, #080808 100%);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.mixer-view.hidden {
+    display: none;
+}
+
+.mixer-channels {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    height: 100%;
+    padding: 8px 12px;
+    gap: 8px;
+}
+
+/* Individual channel strip */
+.mixer-channel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 8px;
+    background: linear-gradient(180deg, #181818 0%, #0f0f0f 100%);
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    flex: 1;
+    min-width: 60px;
+    /* max-width: 90px; */
+    transition: all 0.15s ease;
+}
+
+.mixer-channel:hover {
+    border-color: #444;
+    background: linear-gradient(180deg, #1c1c1c 0%, #121212 100%);
+}
+
+.mixer-channel.has-content {
+    border-color: var(--looper-accent-dim);
+}
+
+.mixer-channel.muted {
+    opacity: 0.5;
+}
+
+.mixer-channel.muted .channel-label {
+    color: #ff4444;
+}
+
+.mixer-channel.solo .channel-label {
+    color: #ffcc00;
+    text-shadow: 0 0 6px rgba(255, 204, 0, 0.5);
+}
+
+/* Channel number label */
+.channel-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--looper-accent);
+    text-shadow: 0 0 6px var(--looper-accent-glow);
+}
+
+/* ============================================
+   VINTAGE VU METER
+   ============================================ */
+
+.channel-vu {
+    width: 100%;
+    height: 44px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.vu-meter {
+    position: relative;
+    width: 80px;
+    height: 48px;
+    background: linear-gradient(180deg, #252525 0%, #1a1a1a 50%, #0f0f0f 100%);
+    border: 2px solid #3a3a3a;
+    border-radius: 6px 6px 2px 2px;
+    overflow: hidden;
+    box-shadow:
+        inset 0 2px 6px rgba(0, 0, 0, 0.6),
+        0 2px 4px rgba(0, 0, 0, 0.4),
+        0 0 0 1px #1a1a1a;
+}
+
+/* VU meter background gradient - cream/off-white vintage look */
+.vu-meter::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    right: 3px;
+    bottom: 2px;
+    background: linear-gradient(180deg,
+        #f8f4e8 0%,     /* warm cream top */
+        #f0ead8 30%,    /* slightly darker */
+        #e8e0c8 70%,    /* aged paper */
+        #ddd5b8 100%);  /* shadow at bottom */
+    border-radius: 4px 4px 1px 1px;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+/* VU scale arc markings */
+.vu-scale {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.vu-mark {
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 6px;
+    font-weight: 700;
+    color: #333;
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(var(--angle)) translateY(-22px);
+}
+
+.vu-mark.vu-red {
+    color: #cc3333;
+}
+
+/* VU needle */
+.vu-needle {
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    width: 2px;
+    height: 28px;
+    background: linear-gradient(180deg,
+        #1a1a1a 0%,
+        #333 30%,
+        #222 100%);
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(-45deg);
+    transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 2;
+    border-radius: 1px 1px 0 0;
+}
+
+/* Needle tip (red) */
+.vu-needle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 3px;
+    height: 4px;
+    background: #cc3333;
+    border-radius: 1px;
+}
+
+/* Needle pivot point */
+.vu-needle::after {
+    content: '';
+    position: absolute;
+    bottom: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    background: radial-gradient(circle at 30% 30%, #444 0%, #222 60%, #111 100%);
+    border-radius: 50%;
+    border: 1px solid #555;
+    box-shadow:
+        inset 0 1px 2px rgba(255, 255, 255, 0.1),
+        0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* ============================================
+   CHANNEL FADER
+   ============================================ */
+
+.channel-fader {
+    position: relative;
+    width: 100%;
+    flex: 1;
+    min-height: 120px;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
+    padding: 8px 0;
+}
+
+/* Fader track background */
+.fader-track {
+    position: absolute;
+    width: 8px;
+    height: calc(100% - 16px);
+    background: linear-gradient(180deg,
+        #0a0a0a 0%,
+        #151515 30%,
+        #151515 70%,
+        #0a0a0a 100%);
+    border: 1px solid #444;
+    border-radius: 4px;
+    box-shadow:
+        inset 0 3px 6px rgba(0, 0, 0, 0.6),
+        inset 0 -1px 2px rgba(255, 255, 255, 0.03),
+        0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Track markings - dB scale lines */
+.fader-track::before {
+    content: '';
+    position: absolute;
+    top: 8%;
+    bottom: 8%;
+    left: 50%;
+    width: 2px;
+    background: repeating-linear-gradient(180deg,
+        #333 0px,
+        #333 2px,
+        transparent 2px,
+        transparent 10px);
+    transform: translateX(-50%);
+}
+
+/* Vertical fader input styling */
+/* The fader is rotated -90deg, so its CSS "width" becomes the visual height */
+/* We set width via CSS custom property --fader-length, defaulting to a reasonable size */
+.fader {
+    -webkit-appearance: none;
+    appearance: none;
+    /* This width becomes the vertical travel distance after rotation */
+    /* Default to 200px which works well for most mixer heights */
+    width: var(--fader-length, 200px);
+    height: 14px;
+    background: transparent;
+    cursor: pointer;
+    transform: rotate(-90deg);
+    transform-origin: center center;
+    position: absolute;
+    z-index: 2;
+}
+
+.fader::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 6px;
+    background: transparent;
+    border-radius: 3px;
+}
+
+.fader::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 28px;
+    height: 14px;
+    margin-top: -4px;
+    background: linear-gradient(90deg,
+        #2a2a2a 0%,
+        #4a4a4a 15%,
+        #5a5a5a 25%,
+        #4a4a4a 35%,
+        #3a3a3a 50%,
+        #4a4a4a 65%,
+        #5a5a5a 75%,
+        #4a4a4a 85%,
+        #2a2a2a 100%);
+    border: 1px solid #666;
+    border-top-color: #777;
+    border-bottom-color: #444;
+    border-radius: 3px;
+    cursor: grab;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.15),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+/* Fader cap line in center */
+.fader::-webkit-slider-thumb::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 2px;
+    background: #222;
+}
+
+.fader::-webkit-slider-thumb:hover {
+    background: linear-gradient(90deg,
+        #333 0%,
+        #555 15%,
+        #666 25%,
+        #555 35%,
+        #444 50%,
+        #555 65%,
+        #666 75%,
+        #555 85%,
+        #333 100%);
+    border-color: var(--looper-accent);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 0 8px var(--looper-accent-glow);
+}
+
+.fader::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    border-color: var(--looper-accent);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 0 12px var(--looper-accent-glow);
+}
+
+/* Firefox fader styling */
+.fader::-moz-range-track {
+    width: 100%;
+    height: 6px;
+    background: transparent;
+    border-radius: 3px;
+}
+
+.fader::-moz-range-thumb {
+    width: 28px;
+    height: 14px;
+    background: linear-gradient(90deg,
+        #2a2a2a 0%,
+        #4a4a4a 15%,
+        #5a5a5a 25%,
+        #4a4a4a 35%,
+        #3a3a3a 50%,
+        #4a4a4a 65%,
+        #5a5a5a 75%,
+        #4a4a4a 85%,
+        #2a2a2a 100%);
+    border: 1px solid #666;
+    border-radius: 3px;
+    cursor: grab;
+}
+
+/* ============================================
+   FADER SCALE (dB Markings)
+   ============================================ */
+
+.fader-scale {
+    position: absolute;
+    left: 4px;
+    top: 5px;
+    bottom: 5px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.fader-mark {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 6px;
+    font-weight: 600;
+    color: #666;
+    text-align: right;
+    line-height: 1;
+}
+
+.fader-mark-red {
+    color: #ff4444;
+}
+
+.fader-mark-yellow {
+    color: #ffcc00;
+}
+
+.fader-mark-green {
+    color: #66bb6a;
+}
+
+/* Track color zones (inside fader track) */
+.fader-zone {
+    position: absolute;
+    left: 0;
+    right: 0;
+    opacity: 0.15;
+}
+
+/* Zone positions based on 0-127 fader scale where 100=0dB, 127=+3dB */
+/* Red zone: +3dB to 0dB (top 21% = 27/127) */
+.fader-zone-red {
+    top: 0;
+    height: 21%;
+    background: linear-gradient(180deg, #ff4444 0%, transparent 100%);
+}
+
+/* Yellow zone: 0dB to -6dB (about 21% to 40%) */
+.fader-zone-yellow {
+    top: 21%;
+    height: 19%;
+    background: linear-gradient(180deg, #ffcc00 0%, transparent 100%);
+}
+
+/* Green zone: -6dB and below (40% to bottom) */
+.fader-zone-green {
+    top: 40%;
+    height: 60%;
+    background: linear-gradient(180deg, #66bb6a 0%, transparent 60%);
+}
+
+/* ============================================
+   CHANNEL COLOR CODING (Layer Colors)
+   ============================================ */
+
+/* Layer 1: Cyan */
+.mixer-channel[data-layer="1"] .channel-label { color: #4fc3f7; text-shadow: 0 0 6px rgba(79, 195, 247, 0.5); }
+.mixer-channel[data-layer="1"].has-content { border-color: #4fc3f7; }
+.mixer-channel[data-layer="1"] .vu-meter { border-color: #4fc3f7; }
+
+/* Layer 2: Deep Orange */
+.mixer-channel[data-layer="2"] .channel-label { color: #ff7043; text-shadow: 0 0 6px rgba(255, 112, 67, 0.5); }
+.mixer-channel[data-layer="2"].has-content { border-color: #ff7043; }
+.mixer-channel[data-layer="2"] .vu-meter { border-color: #ff7043; }
+
+/* Layer 3: Green */
+.mixer-channel[data-layer="3"] .channel-label { color: #66bb6a; text-shadow: 0 0 6px rgba(102, 187, 106, 0.5); }
+.mixer-channel[data-layer="3"].has-content { border-color: #66bb6a; }
+.mixer-channel[data-layer="3"] .vu-meter { border-color: #66bb6a; }
+
+/* Layer 4: Purple */
+.mixer-channel[data-layer="4"] .channel-label { color: #ab47bc; text-shadow: 0 0 6px rgba(171, 71, 188, 0.5); }
+.mixer-channel[data-layer="4"].has-content { border-color: #ab47bc; }
+.mixer-channel[data-layer="4"] .vu-meter { border-color: #ab47bc; }
+
+/* Layer 5: Orange */
+.mixer-channel[data-layer="5"] .channel-label { color: #ffa726; text-shadow: 0 0 6px rgba(255, 167, 38, 0.5); }
+.mixer-channel[data-layer="5"].has-content { border-color: #ffa726; }
+.mixer-channel[data-layer="5"] .vu-meter { border-color: #ffa726; }
+
+/* Layer 6: Teal */
+.mixer-channel[data-layer="6"] .channel-label { color: #26c6da; text-shadow: 0 0 6px rgba(38, 198, 218, 0.5); }
+.mixer-channel[data-layer="6"].has-content { border-color: #26c6da; }
+.mixer-channel[data-layer="6"] .vu-meter { border-color: #26c6da; }
+
+/* Layer 7: Pink */
+.mixer-channel[data-layer="7"] .channel-label { color: #ec407a; text-shadow: 0 0 6px rgba(236, 64, 122, 0.5); }
+.mixer-channel[data-layer="7"].has-content { border-color: #ec407a; }
+.mixer-channel[data-layer="7"] .vu-meter { border-color: #ec407a; }
+
+/* Layer 8: Light Green */
+.mixer-channel[data-layer="8"] .channel-label { color: #9ccc65; text-shadow: 0 0 6px rgba(156, 204, 101, 0.5); }
+.mixer-channel[data-layer="8"].has-content { border-color: #9ccc65; }
+.mixer-channel[data-layer="8"] .vu-meter { border-color: #9ccc65; }
+
+/* ============================================
+   PAN KNOB (Mini)
+   ============================================ */
+
+.channel-pan {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.pan-knob {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2a2a2a 0%, #1a1a1a 100%);
+    border: 1px solid #444;
+    position: relative;
+    cursor: pointer;
+    box-shadow:
+        inset 0 1px 2px rgba(255, 255, 255, 0.05),
+        0 2px 4px rgba(0, 0, 0, 0.3);
+    transition: all 0.15s ease;
+}
+
+.pan-knob:hover {
+    border-color: var(--looper-accent);
+}
+
+.pan-indicator {
+    position: absolute;
+    top: 3px;
+    left: 50%;
+    width: 2px;
+    height: 6px;
+    background: var(--looper-accent);
+    border-radius: 1px;
+    transform-origin: bottom center;
+    transform: translateX(-50%) rotate(0deg);
+    box-shadow: 0 0 4px var(--looper-accent-glow);
+}
+
+/* ============================================
+   MUTE/SOLO BUTTONS
+   ============================================ */
+
+.channel-buttons {
+    display: flex;
+    gap: 3px;
+}
+
+.channel-mute,
+.channel-solo {
+    width: 18px;
+    height: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    border: 1px solid #333;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.channel-mute {
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    color: #666;
+}
+
+.channel-mute:hover {
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+.channel-mute.active {
+    background: linear-gradient(180deg, #662222 0%, #441111 100%);
+    border-color: #ff4444;
+    color: #ff4444;
+    box-shadow: 0 0 6px rgba(255, 68, 68, 0.3);
+}
+
+.channel-solo {
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    color: #666;
+}
+
+.channel-solo:hover {
+    border-color: #ffcc00;
+    color: #ffcc00;
+}
+
+.channel-solo.active {
+    background: linear-gradient(180deg, #665500 0%, #443300 100%);
+    border-color: #ffcc00;
+    color: #ffcc00;
+    box-shadow: 0 0 6px rgba(255, 204, 0, 0.3);
 }

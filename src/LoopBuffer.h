@@ -767,8 +767,8 @@ public:
     void setMuted(bool muted) { isMuted.store(muted); }
     bool getMuted() const { return isMuted.load(); }
 
-    // Per-layer volume (0.0 to 1.0)
-    void setVolume(float vol) { volume.store(std::clamp(vol, 0.0f, 1.0f)); }
+    // Per-layer volume (0.0 to ~1.41 for +3dB boost)
+    void setVolume(float vol) { volume.store(std::clamp(vol, 0.0f, 2.0f)); }
     float getVolume() const { return volume.load(); }
 
     // Per-layer pan (-1.0 = full left, 0.0 = center, 1.0 = full right)

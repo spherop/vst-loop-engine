@@ -179,6 +179,16 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           complete(0.0f);
                       }
                   })
+                  .withNativeFunction("getLayerLevels", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      auto levels = processorRef.getLoopEngine().getLayerLevels();
+                      juce::Array<juce::var> result;
+                      for (float level : levels)
+                      {
+                          result.add(level);
+                      }
+                      complete(result);
+                  })
                   .withNativeFunction("setLoopLengthBars", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)

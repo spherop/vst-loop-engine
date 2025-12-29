@@ -750,19 +750,35 @@ public:
 
             layers[i].processBlock(layerBuffer);
 
-            // Check per-layer peak levels for diagnostic metering
+            // Check per-layer peak levels for diagnostic metering and VU meters
             int layerClips = 0;
+            float layerPeak = 0.0f;
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 const float* data = layerBuffer.getReadPointer(ch);
                 for (int s = 0; s < numSamples; ++s)
                 {
-                    if (std::abs(data[s]) > 1.0f)
+                    float absVal = std::abs(data[s]);
+                    if (absVal > layerPeak)
+                        layerPeak = absVal;
+                    if (absVal > 1.0f)
                         layerClips++;
                 }
             }
             if (layerClips > 0)
                 layerClipCounts[i].fetch_add(layerClips);
+
+            // Update layer peak level with decay (for VU meter smoothing)
+            // This is called once per audio block, not per sample
+            // At 44.1kHz with 512 sample blocks, we get ~86 blocks/sec
+            // Decay of 0.9 per block = ~300ms time constant (reaches 10% after ~20 blocks)
+            float currentPeak = layerPeakLevels[i].load();
+            if (layerPeak > currentPeak) {
+                layerPeakLevels[i].store(layerPeak);  // Attack: immediate
+            } else {
+                // Decay per block: 0.9 = fast meter response, 0.95 = slower/smoother
+                layerPeakLevels[i].store(currentPeak * 0.92f);
+            }
 
             // Mix into main output (loop + input combined)
             for (int ch = 0; ch < numChannels; ++ch)
@@ -1352,6 +1368,16 @@ public:
             layerClipCounts[i].store(0);
     }
 
+    // Get per-layer peak levels for VU meters
+    std::vector<float> getLayerLevels() const {
+        std::vector<float> levels;
+        levels.reserve(NUM_LAYERS);
+        for (int i = 0; i < NUM_LAYERS; ++i) {
+            levels.push_back(layerPeakLevels[i].load());
+        }
+        return levels;
+    }
+
     // Set crossfade parameters from UI (LP filter + volume ducking)
     void setCrossfadeParams(int preTimeMs, int postTimeMs, float volDepth, float filterFreq, float filterDepth,
                             float smearAmount = 0.0f, float smearAttack = 0.1f, float smearLength = 1.0f)
@@ -1481,6 +1507,7 @@ private:
     std::atomic<float> loopOutputPeakR { 0.0f };
     std::atomic<int> clipEventCount { 0 };       // Number of samples that exceeded 1.0
     std::atomic<int> layerClipCounts[NUM_LAYERS] { {0}, {0}, {0}, {0}, {0}, {0}, {0}, {0} };  // Per-layer clip counts
+    std::atomic<float> layerPeakLevels[NUM_LAYERS] { {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f}, {0.0f} };  // Per-layer peak levels for VU meters
 
     // Pre-allocated buffers to avoid allocation in processBlock
     juce::AudioBuffer<float> inputBuffer;
