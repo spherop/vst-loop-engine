@@ -64,6 +64,16 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(satFuzzGateRelay)
                   .withOptionsFrom(satFuzzOctaveRelay)
                   .withOptionsFrom(satFuzzToneRelay)
+                  .withOptionsFrom(subBassFreqRelay)
+                  .withOptionsFrom(subBassAmountRelay)
+                  .withOptionsFrom(reverbSizeRelay)
+                  .withOptionsFrom(reverbDecayRelay)
+                  .withOptionsFrom(reverbDampRelay)
+                  .withOptionsFrom(reverbMixRelay)
+                  .withOptionsFrom(reverbWidthRelay)
+                  .withOptionsFrom(reverbPreDelayRelay)
+                  .withOptionsFrom(reverbModRateRelay)
+                  .withOptionsFrom(reverbModDepthRelay)
                   .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().record();
@@ -466,6 +476,66 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("lpQ", degrade.getCurrentLPQ());
                       complete(juce::var(result.get()));
                   })
+                  // =========== TEXTURE/GRANULAR NATIVE FUNCTIONS ===========
+                  .withNativeFunction("setTextureEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getDegradeProcessor().setTextureEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setTextureFrozen", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getDegradeProcessor().setTextureFrozen(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setTexturePosition", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getDegradeProcessor().setTexturePosition(static_cast<float>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("getTextureState", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      auto& degrade = processorRef.getDegradeProcessor();
+                      result->setProperty("enabled", degrade.getTextureEnabled());
+                      result->setProperty("frozen", degrade.isTextureFrozen());
+                      complete(juce::var(result.get()));
+                  })
+                  // =========== SUB BASS NATIVE FUNCTIONS ===========
+                  .withNativeFunction("setSubBassEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setSubBassEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("getSubBassState", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("enabled", processorRef.getSubBassEnabled());
+                      complete(juce::var(result.get()));
+                  })
+                  // =========== REVERB NATIVE FUNCTIONS ===========
+                  .withNativeFunction("setReverbEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setReverbEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setReverbType", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setReverbType(static_cast<int>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("getReverbState", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("enabled", processorRef.getReverbEnabled());
+                      result->setProperty("type", processorRef.getReverbType());
+                      complete(juce::var(result.get()));
+                  })
                   // =========== SATURATION NATIVE FUNCTIONS ===========
                   .withNativeFunction("setSaturationEnabled", [this](const juce::Array<juce::var>& args, auto complete)
                   {
@@ -763,7 +833,37 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                               processorRef.getAPVTS().undoManager),
       satFuzzToneAttachment(*processorRef.getAPVTS().getParameter("satFuzzTone"),
                             satFuzzToneRelay,
-                            processorRef.getAPVTS().undoManager)
+                            processorRef.getAPVTS().undoManager),
+      subBassFreqAttachment(*processorRef.getAPVTS().getParameter("subBassFreq"),
+                            subBassFreqRelay,
+                            processorRef.getAPVTS().undoManager),
+      subBassAmountAttachment(*processorRef.getAPVTS().getParameter("subBassAmount"),
+                              subBassAmountRelay,
+                              processorRef.getAPVTS().undoManager),
+      reverbSizeAttachment(*processorRef.getAPVTS().getParameter("reverbSize"),
+                           reverbSizeRelay,
+                           processorRef.getAPVTS().undoManager),
+      reverbDecayAttachment(*processorRef.getAPVTS().getParameter("reverbDecay"),
+                            reverbDecayRelay,
+                            processorRef.getAPVTS().undoManager),
+      reverbDampAttachment(*processorRef.getAPVTS().getParameter("reverbDamp"),
+                           reverbDampRelay,
+                           processorRef.getAPVTS().undoManager),
+      reverbMixAttachment(*processorRef.getAPVTS().getParameter("reverbMix"),
+                          reverbMixRelay,
+                          processorRef.getAPVTS().undoManager),
+      reverbWidthAttachment(*processorRef.getAPVTS().getParameter("reverbWidth"),
+                            reverbWidthRelay,
+                            processorRef.getAPVTS().undoManager),
+      reverbPreDelayAttachment(*processorRef.getAPVTS().getParameter("reverbPreDelay"),
+                               reverbPreDelayRelay,
+                               processorRef.getAPVTS().undoManager),
+      reverbModRateAttachment(*processorRef.getAPVTS().getParameter("reverbModRate"),
+                              reverbModRateRelay,
+                              processorRef.getAPVTS().undoManager),
+      reverbModDepthAttachment(*processorRef.getAPVTS().getParameter("reverbModDepth"),
+                               reverbModDepthRelay,
+                               processorRef.getAPVTS().undoManager)
 {
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

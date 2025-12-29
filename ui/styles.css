@@ -14,10 +14,20 @@
     --delay-accent-dim: #cc5429;
     --delay-accent-glow: rgba(255, 107, 53, 0.4);
 
-    /* Degrade colors (green) */
-    --degrade-accent: #66bb6a;
-    --degrade-accent-dim: #558b4b;
-    --degrade-accent-glow: rgba(102, 187, 106, 0.4);
+    /* Lofi colors (green) */
+    --lofi-accent: #66bb6a;
+    --lofi-accent-dim: #558b4b;
+    --lofi-accent-glow: rgba(102, 187, 106, 0.4);
+
+    /* Granular colors (purple/violet) */
+    --granular-accent: #ab47bc;
+    --granular-accent-dim: #8e24aa;
+    --granular-accent-glow: rgba(171, 71, 188, 0.4);
+
+    /* Reverb colors (cyan/teal) */
+    --reverb-accent: #26c6da;
+    --reverb-accent-dim: #00acc1;
+    --reverb-accent-glow: rgba(38, 198, 218, 0.4);
 }
 
 * {
@@ -349,16 +359,16 @@ html, body {
 }
 
 /* Degrade tab uses green accent */
-.tab[data-tab="degrade"].active {
-    border-color: var(--degrade-accent);
-    color: var(--degrade-accent);
-    box-shadow: 0 0 8px var(--degrade-accent-glow);
+.tab[data-tab="lofi"].active {
+    border-color: var(--lofi-accent);
+    color: var(--lofi-accent);
+    box-shadow: 0 0 8px var(--lofi-accent-glow);
 }
 
-.tab[data-tab="degrade"] .tab-led.active {
-    background: var(--degrade-accent);
-    border-color: var(--degrade-accent);
-    box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 0 8px var(--degrade-accent-glow);
+.tab[data-tab="lofi"] .tab-led.active {
+    background: var(--lofi-accent);
+    border-color: var(--lofi-accent);
+    box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 0 8px var(--lofi-accent-glow);
 }
 
 .tab-label {
@@ -2033,22 +2043,22 @@ html, body {
 }
 
 /* Degrade section LED uses green */
-.degrade-led.active {
-    background: var(--degrade-accent);
-    border-color: var(--degrade-accent);
+.lofi-led.active {
+    background: var(--lofi-accent);
+    border-color: var(--lofi-accent);
     box-shadow:
         inset 0 1px 2px rgba(255,255,255,0.3),
-        0 0 8px var(--degrade-accent-glow);
+        0 0 8px var(--lofi-accent-glow);
 }
 
 /* Disabled section styling */
-.degrade-section.disabled {
+.lofi-section.disabled {
     opacity: 0.5;
     pointer-events: none;
 }
 
-.degrade-section.disabled .knob,
-.degrade-section.disabled .subdiv-select {
+.lofi-section.disabled .knob,
+.lofi-section.disabled .subdiv-select {
     pointer-events: none;
 }
 
@@ -2097,14 +2107,14 @@ html, body {
 }
 
 .filter-toggle-btn.active {
-    background: linear-gradient(180deg, var(--degrade-accent-dim) 0%, #3a7a3a 100%);
-    border-color: var(--degrade-accent);
+    background: linear-gradient(180deg, var(--lofi-accent-dim) 0%, #3a7a3a 100%);
+    border-color: var(--lofi-accent);
     color: #0a0a0a;
-    box-shadow: 0 0 8px var(--degrade-accent-glow);
+    box-shadow: 0 0 8px var(--lofi-accent-glow);
 }
 
 .filter-toggle-btn.active:hover {
-    background: linear-gradient(180deg, var(--degrade-accent) 0%, var(--degrade-accent-dim) 100%);
+    background: linear-gradient(180deg, var(--lofi-accent) 0%, var(--lofi-accent-dim) 100%);
 }
 
 .filter-group.disabled .knob {
@@ -2125,18 +2135,18 @@ html, body {
 }
 
 /* Degrade knobs use green accent */
-.degrade-knob:hover {
+.lofi-knob:hover {
     box-shadow:
         inset 0 2px 4px rgba(255, 255, 255, 0.05),
         inset 0 -2px 4px rgba(0, 0, 0, 0.4),
         0 4px 8px rgba(0, 0, 0, 0.5),
         0 0 0 2px #1a1a1a,
-        0 0 0 4px var(--degrade-accent);
+        0 0 0 4px var(--lofi-accent);
 }
 
-.degrade-knob .knob-indicator {
-    background: linear-gradient(180deg, var(--degrade-accent) 0%, #81d4fa 50%, var(--degrade-accent) 100%);
-    box-shadow: 0 0 6px var(--degrade-accent), 0 0 12px var(--degrade-accent-glow);
+.lofi-knob .knob-indicator {
+    background: linear-gradient(180deg, var(--lofi-accent) 0%, #81d4fa 50%, var(--lofi-accent) 100%);
+    box-shadow: 0 0 6px var(--lofi-accent), 0 0 12px var(--lofi-accent-glow);
 }
 
 /* Reshuffle button - matches knob-small dimensions */
@@ -2171,7 +2181,7 @@ html, body {
         inset 0 -2px 4px rgba(0, 0, 0, 0.4),
         0 4px 8px rgba(0, 0, 0, 0.5),
         0 0 0 2px #1a1a1a,
-        0 0 0 4px var(--degrade-accent);
+        0 0 0 4px var(--lofi-accent);
 }
 
 .reshuffle-btn:active {
@@ -2180,14 +2190,14 @@ html, body {
         inset 0 2px 8px rgba(0, 0, 0, 0.5),
         0 2px 4px rgba(0, 0, 0, 0.5),
         0 0 0 2px #1a1a1a,
-        0 0 0 4px var(--degrade-accent),
-        0 0 15px var(--degrade-accent-glow);
+        0 0 0 4px var(--lofi-accent),
+        0 0 15px var(--lofi-accent-glow);
 }
 
 .reshuffle-icon {
     font-size: 18px;
-    color: var(--degrade-accent);
-    text-shadow: 0 0 6px var(--degrade-accent-glow);
+    color: var(--lofi-accent);
+    text-shadow: 0 0 6px var(--lofi-accent-glow);
     transition: transform 0.3s ease;
 }
 
@@ -2220,14 +2230,14 @@ html, body {
 }
 
 .texture-freeze-btn:hover {
-    border-color: var(--degrade-accent);
+    border-color: var(--lofi-accent);
     background: #222;
 }
 
 .texture-freeze-btn.active {
-    background: var(--degrade-accent);
-    border-color: var(--degrade-accent);
-    box-shadow: 0 0 10px var(--degrade-accent-glow);
+    background: var(--lofi-accent);
+    border-color: var(--lofi-accent);
+    box-shadow: 0 0 10px var(--lofi-accent-glow);
 }
 
 .texture-freeze-btn .freeze-icon {
@@ -2237,7 +2247,7 @@ html, body {
 }
 
 .texture-freeze-btn:hover .freeze-icon {
-    color: var(--degrade-accent);
+    color: var(--lofi-accent);
 }
 
 .texture-freeze-btn.active .freeze-icon {
@@ -2245,12 +2255,12 @@ html, body {
     text-shadow: none;
 }
 
-.degrade-section {
+.lofi-section {
     transition: border-color 0.2s ease;
 }
 
-.degrade-section:hover {
-    border-color: var(--degrade-accent-dim);
+.lofi-section:hover {
+    border-color: var(--lofi-accent-dim);
 }
 
 /* Subdivision selector (green variant) */
@@ -2258,7 +2268,7 @@ html, body {
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     font-weight: 500;
-    color: var(--degrade-accent);
+    color: var(--lofi-accent);
     background: #0a0a0a;
     border: 1px solid #333;
     border-radius: 4px;
@@ -2275,13 +2285,13 @@ html, body {
 }
 
 .subdiv-select:hover {
-    border-color: var(--degrade-accent);
+    border-color: var(--lofi-accent);
 }
 
 .subdiv-select:focus {
     outline: none;
-    border-color: var(--degrade-accent);
-    box-shadow: 0 0 8px var(--degrade-accent-glow);
+    border-color: var(--lofi-accent);
+    box-shadow: 0 0 8px var(--lofi-accent-glow);
 }
 
 .subdiv-select option {
@@ -2294,7 +2304,7 @@ html, body {
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
     font-weight: 500;
-    color: var(--degrade-accent);
+    color: var(--lofi-accent);
     background: #0a0a0a;
     border: 1px solid #333;
     border-radius: 3px;
@@ -2311,13 +2321,13 @@ html, body {
 }
 
 .subdiv-select-sm:hover {
-    border-color: var(--degrade-accent);
+    border-color: var(--lofi-accent);
 }
 
 .subdiv-select-sm:focus {
     outline: none;
-    border-color: var(--degrade-accent);
-    box-shadow: 0 0 6px var(--degrade-accent-glow);
+    border-color: var(--lofi-accent);
+    box-shadow: 0 0 6px var(--lofi-accent-glow);
 }
 
 .subdiv-select-sm option {
@@ -2347,10 +2357,10 @@ html, body {
 }
 
 .filter-toggle-btn-sm.active {
-    background: linear-gradient(180deg, var(--degrade-accent-dim) 0%, #3a7a3a 100%);
-    border-color: var(--degrade-accent);
+    background: linear-gradient(180deg, var(--lofi-accent-dim) 0%, #3a7a3a 100%);
+    border-color: var(--lofi-accent);
     color: #0a0a0a;
-    box-shadow: 0 0 6px var(--degrade-accent-glow);
+    box-shadow: 0 0 6px var(--lofi-accent-glow);
 }
 
 /* Filter label toggle (clickable HP/LP labels) */
@@ -2362,8 +2372,8 @@ html, body {
 }
 
 .filter-label.active {
-    color: var(--degrade-accent);
-    text-shadow: 0 0 6px var(--degrade-accent-glow);
+    color: var(--lofi-accent);
+    text-shadow: 0 0 6px var(--lofi-accent-glow);
 }
 
 .filter-label:not(.active) {
@@ -2387,16 +2397,16 @@ html, body {
     transition: all 0.15s ease;
 }
 
-.section-led-sm.degrade-led.active {
-    background: var(--degrade-accent);
-    border-color: var(--degrade-accent);
+.section-led-sm.lofi-led.active {
+    background: var(--lofi-accent);
+    border-color: var(--lofi-accent);
     box-shadow:
         inset 0 1px 2px rgba(255,255,255,0.3),
-        0 0 6px var(--degrade-accent-glow);
+        0 0 6px var(--lofi-accent-glow);
 }
 
-/* Compact degrade section divider */
-.degrade-divider {
+/* Compact lofi section divider */
+.lofi-divider {
     width: 1px;
     height: 60px;
     background: linear-gradient(180deg, transparent 0%, #333 20%, #333 80%, transparent 100%);
@@ -2968,14 +2978,14 @@ html, body {
 }
 
 .micro-transport-btn:hover {
-    border-color: var(--degrade-accent);
+    border-color: var(--lofi-accent);
     background: #222;
 }
 
 .micro-transport-btn.active {
-    background: var(--degrade-accent);
-    border-color: var(--degrade-accent);
-    box-shadow: 0 0 8px var(--degrade-accent-glow);
+    background: var(--lofi-accent);
+    border-color: var(--lofi-accent);
+    box-shadow: 0 0 8px var(--lofi-accent-glow);
 }
 
 .micro-icon {
@@ -2986,7 +2996,7 @@ html, body {
 }
 
 .micro-transport-btn:hover .micro-icon {
-    color: var(--degrade-accent);
+    color: var(--lofi-accent);
 }
 
 .micro-transport-btn.active .micro-icon {
@@ -3070,15 +3080,15 @@ html, body {
 }
 
 .micro-mode-btn:hover {
-    border-color: var(--degrade-accent);
-    color: var(--degrade-accent);
+    border-color: var(--lofi-accent);
+    color: var(--lofi-accent);
 }
 
 .micro-mode-btn.active {
-    background: linear-gradient(180deg, var(--degrade-accent) 0%, var(--degrade-accent-dim) 100%);
-    border-color: var(--degrade-accent);
+    background: linear-gradient(180deg, var(--lofi-accent) 0%, var(--lofi-accent-dim) 100%);
+    border-color: var(--lofi-accent);
     color: #0a0a0a;
-    box-shadow: 0 0 8px var(--degrade-accent-glow);
+    box-shadow: 0 0 8px var(--lofi-accent-glow);
 }
 
 /* Reverse toggle button */
@@ -3095,12 +3105,12 @@ html, body {
 }
 
 .micro-reverse-btn:hover {
-    border-color: var(--degrade-accent);
+    border-color: var(--lofi-accent);
 }
 
 .micro-reverse-btn.active {
     background: rgba(102, 187, 106, 0.15);
-    border-color: var(--degrade-accent);
+    border-color: var(--lofi-accent);
 }
 
 .micro-reverse-btn .reverse-icon {
@@ -3120,13 +3130,13 @@ html, body {
 
 .micro-reverse-btn:hover .reverse-icon,
 .micro-reverse-btn:hover .reverse-label {
-    color: var(--degrade-accent);
+    color: var(--lofi-accent);
 }
 
 .micro-reverse-btn.active .reverse-icon,
 .micro-reverse-btn.active .reverse-label {
-    color: var(--degrade-accent);
-    text-shadow: 0 0 6px var(--degrade-accent-glow);
+    color: var(--lofi-accent);
+    text-shadow: 0 0 6px var(--lofi-accent-glow);
 }
 
 /* ============================================
@@ -3154,8 +3164,8 @@ html, body {
     top: 0;
     bottom: 0;
     width: 2px;
-    background: var(--degrade-accent);
-    box-shadow: 0 0 6px var(--degrade-accent-glow);
+    background: var(--lofi-accent);
+    box-shadow: 0 0 6px var(--lofi-accent-glow);
     left: 0;
     pointer-events: none;
     transition: left 0.03s linear;
@@ -3189,7 +3199,7 @@ html, body {
 }
 
 .micro-mode-desc.active {
-    color: var(--degrade-accent);
+    color: var(--lofi-accent);
 }
 
 /* ============================================
@@ -3320,8 +3330,8 @@ html, body {
     color: var(--saturation-accent);
 }
 
-.degrade-card .pedal-expand-btn:hover {
-    color: var(--degrade-accent);
+.lofi-card .pedal-expand-btn:hover {
+    color: var(--lofi-accent);
 }
 
 .delay-card .pedal-expand-btn:hover {
@@ -3409,14 +3419,14 @@ html, body {
         0 0 0 3px var(--saturation-accent);
 }
 
-.degrade-card .knob-micro:hover,
-.knob-micro.degrade-knob:hover {
+.lofi-card .knob-micro:hover,
+.knob-micro.lofi-knob:hover {
     box-shadow:
         inset 0 1px 2px rgba(255, 255, 255, 0.05),
         inset 0 -1px 2px rgba(0, 0, 0, 0.4),
         0 2px 4px rgba(0, 0, 0, 0.5),
         0 0 0 1px #1a1a1a,
-        0 0 0 3px var(--degrade-accent);
+        0 0 0 3px var(--lofi-accent);
 }
 
 .delay-card .knob-micro:hover,
@@ -3436,10 +3446,10 @@ html, body {
     box-shadow: 0 0 4px var(--saturation-accent-glow);
 }
 
-.degrade-card .knob-micro .knob-dot,
-.knob-micro.degrade-knob .knob-dot {
-    background: var(--degrade-accent);
-    box-shadow: 0 0 4px var(--degrade-accent-glow);
+.lofi-card .knob-micro .knob-dot,
+.knob-micro.lofi-knob .knob-dot {
+    background: var(--lofi-accent);
+    box-shadow: 0 0 4px var(--lofi-accent-glow);
 }
 
 .delay-card .knob-micro .knob-dot,
@@ -3453,12 +3463,210 @@ html, body {
     border-color: var(--saturation-accent);
 }
 
-.degrade-card:hover {
-    border-color: var(--degrade-accent);
+.lofi-card:hover {
+    border-color: var(--lofi-accent);
 }
 
 .delay-card:hover {
     border-color: #ff6b35;
+}
+
+.granular-card:hover {
+    border-color: var(--granular-accent);
+}
+
+/* ============================================
+   GRANULAR EFFECT STYLING
+   ============================================ */
+
+/* Granular LED */
+.granular-led.active {
+    background: var(--granular-accent);
+    border-color: var(--granular-accent);
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,0.3),
+        0 0 8px var(--granular-accent-glow);
+}
+
+/* Granular knob hover */
+.granular-knob:hover {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 8px rgba(0, 0, 0, 0.5),
+        0 0 0 2px #1a1a1a,
+        0 0 0 4px var(--granular-accent);
+}
+
+/* Granular knob dot */
+.granular-knob .knob-dot,
+.knob-micro.granular-knob .knob-dot {
+    background: var(--granular-accent);
+    box-shadow: 0 0 4px var(--granular-accent-glow);
+}
+
+/* Granular card micro knobs */
+.granular-card .knob-micro:hover,
+.knob-micro.granular-knob:hover {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 8px rgba(0, 0, 0, 0.5),
+        0 0 0 2px #1a1a1a,
+        0 0 0 3px var(--granular-accent);
+}
+
+.granular-card .knob-micro .knob-dot {
+    background: var(--granular-accent);
+    box-shadow: 0 0 4px var(--granular-accent-glow);
+}
+
+/* Granular expand button */
+.granular-card .pedal-expand-btn:hover {
+    color: var(--granular-accent);
+}
+
+/* Granular freeze button */
+.granular-freeze-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+    border: 1px solid #333;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.granular-freeze-btn:hover {
+    border-color: var(--granular-accent);
+    color: var(--granular-accent);
+}
+
+.granular-freeze-btn.active {
+    background: linear-gradient(180deg, var(--granular-accent) 0%, var(--granular-accent-dim) 100%);
+    border-color: var(--granular-accent);
+    color: white;
+    box-shadow: 0 0 8px var(--granular-accent-glow);
+}
+
+.granular-freeze-btn .freeze-icon {
+    font-size: 14px;
+}
+
+/* Granular position slider */
+.granular-position-slider {
+    width: 100%;
+    height: 24px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%);
+    border-radius: 4px;
+    border: 1px solid #333;
+    outline: none;
+    cursor: pointer;
+}
+
+.granular-position-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 20px;
+    background: linear-gradient(180deg, var(--granular-accent) 0%, var(--granular-accent-dim) 100%);
+    border-radius: 2px;
+    border: 1px solid var(--granular-accent);
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--granular-accent-glow);
+}
+
+.granular-position-slider::-webkit-slider-thumb:hover {
+    box-shadow: 0 0 10px var(--granular-accent-glow);
+}
+
+/* ============================================
+   REVERB EFFECT STYLING
+   ============================================ */
+
+/* Reverb card hover */
+.reverb-card:hover {
+    border-color: var(--reverb-accent);
+}
+
+/* Reverb LED */
+.reverb-led.active {
+    background: var(--reverb-accent);
+    border-color: var(--reverb-accent);
+    box-shadow:
+        inset 0 1px 2px rgba(255,255,255,0.3),
+        0 0 8px var(--reverb-accent-glow);
+}
+
+/* Reverb knob hover */
+.reverb-knob:hover {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 8px rgba(0, 0, 0, 0.5),
+        0 0 0 2px #1a1a1a,
+        0 0 0 4px var(--reverb-accent);
+}
+
+/* Reverb knob dot */
+.reverb-knob .knob-dot,
+.knob-micro.reverb-knob .knob-dot {
+    background: var(--reverb-accent);
+    box-shadow: 0 0 4px var(--reverb-accent-glow);
+}
+
+/* Reverb card micro knobs */
+.reverb-card .knob-micro:hover,
+.knob-micro.reverb-knob:hover {
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.05),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.4),
+        0 4px 8px rgba(0, 0, 0, 0.5),
+        0 0 0 2px #1a1a1a,
+        0 0 0 3px var(--reverb-accent);
+}
+
+.reverb-card .knob-micro .knob-dot {
+    background: var(--reverb-accent);
+    box-shadow: 0 0 4px var(--reverb-accent-glow);
+}
+
+/* Reverb expand button */
+.reverb-card .pedal-expand-btn:hover {
+    color: var(--reverb-accent);
+}
+
+/* Reverb type selector buttons */
+.reverb-type-btn {
+    padding: 4px 10px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+    border: 1px solid #333;
+    border-radius: 3px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.reverb-type-btn:hover {
+    border-color: var(--reverb-accent);
+    color: var(--reverb-accent);
+}
+
+.reverb-type-btn.active {
+    background: linear-gradient(180deg, var(--reverb-accent) 0%, var(--reverb-accent-dim) 100%);
+    border-color: var(--reverb-accent);
+    color: white;
+    box-shadow: 0 0 8px var(--reverb-accent-glow);
 }
 
 /* ============================================

@@ -397,7 +397,7 @@ class TabController {
         this.tabs = document.querySelectorAll('.tab');
         this.contents = document.querySelectorAll('.tab-content');
         this.currentTab = 'looper';
-        // Note: Delay and Degrade LED toggles are handled by EffectsRackController
+        // Note: Delay and Lofi LED toggles are handled by EffectsRackController
         this.setupEvents();
     }
 
@@ -2499,28 +2499,28 @@ class MicroLooperController {
     }
 }
 
-// Degrade section controller with LEDs and filter visualization
-class DegradeController {
+// Lofi section controller with LEDs and filter visualization
+class LofiController {
     constructor() {
-        // Master LED for entire degrade section
-        this.masterLed = document.getElementById('degrade-master-led');
-        console.log('[DEGRADE] Master LED element:', this.masterLed);
+        // Master LED for entire lofi section
+        this.masterLed = document.getElementById('lofi-master-led');
+        console.log('[LOFI] Master LED element:', this.masterLed);
 
         // Section LEDs
         this.lofiLed = document.getElementById('lofi-led');
         this.microLoopLed = document.getElementById('microloop-led');
         this.filterLed = document.getElementById('filter-led');
-        console.log('[DEGRADE] Lofi LED:', this.lofiLed, 'MicroLoop LED:', this.microLoopLed, 'Filter LED:', this.filterLed);
+        console.log('[LOFI] Lofi LED:', this.lofiLed, 'MicroLoop LED:', this.microLoopLed, 'Filter LED:', this.filterLed);
 
         // Individual filter toggle labels (now using labels instead of buttons)
         this.hpToggleLabel = document.getElementById('hp-toggle-label');
         this.lpToggleLabel = document.getElementById('lp-toggle-label');
         this.hpGroup = document.getElementById('hp-group');
         this.lpGroup = document.getElementById('lp-group');
-        console.log('[DEGRADE] HP label:', this.hpToggleLabel, 'LP label:', this.lpToggleLabel);
+        console.log('[LOFI] HP label:', this.hpToggleLabel, 'LP label:', this.lpToggleLabel);
 
-        // Degrade section container (for dimming when master disabled)
-        this.degradeSection = document.querySelector('.degrade-section');
+        // Lofi section container (for dimming when master disabled)
+        this.lofiSection = document.querySelector('.lofi-section');
 
         // Filter visualization canvas
         this.filterCanvas = document.getElementById('filter-viz-canvas');
@@ -2559,7 +2559,7 @@ class DegradeController {
         this.setupEvents();
         this.fetchInitialState();
         this.startPolling();
-        console.log('[DEGRADE] Controller initialized');
+        console.log('[LOFI] Controller initialized');
     }
 
     setupCanvas() {
@@ -2627,7 +2627,7 @@ class DegradeController {
                 this.updateUI();
             }
         } catch (e) {
-            console.log('Could not fetch initial degrade state');
+            console.log('Could not fetch initial lofi state');
         }
     }
 
@@ -2636,7 +2636,7 @@ class DegradeController {
         this.updateUI();
         try {
             await this.setFilterEnabledFn(this.filterEnabled);
-            console.log(`[DEGRADE] Filter section ${this.filterEnabled ? 'enabled' : 'disabled'}`);
+            console.log(`[LOFI] Filter section ${this.filterEnabled ? 'enabled' : 'disabled'}`);
         } catch (e) {
             console.error('Error toggling filter section:', e);
             this.filterEnabled = !this.filterEnabled;
@@ -2649,9 +2649,9 @@ class DegradeController {
         this.updateUI();
         try {
             await this.setMasterEnabledFn(this.masterEnabled);
-            console.log(`[DEGRADE] Master ${this.masterEnabled ? 'enabled' : 'disabled'}`);
+            console.log(`[LOFI] Master ${this.masterEnabled ? 'enabled' : 'disabled'}`);
         } catch (e) {
-            console.error('Error toggling degrade master:', e);
+            console.error('Error toggling lofi master:', e);
             this.masterEnabled = !this.masterEnabled;
             this.updateUI();
         }
@@ -2662,7 +2662,7 @@ class DegradeController {
         this.updateFilterToggles();
         try {
             await this.setHPEnabledFn(this.hpEnabled);
-            console.log(`[DEGRADE] HP filter ${this.hpEnabled ? 'enabled' : 'disabled'}`);
+            console.log(`[LOFI] HP filter ${this.hpEnabled ? 'enabled' : 'disabled'}`);
         } catch (e) {
             console.error('Error toggling HP filter:', e);
             this.hpEnabled = !this.hpEnabled;
@@ -2675,7 +2675,7 @@ class DegradeController {
         this.updateFilterToggles();
         try {
             await this.setLPEnabledFn(this.lpEnabled);
-            console.log(`[DEGRADE] LP filter ${this.lpEnabled ? 'enabled' : 'disabled'}`);
+            console.log(`[LOFI] LP filter ${this.lpEnabled ? 'enabled' : 'disabled'}`);
         } catch (e) {
             console.error('Error toggling LP filter:', e);
             this.lpEnabled = !this.lpEnabled;
@@ -2706,7 +2706,7 @@ class DegradeController {
         this.updateUI();
         try {
             await this.setLofiEnabledFn(this.lofiEnabled);
-            console.log(`[DEGRADE] Lo-Fi ${this.lofiEnabled ? 'enabled' : 'disabled'}`);
+            console.log(`[LOFI] Lo-Fi ${this.lofiEnabled ? 'enabled' : 'disabled'}`);
         } catch (e) {
             console.error('Error toggling lo-fi:', e);
             this.lofiEnabled = !this.lofiEnabled;
@@ -2719,7 +2719,7 @@ class DegradeController {
         this.updateUI();
         try {
             await this.setMicroLoopEnabledFn(this.microLoopEnabled);
-            console.log(`[DEGRADE] MicroLoop ${this.microLoopEnabled ? 'enabled' : 'disabled'}`);
+            console.log(`[LOFI] MicroLoop ${this.microLoopEnabled ? 'enabled' : 'disabled'}`);
         } catch (e) {
             console.error('Error toggling micro loop:', e);
             this.microLoopEnabled = !this.microLoopEnabled;
@@ -2744,13 +2744,13 @@ class DegradeController {
             this.filterLed.classList.toggle('active', this.filterEnabled);
         }
 
-        // Update entire degrade section opacity when master is disabled
-        if (this.degradeSection) {
+        // Update entire lofi section opacity when master is disabled
+        if (this.lofiSection) {
             // Apply dim to everything except the header with master LED
-            const sections = this.degradeSection.querySelectorAll('.p-3');
+            const sections = this.lofiSection.querySelectorAll('.p-3');
             sections.forEach(section => {
                 // Skip if it's a header section (contains the master LED)
-                if (!section.querySelector('#degrade-master-led')) {
+                if (!section.querySelector('#lofi-master-led')) {
                     section.style.opacity = this.masterEnabled ? '1' : '0.4';
                     section.style.pointerEvents = this.masterEnabled ? 'auto' : 'none';
                 }
@@ -3666,7 +3666,7 @@ class EffectsRackController {
     }
 
     setupBypassLEDs() {
-        // Use the same getNativeFunction wrapper that DegradeController uses
+        // Use the same getNativeFunction wrapper that LofiController uses
         const setSaturationEnabledFn = getNativeFunction('setSaturationEnabled');
         const setDelayEnabledFn = getNativeFunction('setDelayEnabled');
 
@@ -3714,7 +3714,7 @@ class EffectsRackController {
             }
         });
 
-        // Degrade LED already handled by DegradeController
+        // Lofi LED already handled by LofiController
     }
 
     showDetail(effect) {
@@ -3735,12 +3735,12 @@ class EffectsRackController {
             }
         });
 
-        // Reinitialize filter canvas when degrade detail is shown
+        // Reinitialize filter canvas when lofi detail is shown
         // (canvas needs to be visible to get correct dimensions)
-        if (effect === 'degrade' && window.degradeController) {
+        if (effect === 'lofi' && window.lofiController) {
             // Use setTimeout to ensure DOM has updated
             setTimeout(() => {
-                window.degradeController.setupCanvas();
+                window.lofiController.setupCanvas();
             }, 10);
         }
     }
@@ -3753,6 +3753,283 @@ class EffectsRackController {
         if (this.rackOverview) this.rackOverview.classList.remove('hidden');
         if (this.rackDetail) this.rackDetail.classList.add('hidden');
         if (this.backBtn) this.backBtn.classList.add('hidden');
+    }
+}
+
+// ============================================
+// SUB BASS CONTROLLER
+// ============================================
+
+class SubBassController {
+    constructor() {
+        this.led = document.getElementById('subbass-led');
+        this.enabled = false;
+
+        this.setSubBassEnabledFn = getNativeFunction('setSubBassEnabled');
+        this.getSubBassStateFn = getNativeFunction('getSubBassState');
+
+        this.setupEvents();
+        this.fetchInitialState();
+
+        console.log('[SUBBASS] Controller initialized');
+    }
+
+    setupEvents() {
+        if (this.led) {
+            this.led.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleEnabled();
+            });
+        }
+    }
+
+    async fetchInitialState() {
+        try {
+            const state = await this.getSubBassStateFn();
+            if (state) {
+                this.enabled = state.enabled === true;
+                this.updateUI();
+            }
+        } catch (e) {
+            console.log('Could not fetch initial sub bass state');
+        }
+    }
+
+    async toggleEnabled() {
+        this.enabled = !this.enabled;
+        this.updateUI();
+        try {
+            await this.setSubBassEnabledFn(this.enabled);
+            console.log(`[SUBBASS] ${this.enabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling sub bass:', e);
+            this.enabled = !this.enabled;
+            this.updateUI();
+        }
+    }
+
+    updateUI() {
+        if (this.led) this.led.classList.toggle('active', this.enabled);
+    }
+}
+
+// ============================================
+// GRANULAR CONTROLLER (Micro Looper)
+// ============================================
+
+class GranularController {
+    constructor() {
+        // LEDs (card and detail)
+        this.cardLed = document.getElementById('granular-led');
+        this.detailLed = document.getElementById('granular-detail-led');
+
+        // State
+        this.enabled = false;
+
+        // Native functions (micro looper)
+        this.setMicroLooperEnabledFn = getNativeFunction('setMicroLooperEnabled');
+        this.getMicroLooperStateFn = getNativeFunction('getMicroLooperState');
+
+        this.setupEvents();
+        this.fetchInitialState();
+
+        console.log('[GRANULAR/MICRO] Controller initialized');
+    }
+
+    setupEvents() {
+        // LED toggles
+        const toggleEnabled = (e) => {
+            e.stopPropagation();
+            this.toggleEnabled();
+        };
+
+        if (this.cardLed) this.cardLed.addEventListener('click', toggleEnabled);
+        if (this.detailLed) this.detailLed.addEventListener('click', toggleEnabled);
+    }
+
+    async fetchInitialState() {
+        try {
+            const state = await this.getMicroLooperStateFn();
+            if (state) {
+                this.enabled = state.enabled === true;
+                this.updateUI();
+            }
+        } catch (e) {
+            console.log('Could not fetch initial micro looper state');
+        }
+    }
+
+    async toggleEnabled() {
+        this.enabled = !this.enabled;
+        this.updateUI();
+        try {
+            await this.setMicroLooperEnabledFn(this.enabled);
+            console.log(`[GRANULAR/MICRO] ${this.enabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling micro looper:', e);
+            this.enabled = !this.enabled;
+            this.updateUI();
+        }
+    }
+
+    updateUI() {
+        // Update LEDs
+        if (this.cardLed) this.cardLed.classList.toggle('active', this.enabled);
+        if (this.detailLed) this.detailLed.classList.toggle('active', this.enabled);
+    }
+}
+
+// ============================================
+// REVERB CONTROLLER
+// ============================================
+
+class ReverbController {
+    constructor() {
+        // Algorithm type: 0=SPRING, 1=PLATE, 2=HALL
+        this.currentType = 0;
+        this.typeNames = ['SPRING', 'PLATE', 'HALL'];
+
+        // LEDs (card and detail)
+        this.cardLed = document.getElementById('reverb-led');
+        this.detailLed = document.getElementById('reverb-detail-led');
+
+        // Type selector buttons
+        this.typeButtons = document.querySelectorAll('.reverb-type-btn');
+
+        // Card type indicator
+        this.cardTypeIndicator = document.getElementById('reverb-type-card');
+
+        // State
+        this.enabled = false;
+
+        // Native functions
+        this.setReverbEnabledFn = getNativeFunction('setReverbEnabled');
+        this.setReverbTypeFn = getNativeFunction('setReverbType');
+        this.getReverbStateFn = getNativeFunction('getReverbState');
+
+        this.setupEvents();
+        this.setupKnobs();
+        this.fetchInitialState();
+
+        console.log('[REVERB] Controller initialized');
+    }
+
+    setupEvents() {
+        // LED toggles
+        const toggleEnabled = (e) => {
+            e.stopPropagation();
+            this.toggleEnabled();
+        };
+
+        if (this.cardLed) this.cardLed.addEventListener('click', toggleEnabled);
+        if (this.detailLed) this.detailLed.addEventListener('click', toggleEnabled);
+
+        // Type selector buttons
+        this.typeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const type = parseInt(btn.dataset.type);
+                this.setType(type);
+            });
+        });
+    }
+
+    setupKnobs() {
+        // Mix knobs (card and detail synced)
+        new KnobController('reverbMix-knob', 'reverbMix', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('reverbMix-detail-knob', 'reverbMix', {
+            formatValue: (v) => `${Math.round(v * 100)}%`,
+            valueElementId: 'reverbMix-detail-value'
+        });
+
+        // Card knobs (no value display)
+        new KnobController('reverbDecay-card-knob', 'reverbDecay', {
+            formatValue: () => ''
+        });
+        new KnobController('reverbSize-card-knob', 'reverbSize', {
+            formatValue: () => ''
+        });
+
+        // Detail panel knobs
+        new KnobController('reverbSize-knob', 'reverbSize', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('reverbDecay-knob', 'reverbDecay', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('reverbDamp-knob', 'reverbDamp', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('reverbPreDelay-knob', 'reverbPreDelay', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('reverbWidth-knob', 'reverbWidth', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('reverbModRate-knob', 'reverbModRate', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('reverbModDepth-knob', 'reverbModDepth', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+    }
+
+    async fetchInitialState() {
+        try {
+            const state = await this.getReverbStateFn();
+            if (state) {
+                this.enabled = state.enabled === true;
+                this.currentType = state.type || 0;
+                this.updateUI();
+            }
+        } catch (e) {
+            console.log('Could not fetch initial reverb state');
+        }
+    }
+
+    async toggleEnabled() {
+        this.enabled = !this.enabled;
+        this.updateUI();
+        try {
+            await this.setReverbEnabledFn(this.enabled);
+            console.log(`[REVERB] ${this.enabled ? 'enabled' : 'disabled'}`);
+        } catch (e) {
+            console.error('Error toggling reverb:', e);
+            this.enabled = !this.enabled;
+            this.updateUI();
+        }
+    }
+
+    async setType(type) {
+        this.currentType = type;
+        this.updateTypeUI();
+        try {
+            await this.setReverbTypeFn(type);
+            console.log(`[REVERB] Type set to ${this.typeNames[type]}`);
+        } catch (e) {
+            console.error('Error setting reverb type:', e);
+        }
+    }
+
+    updateUI() {
+        // Update LEDs
+        if (this.cardLed) this.cardLed.classList.toggle('active', this.enabled);
+        if (this.detailLed) this.detailLed.classList.toggle('active', this.enabled);
+        this.updateTypeUI();
+    }
+
+    updateTypeUI() {
+        // Update type buttons
+        this.typeButtons.forEach(btn => {
+            const type = parseInt(btn.dataset.type);
+            btn.classList.toggle('active', type === this.currentType);
+        });
+
+        // Update card indicator
+        if (this.cardTypeIndicator) {
+            this.cardTypeIndicator.textContent = this.typeNames[this.currentType];
+        }
     }
 }
 
@@ -3792,7 +4069,7 @@ class SaturationController {
     }
 
     setupNativeFunctions() {
-        // Use the same getNativeFunction wrapper that works for Degrade
+        // Use the same getNativeFunction wrapper that works for Lofi
         this.getSaturationStateFn = getNativeFunction('getSaturationState');
         this.setSaturationTypeFn = getNativeFunction('setSaturationType');
     }
@@ -4368,11 +4645,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ============================================
-    // DEGRADE TAB CONTROLLERS
+    // LOFI TAB CONTROLLERS
     // ============================================
 
     // High-pass frequency: 20Hz - 2000Hz (logarithmic)
-    new KnobController('degradeHP-knob', 'degradeHP', {
+    new KnobController('lofiHP-knob', 'degradeHP', {
         formatValue: (v) => {
             const hz = 20 + Math.pow(v, 0.3) * 1980;
             return hz < 1000 ? `${Math.round(hz)}Hz` : `${(hz/1000).toFixed(1)}kHz`;
@@ -4380,12 +4657,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // High-pass Q: 0.5 - 10
-    new KnobController('degradeHPQ-knob', 'degradeHPQ', {
+    new KnobController('lofiHPQ-knob', 'degradeHPQ', {
         formatValue: (v) => (0.5 + v * 9.5).toFixed(1)
     });
 
     // Low-pass frequency: 200Hz - 20kHz (logarithmic)
-    new KnobController('degradeLP-knob', 'degradeLP', {
+    new KnobController('lofiLP-knob', 'degradeLP', {
         formatValue: (v) => {
             const hz = 200 + Math.pow(v, 0.3) * 19800;
             return hz < 1000 ? `${Math.round(hz)}Hz` : `${(hz/1000).toFixed(1)}kHz`;
@@ -4393,17 +4670,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Low-pass Q: 0.5 - 10
-    new KnobController('degradeLPQ-knob', 'degradeLPQ', {
+    new KnobController('lofiLPQ-knob', 'degradeLPQ', {
         formatValue: (v) => (0.5 + v * 9.5).toFixed(1)
     });
 
     // Bit depth: 1 - 16 bits
-    new KnobController('degradeBit-knob', 'degradeBit', {
+    new KnobController('lofiBit-knob', 'degradeBit', {
         formatValue: (v) => `${Math.round(1 + v * 15)}-bit`
     });
 
     // Sample rate: 1kHz - 48kHz (logarithmic)
-    new KnobController('degradeSR-knob', 'degradeSR', {
+    new KnobController('lofiSR-knob', 'degradeSR', {
         formatValue: (v) => {
             const khz = 1 + Math.pow(v, 0.4) * 47;
             return `${khz.toFixed(1)}kHz`;
@@ -4411,26 +4688,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Wobble: 0% - 100%
-    new KnobController('degradeWobble-knob', 'degradeWobble', {
+    new KnobController('lofiWobble-knob', 'degradeWobble', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
     // Vinyl: 0% - 100% (hiss + crackle)
-    new KnobController('degradeVinyl-knob', 'degradeVinyl', {
+    new KnobController('lofiVinyl-knob', 'degradeVinyl', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Degrade card micro knobs (no value display)
-    new KnobController('degradeBit-card-knob', 'degradeBit', {
+    // Lofi card micro knobs (no value display)
+    new KnobController('lofiBit-card-knob', 'degradeBit', {
         formatValue: () => ''
     });
-    new KnobController('degradeWobble-card-knob', 'degradeWobble', {
+    new KnobController('lofiWobble-card-knob', 'degradeWobble', {
         formatValue: () => ''
     });
-    new KnobController('degradeVinyl-card-knob', 'degradeVinyl', {
+    new KnobController('lofiVinyl-card-knob', 'degradeVinyl', {
         formatValue: () => ''
     });
-    new KnobController('degradeLP-card-knob', 'degradeLP', {
+    new KnobController('lofiLP-card-knob', 'degradeLP', {
         formatValue: () => ''
     });
 
@@ -4474,13 +4751,57 @@ document.addEventListener('DOMContentLoaded', () => {
     // Micro Looper controller (handles transport buttons, modes, etc.)
     new MicroLooperController();
 
-    // Degrade mix: 0% - 100%
-    new KnobController('degradeMix-knob', 'degradeMix', {
+    // Lofi mix: 0% - 100%
+    new KnobController('lofiMix-knob', 'degradeMix', {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Degrade section controller (stored globally for canvas reinit)
-    window.degradeController = new DegradeController();
+    // Lofi section controller (stored globally for canvas reinit)
+    window.lofiController = new LofiController();
+
+    // ============================================
+    // GRANULAR/MICRO LOOPER CARD CONTROLS
+    // ============================================
+
+    // Card knobs for micro looper
+    new KnobController('microMix-card-knob', 'microMix', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+    new KnobController('microSpeed-card-knob', 'microSpeed', {
+        formatValue: (v) => {
+            const speed = 0.25 + v * 1.75;
+            return `${speed.toFixed(1)}x`;
+        }
+    });
+    new KnobController('microModify-card-knob', 'microModify', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Granular/Micro Looper controller (LED toggle)
+    new GranularController();
+
+    // Reverb controller
+    new ReverbController();
+
+    // ============================================
+    // SUB BASS CONTROLS
+    // ============================================
+
+    // Sub Bass Frequency: 30-80Hz
+    new KnobController('subBassFreq-knob', 'subBassFreq', {
+        formatValue: (v) => {
+            const hz = 30 + v * 50;
+            return `${Math.round(hz)}Hz`;
+        }
+    });
+
+    // Sub Bass Amount: 0-100%
+    new KnobController('subBassAmount-knob', 'subBassAmount', {
+        formatValue: (v) => `${Math.round(v * 100)}%`
+    });
+
+    // Sub Bass controller
+    new SubBassController();
 
     // BPM display and tempo sync
     new BpmDisplayController();

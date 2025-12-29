@@ -59,6 +59,20 @@ LoopEngineProcessor::LoopEngineProcessor()
     satFuzzGateParam = apvts.getRawParameterValue("satFuzzGate");
     satFuzzOctaveParam = apvts.getRawParameterValue("satFuzzOctave");
     satFuzzToneParam = apvts.getRawParameterValue("satFuzzTone");
+
+    // Sub Bass parameters
+    subBassFreqParam = apvts.getRawParameterValue("subBassFreq");
+    subBassAmountParam = apvts.getRawParameterValue("subBassAmount");
+
+    // Reverb parameters
+    reverbSizeParam = apvts.getRawParameterValue("reverbSize");
+    reverbDecayParam = apvts.getRawParameterValue("reverbDecay");
+    reverbDampParam = apvts.getRawParameterValue("reverbDamp");
+    reverbMixParam = apvts.getRawParameterValue("reverbMix");
+    reverbWidthParam = apvts.getRawParameterValue("reverbWidth");
+    reverbPreDelayParam = apvts.getRawParameterValue("reverbPreDelay");
+    reverbModRateParam = apvts.getRawParameterValue("reverbModRate");
+    reverbModDepthParam = apvts.getRawParameterValue("reverbModDepth");
 }
 
 LoopEngineProcessor::~LoopEngineProcessor()
@@ -410,6 +424,82 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         50.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
+    // =======================
+    // SUB BASS
+    // =======================
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"subBassFreq", 1},
+        "Sub Bass Frequency",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,  // Default ~55Hz (30 + 0.5*50)
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"subBassAmount", 1},
+        "Sub Bass Amount",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,  // Default off
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // =======================
+    // REVERB
+    // =======================
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbSize", 1},
+        "Reverb Size",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbDecay", 1},
+        "Reverb Decay",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbDamp", 1},
+        "Reverb Damping",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbMix", 1},
+        "Reverb Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        30.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbWidth", 1},
+        "Reverb Width",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        100.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbPreDelay", 1},
+        "Reverb Pre-Delay",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        10.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbModRate", 1},
+        "Reverb Mod Rate",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        30.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"reverbModDepth", 1},
+        "Reverb Mod Depth",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        20.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
     return { params.begin(), params.end() };
 }
 
@@ -478,6 +568,12 @@ void LoopEngineProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // Prepare saturation processor
     saturationProcessor.prepare(sampleRate, samplesPerBlock);
+
+    // Prepare sub bass processor
+    subBassProcessor.prepare(sampleRate, samplesPerBlock);
+
+    // Prepare reverb processor
+    reverbProcessor.prepare(sampleRate, samplesPerBlock);
 
     // Prepare micro looper
     microLooper.prepare(sampleRate, samplesPerBlock);
@@ -628,6 +724,24 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         degradeProcessor.processBlock(loopPlaybackBuffer);
     }
 
+    // Apply reverb processing (Spring/Plate/Hall algorithms) - to loop playback only
+    if (reverbProcessor.getEnabled())
+    {
+        // Update reverb parameters from APVTS
+        if (reverbSizeParam) reverbProcessor.setSize(reverbSizeParam->load() / 100.0f);
+        if (reverbDecayParam) reverbProcessor.setDecay(reverbDecayParam->load() / 100.0f);
+        if (reverbDampParam) reverbProcessor.setDamping(reverbDampParam->load() / 100.0f);
+        if (reverbMixParam) reverbProcessor.setMix(reverbMixParam->load() / 100.0f);
+        if (reverbWidthParam) reverbProcessor.setWidth(reverbWidthParam->load() / 100.0f);
+        if (reverbPreDelayParam) reverbProcessor.setPreDelay(reverbPreDelayParam->load() / 100.0f);
+        if (reverbModRateParam) reverbProcessor.setModRate(reverbModRateParam->load() / 100.0f);
+        if (reverbModDepthParam) reverbProcessor.setModDepth(reverbModDepthParam->load() / 100.0f);
+
+        reverbProcessor.processBlock(loopPlaybackBuffer);
+    }
+
+    // Sub bass processing moved to after signal combination (see below)
+
     // Process through micro looper (always-listening buffer)
     // The micro looper processes the combined signal (after looper and degrade)
     if (microLooper.isEnabled())
@@ -668,6 +782,17 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
                 outputData[i] = loopData[i] + cleanInputData[i];
             }
         }
+    }
+
+    // Apply sub bass processing (octave-down generator) to the COMBINED output
+    // This runs on the final mixed signal (loop + input) so it always has content
+    if (subBassProcessor.getEnabled())
+    {
+        // Update parameters from APVTS (convert 0-100 to 0-1)
+        if (subBassFreqParam) subBassProcessor.setFrequency(subBassFreqParam->load() / 100.0f);
+        if (subBassAmountParam) subBassProcessor.setAmount(subBassAmountParam->load() / 100.0f);
+
+        subBassProcessor.processBlock(buffer);
     }
 
     // Get delay time - either from parameter or tempo sync
@@ -869,6 +994,36 @@ void LoopEngineProcessor::setSaturationType(int type)
 int LoopEngineProcessor::getSaturationType() const
 {
     return static_cast<int>(saturationProcessor.getType());
+}
+
+void LoopEngineProcessor::setSubBassEnabled(bool enabled)
+{
+    subBassProcessor.setEnabled(enabled);
+}
+
+bool LoopEngineProcessor::getSubBassEnabled() const
+{
+    return subBassProcessor.getEnabled();
+}
+
+void LoopEngineProcessor::setReverbEnabled(bool enabled)
+{
+    reverbProcessor.setEnabled(enabled);
+}
+
+bool LoopEngineProcessor::getReverbEnabled() const
+{
+    return reverbProcessor.getEnabled();
+}
+
+void LoopEngineProcessor::setReverbType(int type)
+{
+    reverbProcessor.setAlgorithm(type);
+}
+
+int LoopEngineProcessor::getReverbType() const
+{
+    return static_cast<int>(reverbProcessor.getAlgorithm());
 }
 
 void LoopEngineProcessor::setHostTransportSync(bool enabled)

@@ -321,7 +321,7 @@
                                         <path d="M7 16l4-8 4 6 4-10"/>
                                     </svg>
                                 </button>
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v5.1.4</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v6.0.4</span>
                             </div>
 
                             <!-- Controls (center) -->
@@ -418,49 +418,123 @@
                                 </div>
                             </div>
 
-                            <!-- DEGRADE Pedal Card -->
-                            <div class="pedal-card degrade-card" id="degrade-card" data-effect="degrade">
+                            <!-- LOFI Pedal Card -->
+                            <div class="pedal-card lofi-card" id="lofi-card" data-effect="lofi">
                                 <div class="pedal-header">
                                     <div class="flex items-center gap-2">
-                                        <div class="section-led degrade-led active" id="degrade-master-led"></div>
-                                        <span class="pedal-name">DEGRADE</span>
-                                        <button class="pedal-expand-btn" data-effect="degrade" title="Open full panel">
+                                        <div class="section-led lofi-led active" id="lofi-master-led"></div>
+                                        <span class="pedal-name">LOFI</span>
+                                        <button class="pedal-expand-btn" data-effect="lofi" title="Open full panel">
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <path d="M9 18l6-6-6-6"/>
                                             </svg>
                                         </button>
                                     </div>
                                     <div class="flex items-center gap-1">
-                                        <div class="knob knob-micro degrade-knob" id="degradeMix-knob">
+                                        <div class="knob knob-micro lofi-knob" id="lofiMix-knob">
                                             <div class="knob-dot"></div>
                                         </div>
-                                        <span class="font-mono text-[8px] text-white w-[28px] text-right" id="degradeMix-value">100%</span>
+                                        <span class="font-mono text-[8px] text-white w-[28px] text-right" id="lofiMix-value">100%</span>
                                     </div>
                                 </div>
                                 <div class="pedal-params">
                                     <div class="pedal-param">
-                                        <div class="knob knob-micro degrade-knob" id="degradeBit-card-knob">
+                                        <div class="knob knob-micro lofi-knob" id="lofiBit-card-knob">
                                             <div class="knob-dot"></div>
                                         </div>
                                         <span class="pedal-param-label">BIT</span>
                                     </div>
                                     <div class="pedal-param">
-                                        <div class="knob knob-micro degrade-knob" id="degradeWobble-card-knob">
+                                        <div class="knob knob-micro lofi-knob" id="lofiWobble-card-knob">
                                             <div class="knob-dot"></div>
                                         </div>
                                         <span class="pedal-param-label">WOB</span>
                                     </div>
                                     <div class="pedal-param">
-                                        <div class="knob knob-micro degrade-knob" id="degradeVinyl-card-knob">
+                                        <div class="knob knob-micro lofi-knob" id="lofiVinyl-card-knob">
                                             <div class="knob-dot"></div>
                                         </div>
                                         <span class="pedal-param-label">VINYL</span>
                                     </div>
                                     <div class="pedal-param">
-                                        <div class="knob knob-micro degrade-knob" id="degradeLP-card-knob">
+                                        <div class="knob knob-micro lofi-knob" id="lofiLP-card-knob">
                                             <div class="knob-dot"></div>
                                         </div>
                                         <span class="pedal-param-label">LP</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- GRANULAR Pedal Card (Micro Looper) -->
+                            <div class="pedal-card granular-card" id="granular-card" data-effect="granular">
+                                <div class="pedal-header">
+                                    <div class="flex items-center gap-2">
+                                        <div class="section-led granular-led" id="granular-led"></div>
+                                        <span class="pedal-name">MICRO LOOP</span>
+                                        <button class="pedal-expand-btn" data-effect="granular" title="Open full panel">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M9 18l6-6-6-6"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <div class="knob knob-micro granular-knob" id="microMix-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="font-mono text-[8px] text-white w-[28px] text-right" id="microMix-card-value">50%</span>
+                                    </div>
+                                </div>
+                                <div class="pedal-params">
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro granular-knob" id="microSpeed-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">SPEED</span>
+                                    </div>
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro granular-knob" id="microModify-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">MOD</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- REVERB Pedal Card -->
+                            <div class="pedal-card reverb-card" id="reverb-card" data-effect="reverb">
+                                <div class="pedal-header">
+                                    <div class="flex items-center gap-2">
+                                        <div class="section-led reverb-led" id="reverb-led"></div>
+                                        <span class="pedal-name">REVERB</span>
+                                        <button class="pedal-expand-btn" data-effect="reverb" title="Open full panel">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M9 18l6-6-6-6"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <div class="knob knob-micro reverb-knob" id="reverbMix-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="font-mono text-[8px] text-white w-[28px] text-right" id="reverbMix-value">30%</span>
+                                    </div>
+                                </div>
+                                <div class="pedal-params">
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro reverb-knob" id="reverbDecay-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">DECAY</span>
+                                    </div>
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro reverb-knob" id="reverbSize-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">SIZE</span>
+                                    </div>
+                                    <div class="pedal-param">
+                                        <span class="reverb-type-indicator font-mono text-[9px] text-fd-accent" id="reverb-type-card">SPRING</span>
+                                        <span class="pedal-param-label">TYPE</span>
                                     </div>
                                 </div>
                             </div>
@@ -660,53 +734,108 @@
                                 </div>
                             </div>
 
-                            <!-- DEGRADE Detail View -->
-                            <div class="effect-detail hidden" id="degrade-detail" data-effect="degrade">
+                            <!-- LOFI Detail View -->
+                            <div class="effect-detail hidden" id="lofi-detail" data-effect="lofi">
                                 <!-- LO-FI Section -->
                                 <div class="p-3 border-b border-fd-border">
                                     <div class="flex items-center justify-between mb-3">
                                         <div class="flex items-center gap-2">
-                                            <div class="section-led degrade-led active" id="lofi-led"></div>
+                                            <div class="section-led lofi-led active" id="lofi-led"></div>
                                             <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">LO-FI</span>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-4 gap-2">
                                         <div class="flex flex-col items-center gap-1">
-                                            <div class="knob knob-small degrade-knob" id="degradeBit-knob">
+                                            <div class="knob knob-small lofi-knob" id="lofiBit-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
-                                            <span class="font-mono text-[9px] text-white" id="degradeBit-value">16</span>
+                                            <span class="font-mono text-[9px] text-white" id="lofiBit-value">16</span>
                                             <span class="font-display text-[7px] text-fd-text-dim">BIT</span>
                                         </div>
                                         <div class="flex flex-col items-center gap-1">
-                                            <div class="knob knob-small degrade-knob" id="degradeSR-knob">
+                                            <div class="knob knob-small lofi-knob" id="lofiSR-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
-                                            <span class="font-mono text-[9px] text-white" id="degradeSR-value">48k</span>
+                                            <span class="font-mono text-[9px] text-white" id="lofiSR-value">48k</span>
                                             <span class="font-display text-[7px] text-fd-text-dim">SR</span>
                                         </div>
                                         <div class="flex flex-col items-center gap-1">
-                                            <div class="knob knob-small degrade-knob" id="degradeWobble-knob">
+                                            <div class="knob knob-small lofi-knob" id="lofiWobble-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
-                                            <span class="font-mono text-[9px] text-white" id="degradeWobble-value">0%</span>
+                                            <span class="font-mono text-[9px] text-white" id="lofiWobble-value">0%</span>
                                             <span class="font-display text-[7px] text-fd-text-dim">WOB</span>
                                         </div>
                                         <div class="flex flex-col items-center gap-1">
-                                            <div class="knob knob-small degrade-knob" id="degradeVinyl-knob">
+                                            <div class="knob knob-small lofi-knob" id="lofiVinyl-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
-                                            <span class="font-mono text-[9px] text-white" id="degradeVinyl-value">0%</span>
+                                            <span class="font-mono text-[9px] text-white" id="lofiVinyl-value">0%</span>
                                             <span class="font-display text-[7px] text-fd-text-dim">VINYL</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- MICRO LOOP Section -->
+                                <!-- FILTER Section -->
+                                <div class="p-3">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="flex items-center gap-2">
+                                            <div class="section-led lofi-led active" id="filter-led"></div>
+                                            <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">FILTER</span>
+                                        </div>
+                                    </div>
+                                    <div class="filter-viz-container mb-3">
+                                        <canvas id="filter-viz-canvas" class="filter-viz-canvas"></canvas>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="flex flex-col items-center gap-1" id="hp-group">
+                                            <div class="knob knob-small lofi-knob" id="lofiHP-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="lofiHP-value">20Hz</span>
+                                            <span class="filter-label font-display text-[7px] font-bold cursor-pointer active" id="hp-toggle-label" title="Toggle High-Pass">HP</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1" id="lp-group">
+                                            <div class="knob knob-small lofi-knob" id="lofiLP-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="lofiLP-value">20kHz</span>
+                                            <span class="filter-label font-display text-[7px] font-bold cursor-pointer active" id="lp-toggle-label" title="Toggle Low-Pass">LP</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- SUB BASS Section -->
+                                <div class="p-3 border-t border-fd-border">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <div class="section-led lofi-led" id="subbass-led"></div>
+                                        <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">SUB BASS</span>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small lofi-knob" id="subBassFreq-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="subBassFreq-value">55Hz</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">FREQ</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small lofi-knob" id="subBassAmount-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="subBassAmount-value">0%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">AMOUNT</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- GRANULAR Detail View (Micro Looper) -->
+                            <div class="effect-detail hidden" id="granular-detail" data-effect="granular">
                                 <div class="p-3 border-b border-fd-border">
                                     <div class="flex items-center justify-between mb-2">
                                         <div class="flex items-center gap-2">
-                                            <div class="section-led degrade-led" id="microloop-led"></div>
+                                            <div class="section-led granular-led" id="granular-detail-led"></div>
                                             <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">MICRO LOOPER</span>
                                         </div>
                                         <div class="flex items-center gap-1">
@@ -745,35 +874,35 @@
 
                                     <div class="grid grid-cols-5 gap-2 mb-2">
                                         <div class="flex flex-col items-center gap-0.5">
-                                            <div class="knob knob-tiny degrade-knob" id="microClock-knob">
+                                            <div class="knob knob-tiny granular-knob" id="microClock-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
                                             <span class="font-mono text-[8px] text-white" id="microClock-value">8.0s</span>
                                             <span class="font-display text-[6px] text-fd-text-dim">CLOCK</span>
                                         </div>
                                         <div class="flex flex-col items-center gap-0.5">
-                                            <div class="knob knob-tiny degrade-knob" id="microLength-knob">
+                                            <div class="knob knob-tiny granular-knob" id="microLength-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
                                             <span class="font-mono text-[8px] text-white" id="microLength-value">100%</span>
                                             <span class="font-display text-[6px] text-fd-text-dim">LENGTH</span>
                                         </div>
                                         <div class="flex flex-col items-center gap-0.5">
-                                            <div class="knob knob-tiny degrade-knob" id="microSpeed-knob">
+                                            <div class="knob knob-tiny granular-knob" id="microSpeed-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
                                             <span class="font-mono text-[8px] text-white" id="microSpeed-value">1.0x</span>
                                             <span class="font-display text-[6px] text-fd-text-dim">SPEED</span>
                                         </div>
                                         <div class="flex flex-col items-center gap-0.5">
-                                            <div class="knob knob-tiny degrade-knob" id="microModify-knob">
+                                            <div class="knob knob-tiny granular-knob" id="microModify-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
                                             <span class="font-mono text-[8px] text-white" id="microModify-value">50%</span>
                                             <span class="font-display text-[6px] text-fd-text-dim">MODIFY</span>
                                         </div>
                                         <div class="flex flex-col items-center gap-0.5">
-                                            <div class="knob knob-tiny degrade-knob" id="microMix-knob">
+                                            <div class="knob knob-tiny granular-knob" id="microMix-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
                                             <span class="font-mono text-[8px] text-white" id="microMix-value">50%</span>
@@ -788,32 +917,90 @@
                                         </button>
                                     </div>
                                 </div>
+                            </div>
 
-                                <!-- FILTER Section -->
-                                <div class="p-3">
+                            <!-- REVERB Detail View -->
+                            <div class="effect-detail hidden" id="reverb-detail" data-effect="reverb">
+                                <div class="p-3 border-b border-fd-border">
                                     <div class="flex items-center justify-between mb-3">
                                         <div class="flex items-center gap-2">
-                                            <div class="section-led degrade-led active" id="filter-led"></div>
-                                            <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">FILTER</span>
+                                            <div class="section-led reverb-led" id="reverb-detail-led"></div>
+                                            <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">REVERB</span>
                                         </div>
-                                    </div>
-                                    <div class="filter-viz-container mb-3">
-                                        <canvas id="filter-viz-canvas" class="filter-viz-canvas"></canvas>
-                                    </div>
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <div class="flex flex-col items-center gap-1" id="hp-group">
-                                            <div class="knob knob-small degrade-knob" id="degradeHP-knob">
+                                        <div class="flex items-center gap-1">
+                                            <div class="knob knob-small reverb-knob" id="reverbMix-detail-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
-                                            <span class="font-mono text-[9px] text-white" id="degradeHP-value">20Hz</span>
-                                            <span class="filter-label font-display text-[7px] font-bold cursor-pointer active" id="hp-toggle-label" title="Toggle High-Pass">HP</span>
+                                            <span class="font-mono text-[9px] text-white w-[32px] text-right" id="reverbMix-detail-value">30%</span>
                                         </div>
-                                        <div class="flex flex-col items-center gap-1" id="lp-group">
-                                            <div class="knob knob-small degrade-knob" id="degradeLP-knob">
+                                    </div>
+
+                                    <!-- Algorithm Selector -->
+                                    <div class="flex justify-center gap-1 mb-4">
+                                        <button class="reverb-type-btn active" data-type="0">SPRING</button>
+                                        <button class="reverb-type-btn" data-type="1">PLATE</button>
+                                        <button class="reverb-type-btn" data-type="2">HALL</button>
+                                    </div>
+
+                                    <!-- Main Controls -->
+                                    <div class="grid grid-cols-4 gap-2 mb-3">
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small reverb-knob" id="reverbSize-knob">
                                                 <div class="knob-dot"></div>
                                             </div>
-                                            <span class="font-mono text-[9px] text-white" id="degradeLP-value">20kHz</span>
-                                            <span class="filter-label font-display text-[7px] font-bold cursor-pointer active" id="lp-toggle-label" title="Toggle Low-Pass">LP</span>
+                                            <span class="font-mono text-[9px] text-white" id="reverbSize-value">50%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">SIZE</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small reverb-knob" id="reverbDecay-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="reverbDecay-value">50%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">DECAY</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small reverb-knob" id="reverbDamp-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="reverbDamp-value">50%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">DAMP</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small reverb-knob" id="reverbPreDelay-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="reverbPreDelay-value">10%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">PRE-DLY</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Stereo & Modulation Section -->
+                                <div class="p-3">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">STEREO & MODULATION</span>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-3">
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small reverb-knob" id="reverbWidth-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="reverbWidth-value">100%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">WIDTH</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small reverb-knob" id="reverbModRate-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="reverbModRate-value">30%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">MOD RATE</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small reverb-knob" id="reverbModDepth-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="reverbModDepth-value">20%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">MOD DEPTH</span>
                                         </div>
                                     </div>
                                 </div>

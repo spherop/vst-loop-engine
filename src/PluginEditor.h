@@ -77,6 +77,20 @@ private:
     juce::WebSliderRelay satFuzzOctaveRelay { "satFuzzOctave" };
     juce::WebSliderRelay satFuzzToneRelay { "satFuzzTone" };
 
+    // Sub Bass parameter relays
+    juce::WebSliderRelay subBassFreqRelay { "subBassFreq" };
+    juce::WebSliderRelay subBassAmountRelay { "subBassAmount" };
+
+    // Reverb parameter relays
+    juce::WebSliderRelay reverbSizeRelay { "reverbSize" };
+    juce::WebSliderRelay reverbDecayRelay { "reverbDecay" };
+    juce::WebSliderRelay reverbDampRelay { "reverbDamp" };
+    juce::WebSliderRelay reverbMixRelay { "reverbMix" };
+    juce::WebSliderRelay reverbWidthRelay { "reverbWidth" };
+    juce::WebSliderRelay reverbPreDelayRelay { "reverbPreDelay" };
+    juce::WebSliderRelay reverbModRateRelay { "reverbModRate" };
+    juce::WebSliderRelay reverbModDepthRelay { "reverbModDepth" };
+
     juce::WebBrowserComponent webView;
 
     // Parameter attachments
@@ -137,6 +151,20 @@ private:
     juce::WebSliderParameterAttachment satFuzzGateAttachment;
     juce::WebSliderParameterAttachment satFuzzOctaveAttachment;
     juce::WebSliderParameterAttachment satFuzzToneAttachment;
+
+    // Sub Bass parameter attachments
+    juce::WebSliderParameterAttachment subBassFreqAttachment;
+    juce::WebSliderParameterAttachment subBassAmountAttachment;
+
+    // Reverb parameter attachments
+    juce::WebSliderParameterAttachment reverbSizeAttachment;
+    juce::WebSliderParameterAttachment reverbDecayAttachment;
+    juce::WebSliderParameterAttachment reverbDampAttachment;
+    juce::WebSliderParameterAttachment reverbMixAttachment;
+    juce::WebSliderParameterAttachment reverbWidthAttachment;
+    juce::WebSliderParameterAttachment reverbPreDelayAttachment;
+    juce::WebSliderParameterAttachment reverbModRateAttachment;
+    juce::WebSliderParameterAttachment reverbModDepthAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
 

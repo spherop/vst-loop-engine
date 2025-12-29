@@ -6,6 +6,8 @@
 #include "LoopEngine.h"
 #include "DegradeProcessor.h"
 #include "SaturationProcessor.h"
+#include "SubBassProcessor.h"
+#include "ReverbProcessor.h"
 #include "MicroLooper.h"
 
 class LoopEngineProcessor : public juce::AudioProcessor
@@ -85,6 +87,18 @@ public:
     int getSaturationType() const;
     SaturationProcessor& getSaturationProcessor() { return saturationProcessor; }
 
+    // Sub Bass controls
+    void setSubBassEnabled(bool enabled);
+    bool getSubBassEnabled() const;
+    SubBassProcessor& getSubBassProcessor() { return subBassProcessor; }
+
+    // Reverb controls
+    void setReverbEnabled(bool enabled);
+    bool getReverbEnabled() const;
+    void setReverbType(int type);
+    int getReverbType() const;
+    ReverbProcessor& getReverbProcessor() { return reverbProcessor; }
+
     // Host transport sync
     void setHostTransportSync(bool enabled);
     bool getHostTransportSync() const;
@@ -104,6 +118,8 @@ private:
     LoopEngine loopEngine;
     DegradeProcessor degradeProcessor;
     SaturationProcessor saturationProcessor;
+    SubBassProcessor subBassProcessor;
+    ReverbProcessor reverbProcessor;
     MicroLooper microLooper;
 
     // Parameter pointers for efficient access
@@ -157,6 +173,20 @@ private:
     std::atomic<float>* satFuzzGateParam = nullptr;
     std::atomic<float>* satFuzzOctaveParam = nullptr;
     std::atomic<float>* satFuzzToneParam = nullptr;
+
+    // Sub Bass parameters
+    std::atomic<float>* subBassFreqParam = nullptr;
+    std::atomic<float>* subBassAmountParam = nullptr;
+
+    // Reverb parameters
+    std::atomic<float>* reverbSizeParam = nullptr;
+    std::atomic<float>* reverbDecayParam = nullptr;
+    std::atomic<float>* reverbDampParam = nullptr;
+    std::atomic<float>* reverbMixParam = nullptr;
+    std::atomic<float>* reverbWidthParam = nullptr;
+    std::atomic<float>* reverbPreDelayParam = nullptr;
+    std::atomic<float>* reverbModRateParam = nullptr;
+    std::atomic<float>* reverbModDepthParam = nullptr;
 
     // Tempo sync state
     std::atomic<bool> tempoSyncEnabled { false };
