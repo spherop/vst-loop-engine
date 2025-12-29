@@ -48,6 +48,22 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   .withOptionsFrom(microModifyRelay)
                   .withOptionsFrom(microSpeedRelay)
                   .withOptionsFrom(microMixRelay)
+                  .withOptionsFrom(satMixRelay)
+                  .withOptionsFrom(satSoftDriveRelay)
+                  .withOptionsFrom(satSoftToneRelay)
+                  .withOptionsFrom(satSoftCurveRelay)
+                  .withOptionsFrom(satTapeDriveRelay)
+                  .withOptionsFrom(satTapeBiasRelay)
+                  .withOptionsFrom(satTapeFlutterRelay)
+                  .withOptionsFrom(satTapeToneRelay)
+                  .withOptionsFrom(satTubeDriveRelay)
+                  .withOptionsFrom(satTubeBiasRelay)
+                  .withOptionsFrom(satTubeWarmthRelay)
+                  .withOptionsFrom(satTubeSagRelay)
+                  .withOptionsFrom(satFuzzDriveRelay)
+                  .withOptionsFrom(satFuzzGateRelay)
+                  .withOptionsFrom(satFuzzOctaveRelay)
+                  .withOptionsFrom(satFuzzToneRelay)
                   .withNativeFunction("loopRecord", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().record();
@@ -450,6 +466,26 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("lpQ", degrade.getCurrentLPQ());
                       complete(juce::var(result.get()));
                   })
+                  // =========== SATURATION NATIVE FUNCTIONS ===========
+                  .withNativeFunction("setSaturationEnabled", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setSaturationEnabled(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("setSaturationType", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.setSaturationType(static_cast<int>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("getSaturationState", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("enabled", processorRef.getSaturationEnabled());
+                      result->setProperty("type", processorRef.getSaturationType());
+                      complete(juce::var(result.get()));
+                  })
                   .withNativeFunction("clearLayer", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() > 0)
@@ -517,6 +553,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   })
                   .withNativeFunction("setCrossfadeParams", [this](const juce::Array<juce::var>& args, auto complete)
                   {
+                      DBG("setCrossfadeParams CALLED with " + juce::String(args.size()) + " args");
                       // Args: preTimeMs, postTimeMs, volDepth (0-1), filterFreq (Hz, 0=off), filterDepth (0-1),
                       //       smearAmount (0-1), smearAttack (0.01-0.5), smearLength (0.25-2.0)
                       if (args.size() >= 5)
@@ -678,7 +715,55 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                            processorRef.getAPVTS().undoManager),
       microMixAttachment(*processorRef.getAPVTS().getParameter("microMix"),
                          microMixRelay,
-                         processorRef.getAPVTS().undoManager)
+                         processorRef.getAPVTS().undoManager),
+      satMixAttachment(*processorRef.getAPVTS().getParameter("satMix"),
+                       satMixRelay,
+                       processorRef.getAPVTS().undoManager),
+      satSoftDriveAttachment(*processorRef.getAPVTS().getParameter("satSoftDrive"),
+                             satSoftDriveRelay,
+                             processorRef.getAPVTS().undoManager),
+      satSoftToneAttachment(*processorRef.getAPVTS().getParameter("satSoftTone"),
+                            satSoftToneRelay,
+                            processorRef.getAPVTS().undoManager),
+      satSoftCurveAttachment(*processorRef.getAPVTS().getParameter("satSoftCurve"),
+                             satSoftCurveRelay,
+                             processorRef.getAPVTS().undoManager),
+      satTapeDriveAttachment(*processorRef.getAPVTS().getParameter("satTapeDrive"),
+                             satTapeDriveRelay,
+                             processorRef.getAPVTS().undoManager),
+      satTapeBiasAttachment(*processorRef.getAPVTS().getParameter("satTapeBias"),
+                            satTapeBiasRelay,
+                            processorRef.getAPVTS().undoManager),
+      satTapeFlutterAttachment(*processorRef.getAPVTS().getParameter("satTapeFlutter"),
+                               satTapeFlutterRelay,
+                               processorRef.getAPVTS().undoManager),
+      satTapeToneAttachment(*processorRef.getAPVTS().getParameter("satTapeTone"),
+                            satTapeToneRelay,
+                            processorRef.getAPVTS().undoManager),
+      satTubeDriveAttachment(*processorRef.getAPVTS().getParameter("satTubeDrive"),
+                             satTubeDriveRelay,
+                             processorRef.getAPVTS().undoManager),
+      satTubeBiasAttachment(*processorRef.getAPVTS().getParameter("satTubeBias"),
+                            satTubeBiasRelay,
+                            processorRef.getAPVTS().undoManager),
+      satTubeWarmthAttachment(*processorRef.getAPVTS().getParameter("satTubeWarmth"),
+                              satTubeWarmthRelay,
+                              processorRef.getAPVTS().undoManager),
+      satTubeSagAttachment(*processorRef.getAPVTS().getParameter("satTubeSag"),
+                           satTubeSagRelay,
+                           processorRef.getAPVTS().undoManager),
+      satFuzzDriveAttachment(*processorRef.getAPVTS().getParameter("satFuzzDrive"),
+                             satFuzzDriveRelay,
+                             processorRef.getAPVTS().undoManager),
+      satFuzzGateAttachment(*processorRef.getAPVTS().getParameter("satFuzzGate"),
+                            satFuzzGateRelay,
+                            processorRef.getAPVTS().undoManager),
+      satFuzzOctaveAttachment(*processorRef.getAPVTS().getParameter("satFuzzOctave"),
+                              satFuzzOctaveRelay,
+                              processorRef.getAPVTS().undoManager),
+      satFuzzToneAttachment(*processorRef.getAPVTS().getParameter("satFuzzTone"),
+                            satFuzzToneRelay,
+                            processorRef.getAPVTS().undoManager)
 {
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());

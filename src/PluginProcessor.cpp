@@ -37,6 +37,28 @@ LoopEngineProcessor::LoopEngineProcessor()
     microModifyParam = apvts.getRawParameterValue("microModify");
     microSpeedParam = apvts.getRawParameterValue("microSpeed");
     microMixParam = apvts.getRawParameterValue("microMix");
+
+    // Saturation parameters
+    satMixParam = apvts.getRawParameterValue("satMix");
+    // Soft type
+    satSoftDriveParam = apvts.getRawParameterValue("satSoftDrive");
+    satSoftToneParam = apvts.getRawParameterValue("satSoftTone");
+    satSoftCurveParam = apvts.getRawParameterValue("satSoftCurve");
+    // Tape type
+    satTapeDriveParam = apvts.getRawParameterValue("satTapeDrive");
+    satTapeBiasParam = apvts.getRawParameterValue("satTapeBias");
+    satTapeFlutterParam = apvts.getRawParameterValue("satTapeFlutter");
+    satTapeToneParam = apvts.getRawParameterValue("satTapeTone");
+    // Tube type
+    satTubeDriveParam = apvts.getRawParameterValue("satTubeDrive");
+    satTubeBiasParam = apvts.getRawParameterValue("satTubeBias");
+    satTubeWarmthParam = apvts.getRawParameterValue("satTubeWarmth");
+    satTubeSagParam = apvts.getRawParameterValue("satTubeSag");
+    // Fuzz type
+    satFuzzDriveParam = apvts.getRawParameterValue("satFuzzDrive");
+    satFuzzGateParam = apvts.getRawParameterValue("satFuzzGate");
+    satFuzzOctaveParam = apvts.getRawParameterValue("satFuzzOctave");
+    satFuzzToneParam = apvts.getRawParameterValue("satFuzzTone");
 }
 
 LoopEngineProcessor::~LoopEngineProcessor()
@@ -269,6 +291,125 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         50.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
+    // =========== SATURATION PARAMETERS ===========
+
+    // Master saturation mix
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satMix", 1},
+        "Saturation Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        100.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // --- SOFT TYPE ---
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satSoftDrive", 1},
+        "Soft Drive",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        30.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satSoftTone", 1},
+        "Soft Tone",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satSoftCurve", 1},
+        "Soft Curve",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        30.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // --- TAPE TYPE ---
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satTapeDrive", 1},
+        "Tape Drive",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        40.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satTapeBias", 1},
+        "Tape Bias",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satTapeFlutter", 1},
+        "Tape Flutter",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        20.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satTapeTone", 1},
+        "Tape Tone",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        60.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // --- TUBE TYPE ---
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satTubeDrive", 1},
+        "Tube Drive",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        35.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satTubeBias", 1},
+        "Tube Bias",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satTubeWarmth", 1},
+        "Tube Warmth",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satTubeSag", 1},
+        "Tube Sag",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        20.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    // --- FUZZ TYPE ---
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satFuzzDrive", 1},
+        "Fuzz Drive",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        60.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satFuzzGate", 1},
+        "Fuzz Gate",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satFuzzOctave", 1},
+        "Fuzz Octave",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        0.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"satFuzzTone", 1},
+        "Fuzz Tone",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f),
+        50.0f,
+        juce::AudioParameterFloatAttributes().withLabel("%")));
+
     return { params.begin(), params.end() };
 }
 
@@ -334,6 +475,9 @@ void LoopEngineProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // Prepare degrade processor
     degradeProcessor.prepare(sampleRate, samplesPerBlock);
+
+    // Prepare saturation processor
+    saturationProcessor.prepare(sampleRate, samplesPerBlock);
 
     // Prepare micro looper
     microLooper.prepare(sampleRate, samplesPerBlock);
@@ -446,6 +590,36 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     microLooper.setModify(microModifyParam->load() / 100.0f);  // Convert 0-100% to 0-1
     microLooper.setSpeed(microSpeedParam->load() / 100.0f);  // Convert 0-100% to 0-1
     microLooper.setMix(microMixParam->load() / 100.0f);  // Convert 0-100% to 0-1
+
+    // Update saturation processor parameters
+    saturationProcessor.setMix(satMixParam->load() / 100.0f);
+    // Soft type params
+    saturationProcessor.setSoftDrive(satSoftDriveParam->load() / 100.0f);
+    saturationProcessor.setSoftTone(satSoftToneParam->load() / 100.0f);
+    saturationProcessor.setSoftCurve(satSoftCurveParam->load() / 100.0f);
+    // Tape type params
+    saturationProcessor.setTapeDrive(satTapeDriveParam->load() / 100.0f);
+    saturationProcessor.setTapeBias(satTapeBiasParam->load() / 100.0f);
+    saturationProcessor.setTapeFlutter(satTapeFlutterParam->load() / 100.0f);
+    saturationProcessor.setTapeTone(satTapeToneParam->load() / 100.0f);
+    // Tube type params
+    saturationProcessor.setTubeDrive(satTubeDriveParam->load() / 100.0f);
+    saturationProcessor.setTubeBias(satTubeBiasParam->load() / 100.0f);
+    saturationProcessor.setTubeWarmth(satTubeWarmthParam->load() / 100.0f);
+    saturationProcessor.setTubeSag(satTubeSagParam->load() / 100.0f);
+    // Fuzz type params
+    saturationProcessor.setFuzzDrive(satFuzzDriveParam->load() / 100.0f);
+    saturationProcessor.setFuzzGate(satFuzzGateParam->load() / 100.0f);
+    saturationProcessor.setFuzzOctave(satFuzzOctaveParam->load() / 100.0f);
+    saturationProcessor.setFuzzTone(satFuzzToneParam->load() / 100.0f);
+
+    // Signal flow: Loop -> Saturation -> Degrade -> Delay
+
+    // Apply saturation ONLY to the loop playback buffer (before degrade)
+    if (saturationProcessor.isEnabled())
+    {
+        saturationProcessor.processBlock(loopPlaybackBuffer);
+    }
 
     // Blooper-style degrade: only affects loop playback, not input
     // Apply degrade ONLY to the loop playback buffer
@@ -675,6 +849,26 @@ bool LoopEngineProcessor::getDegradeHPEnabled() const
 bool LoopEngineProcessor::getDegradeLPEnabled() const
 {
     return degradeProcessor.getLPEnabled();
+}
+
+void LoopEngineProcessor::setSaturationEnabled(bool enabled)
+{
+    saturationProcessor.setEnabled(enabled);
+}
+
+bool LoopEngineProcessor::getSaturationEnabled() const
+{
+    return saturationProcessor.isEnabled();
+}
+
+void LoopEngineProcessor::setSaturationType(int type)
+{
+    saturationProcessor.setType(type);
+}
+
+int LoopEngineProcessor::getSaturationType() const
+{
+    return static_cast<int>(saturationProcessor.getType());
 }
 
 void LoopEngineProcessor::setHostTransportSync(bool enabled)

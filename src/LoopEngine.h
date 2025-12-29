@@ -703,6 +703,16 @@ public:
         // Each layer manages its own fade independently based on when it was created
         // No need to set fadeActive globally - fade decay happens per-layer on loop wrap
 
+        // FIX: Ensure masterLoopLength is set when layer 0 has content
+        // This handles the case where LoopBuffer auto-stops recording (fixed-length mode)
+        // and bypasses LoopEngine::stopRecording, leaving masterLoopLength unset
+        if (masterLoopLength == 0 && layers[0].hasContent())
+        {
+            masterLoopLength = layers[0].getLoopLengthSamples();
+            highestLayer = std::max(highestLayer, 0);
+            DBG("processBlock() - Fixed masterLoopLength from layer 0: " + juce::String(masterLoopLength));
+        }
+
         for (int i = 0; i <= highestLayer; ++i)
         {
             bool hasContent = layers[i].hasContent();
@@ -875,14 +885,26 @@ public:
         // BEFORE the boundary: fade OUT as we approach
         // AFTER the boundary: fade IN as we move away
         // Uses dynamic parameters from UI settings
+
+        // DEBUG: Log BEFORE the condition to see what values we have
+        xfadeDebugCounter++;
+        if (xfadeDebugCounter >= 500)  // Log every ~500 blocks (~10ms)
+        {
+            xfadeDebugCounter = 0;
+            DBG("*** XFADE CHECK: loopLen=" + juce::String(masterLoopLength) +
+                " content=" + juce::String(layers[0].hasContent() ? 1 : 0) +
+                " state=" + juce::String(static_cast<int>(layers[0].getState())) +
+                " highest=" + juce::String(highestLayer));
+        }
+
         if (masterLoopLength > 0 && layers[0].hasContent())
         {
-            // Load current crossfade parameters
+            // Load current crossfade parameters (LP filter + volume ducking)
             const int preTimeMs = xfadePreTimeMs.load();
             const int postTimeMs = xfadePostTimeMs.load();
-            const float minVolume = xfadeVolDepth.load();  // Minimum volume at boundary (0 = mute, 1 = no duck)
-            const float filterFreq = xfadeFilterFreq.load();  // LP filter cutoff (0 = off)
+            const float filterFreq = xfadeFilterFreq.load();  // LP filter cutoff (Hz)
             const float filterMix = xfadeFilterDepth.load();  // Filter wet mix (0-1)
+            const float volDepth = xfadeVolDepth.load();      // Volume duck depth (0-1)
 
             // Convert pre-time to position threshold (normalized 0-1)
             // threshold = preTimeMs / loopLengthMs
@@ -940,6 +962,19 @@ public:
 
             lastMasterPlayheadPos = currentMasterPos;
 
+            // DEBUG: Log position periodically
+            static int debugCounter = 0;
+            if (++debugCounter >= 1000)  // Log every ~1000 blocks
+            {
+                debugCounter = 0;
+                DBG("XFADE DEBUG: pos=" + juce::String(currentMasterPos, 3) +
+                    " preThreshold=" + juce::String(preThreshold, 3) +
+                    " inPre=" + juce::String(inPreBoundaryZone ? 1 : 0) +
+                    " countdown=" + juce::String(antiClickCountdown) +
+                    " filterFreq=" + juce::String(filterFreq, 0) +
+                    " filterMix=" + juce::String(filterMix, 2));
+            }
+
             // Calculate effect strength based on where we are
             float effectStrength = 0.0f;  // 0 = no effect, 1 = full effect at boundary
             const float smearAmount = xfadeSmearAmount.load();
@@ -985,51 +1020,55 @@ public:
                 }
             }
 
-            // Apply effects if strength > 0
-            if (effectStrength > 0.0f)
+            // Apply LP filter ducking if strength > 0
+            // IMPORTANT: Apply to loopOnlyBuffer, not buffer, because PluginProcessor
+            // reconstructs output from loopOnlyBuffer + inputPassthrough, discarding buffer
+            if (effectStrength > 0.0f && filterFreq > 0.0f && filterMix > 0.0f)
             {
-                float* leftData = buffer.getWritePointer(0);
-                float* rightData = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
+                float* leftData = loopOnlyBuffer.getWritePointer(0);
+                float* rightData = numChannels > 1 ? loopOnlyBuffer.getWritePointer(1) : nullptr;
 
-                // Volume: lerp from 1.0 to minVolume based on effectStrength
-                float volumeMultiplier = 1.0f - effectStrength * (1.0f - minVolume);
-
-                // LP filter coefficient (lower = more filtering)
-                // Map filterFreq to coefficient: higher freq = less filtering
-                float filterCoeff = 1.0f;
-                if (filterFreq > 0.0f && filterMix > 0.0f)
-                {
-                    // Simple one-pole: coeff = 2*pi*fc/sr, clamped
-                    filterCoeff = std::clamp(2.0f * juce::MathConstants<float>::pi * filterFreq / static_cast<float>(currentSampleRate), 0.01f, 1.0f);
-                }
+                // LP filter coefficient - lower value = more aggressive filtering
+                // For 200Hz at 48kHz: coeff = 2*pi*200/48000 = 0.026
+                float filterCoeff = std::clamp(2.0f * juce::MathConstants<float>::pi * filterFreq / static_cast<float>(currentSampleRate), 0.01f, 1.0f);
 
                 for (int i = 0; i < numSamples; ++i)
                 {
-                    // Apply volume ducking
+                    // One-pole LP: y[n] = coeff * x[n] + (1 - coeff) * y[n-1]
+                    float filteredL = filterCoeff * leftData[i] + (1.0f - filterCoeff) * antiClickFilterL;
+                    float filteredR = rightData ? filterCoeff * rightData[i] + (1.0f - filterCoeff) * antiClickFilterR : 0.0f;
+                    antiClickFilterL = filteredL;
+                    antiClickFilterR = filteredR;
+
+                    // Mix filtered with dry based on effectStrength and filterMix
+                    float wetAmount = effectStrength * filterMix;
+                    leftData[i] = leftData[i] * (1.0f - wetAmount) + filteredL * wetAmount;
+                    if (rightData) rightData[i] = rightData[i] * (1.0f - wetAmount) + filteredR * wetAmount;
+                }
+            }
+
+            // Apply VOLUME ducking if strength > 0 and volDepth > 0
+            // IMPORTANT: Apply to loopOnlyBuffer, same as LP filter
+            if (effectStrength > 0.0f && volDepth > 0.0f)
+            {
+                float* leftData = loopOnlyBuffer.getWritePointer(0);
+                float* rightData = numChannels > 1 ? loopOnlyBuffer.getWritePointer(1) : nullptr;
+
+                // Volume reduction: 1.0 = full volume, (1 - volDepth) = ducked volume
+                // effectStrength ramps from 0 (far) to 1 (at boundary)
+                float volumeMultiplier = 1.0f - (effectStrength * volDepth);
+
+                for (int i = 0; i < numSamples; ++i)
+                {
                     leftData[i] *= volumeMultiplier;
                     if (rightData) rightData[i] *= volumeMultiplier;
-
-                    // Apply LP filter if enabled
-                    if (filterFreq > 0.0f && filterMix > 0.0f)
-                    {
-                        // One-pole LP: y[n] = coeff * x[n] + (1 - coeff) * y[n-1]
-                        float filteredL = filterCoeff * leftData[i] + (1.0f - filterCoeff) * antiClickFilterL;
-                        float filteredR = rightData ? filterCoeff * rightData[i] + (1.0f - filterCoeff) * antiClickFilterR : 0.0f;
-                        antiClickFilterL = filteredL;
-                        antiClickFilterR = filteredR;
-
-                        // Mix filtered with dry based on effectStrength and filterMix
-                        float wetAmount = effectStrength * filterMix;
-                        leftData[i] = leftData[i] * (1.0f - wetAmount) + filteredL * wetAmount;
-                        if (rightData) rightData[i] = rightData[i] * (1.0f - wetAmount) + filteredR * wetAmount;
-                    }
                 }
+            }
 
-                // Decrement countdown for post-boundary phase
-                if (antiClickCountdown > 0)
-                {
-                    antiClickCountdown = std::max(0, antiClickCountdown - numSamples);
-                }
+            // Decrement countdown for post-boundary phase
+            if (antiClickCountdown > 0)
+            {
+                antiClickCountdown = std::max(0, antiClickCountdown - numSamples);
             }
 
             // SMEAR FILL: Apply AFTER all ducking effects, as a separate pass
@@ -1313,7 +1352,7 @@ public:
             layerClipCounts[i].store(0);
     }
 
-    // Set crossfade parameters from UI
+    // Set crossfade parameters from UI (LP filter + volume ducking)
     void setCrossfadeParams(int preTimeMs, int postTimeMs, float volDepth, float filterFreq, float filterDepth,
                             float smearAmount = 0.0f, float smearAttack = 0.1f, float smearLength = 1.0f)
     {
@@ -1456,11 +1495,12 @@ private:
     bool approachingBoundary = false;    // True when we're in PRE-boundary fade-out zone
 
     // Crossfade parameters (settable from UI)
-    std::atomic<int> xfadePreTimeMs { 80 };      // Pre-boundary fade time (ms)
-    std::atomic<int> xfadePostTimeMs { 100 };    // Post-boundary fade time (ms)
-    std::atomic<float> xfadeVolDepth { 0.0f };   // Min volume at boundary (0 = full mute, 1 = no ducking)
-    std::atomic<float> xfadeFilterFreq { 0.0f }; // LP filter cutoff at boundary (Hz, 0 = off)
-    std::atomic<float> xfadeFilterDepth { 0.0f }; // Filter mix at boundary (0-1)
+    // TEST: AGGRESSIVE 500ms pre/post, 200Hz LP filter - should be VERY obvious
+    std::atomic<int> xfadePreTimeMs { 500 };       // Pre-boundary fade time (ms)
+    std::atomic<int> xfadePostTimeMs { 500 };      // Post-boundary fade time (ms)
+    std::atomic<float> xfadeFilterFreq { 200.0f }; // LP filter cutoff at boundary (Hz) - VERY dark
+    std::atomic<float> xfadeFilterDepth { 1.0f };  // Filter mix at boundary (0-1) - 100%
+    std::atomic<float> xfadeVolDepth { 0.5f };     // Volume duck depth (0-1) - 50% default
     float antiClickFilterL = 0.0f;  // One-pole LP filter state
     float antiClickFilterR = 0.0f;
 
@@ -1475,6 +1515,9 @@ private:
     int smearCaptureLength = 0;      // How many samples captured before boundary
     int smearPlaybackStart = 0;      // Write position snapshot at boundary crossing
     bool smearActive = false;        // True when playing back smear buffer
+
+    // Debug counter (member variable to avoid static issues)
+    int xfadeDebugCounter = 0;
 
     LoopBuffer::State getCurrentState() const
     {

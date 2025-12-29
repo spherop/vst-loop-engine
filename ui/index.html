@@ -116,14 +116,10 @@
                 </span>
             </div>
 
-            <!-- Tabs (right) -->
+            <!-- Tabs (right) - just LOOPER now, effects are in the rack -->
             <nav class="tab-bar flex gap-1">
                 <button class="tab active" data-tab="looper">
                     <span class="tab-label">LOOPER</span>
-                </button>
-                <button class="tab" data-tab="delay">
-                    <span class="tab-led" id="delay-led"></span>
-                    <span class="tab-label">DELAY</span>
                 </button>
             </nav>
         </header>
@@ -325,7 +321,7 @@
                                         <path d="M7 16l4-8 4 6 4-10"/>
                                     </svg>
                                 </button>
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v3.9.2</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v5.1.4</span>
                             </div>
 
                             <!-- Controls (center) -->
@@ -372,275 +368,539 @@
                     </section>
                 </div>
 
-                <!-- RIGHT COLUMN: Degrade Module -->
-                <div class="w-56 flex flex-col">
-                    <section class="section-card degrade-section bg-fd-card rounded-lg border border-fd-border flex-1 flex flex-col">
-                        <!-- Header -->
+                <!-- RIGHT COLUMN: Effects Rack -->
+                <div class="w-64 flex flex-col" id="effects-rack">
+                    <section class="section-card bg-fd-card rounded-lg border border-fd-border flex-1 flex flex-col overflow-hidden">
+                        <!-- Rack Header -->
                         <div class="flex items-center justify-between p-3 border-b border-fd-border">
                             <div class="flex items-center gap-2">
-                                <div class="section-led degrade-led active" id="degrade-master-led"></div>
-                                <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">DEGRADE</span>
+                                <span class="font-display text-[9px] font-bold tracking-[2px] text-fd-text-dim uppercase">EFFECTS</span>
                             </div>
-                            <div class="flex items-center gap-2">
-                                <div class="knob knob-small degrade-knob" id="degradeMix-knob">
-                                    <div class="knob-indicator"></div>
-                                </div>
-                                <span class="font-mono text-[9px] text-white w-[32px] text-right" id="degradeMix-value">100%</span>
-                            </div>
+                            <button class="rack-back-btn hidden" id="rack-back-btn" title="Back to rack overview">
+                                <span class="back-icon">&larr;</span>
+                                <span class="back-label">BACK</span>
+                            </button>
                         </div>
 
-                        <!-- LO-FI Section -->
-                        <div class="p-3 border-b border-fd-border">
-                            <div class="flex items-center justify-between mb-3">
-                                <div class="flex items-center gap-2">
-                                    <div class="section-led degrade-led active" id="lofi-led"></div>
-                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">LO-FI</span>
+                        <!-- RACK OVERVIEW (Pedal Cards) -->
+                        <div class="rack-overview flex-1 overflow-y-auto p-2 flex flex-col gap-2" id="rack-overview">
+
+                            <!-- SATURATION Pedal Card -->
+                            <div class="pedal-card saturation-card" id="saturation-card" data-effect="saturation">
+                                <div class="pedal-header">
+                                    <div class="flex items-center gap-2">
+                                        <div class="section-led saturation-led" id="saturation-led"></div>
+                                        <span class="pedal-name">SATURATION</span>
+                                        <button class="pedal-expand-btn" data-effect="saturation" title="Open full panel">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M9 18l6-6-6-6"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <div class="knob knob-micro saturation-knob" id="satMix-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="font-mono text-[8px] text-white w-[28px] text-right" id="satMix-value">100%</span>
+                                    </div>
+                                </div>
+                                <div class="pedal-params">
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro saturation-knob" id="satDrive-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">DRIVE</span>
+                                    </div>
+                                    <div class="pedal-param">
+                                        <span class="sat-type-indicator font-mono text-[9px] text-fd-accent" id="sat-type-card">SOFT</span>
+                                        <span class="pedal-param-label">TYPE</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="grid grid-cols-4 gap-2">
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="degradeBit-knob">
-                                        <div class="knob-indicator"></div>
+
+                            <!-- DEGRADE Pedal Card -->
+                            <div class="pedal-card degrade-card" id="degrade-card" data-effect="degrade">
+                                <div class="pedal-header">
+                                    <div class="flex items-center gap-2">
+                                        <div class="section-led degrade-led active" id="degrade-master-led"></div>
+                                        <span class="pedal-name">DEGRADE</span>
+                                        <button class="pedal-expand-btn" data-effect="degrade" title="Open full panel">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M9 18l6-6-6-6"/>
+                                            </svg>
+                                        </button>
                                     </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeBit-value">16</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">BIT</span>
+                                    <div class="flex items-center gap-1">
+                                        <div class="knob knob-micro degrade-knob" id="degradeMix-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="font-mono text-[8px] text-white w-[28px] text-right" id="degradeMix-value">100%</span>
+                                    </div>
                                 </div>
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="degradeSR-knob">
-                                        <div class="knob-indicator"></div>
+                                <div class="pedal-params">
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro degrade-knob" id="degradeBit-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">BIT</span>
                                     </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeSR-value">48k</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">SR</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="degradeWobble-knob">
-                                        <div class="knob-indicator"></div>
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro degrade-knob" id="degradeWobble-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">WOB</span>
                                     </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeWobble-value">0%</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">WOB</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-small degrade-knob" id="degradeVinyl-knob">
-                                        <div class="knob-indicator"></div>
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro degrade-knob" id="degradeVinyl-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">VINYL</span>
                                     </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeVinyl-value">0%</span>
-                                    <span class="font-display text-[7px] text-fd-text-dim">VINYL</span>
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro degrade-knob" id="degradeLP-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">LP</span>
+                                    </div>
                                 </div>
                             </div>
+
+                            <!-- DELAY Pedal Card -->
+                            <div class="pedal-card delay-card" id="delay-card" data-effect="delay">
+                                <div class="pedal-header">
+                                    <div class="flex items-center gap-2">
+                                        <div class="section-led delay-led" id="delay-led"></div>
+                                        <span class="pedal-name">DELAY</span>
+                                        <button class="pedal-expand-btn" data-effect="delay" title="Open full panel">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M9 18l6-6-6-6"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        <div class="knob knob-micro delay-knob" id="mix-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="font-mono text-[8px] text-white w-[28px] text-right" id="mix-value">50%</span>
+                                    </div>
+                                </div>
+                                <div class="pedal-params">
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro delay-knob" id="delayTime-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">TIME</span>
+                                    </div>
+                                    <div class="pedal-param">
+                                        <div class="knob knob-micro delay-knob" id="feedback-card-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="pedal-param-label">FDBK</span>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
 
-                        <!-- MICRO LOOP Section (MOOD-inspired always-listening micro-looper) -->
-                        <div class="p-3 border-b border-fd-border">
-                            <div class="flex items-center justify-between mb-2">
-                                <div class="flex items-center gap-2">
-                                    <div class="section-led degrade-led" id="microloop-led"></div>
-                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">MICRO LOOPER</span>
-                                </div>
-                                <div class="flex items-center gap-1">
-                                    <button class="micro-transport-btn" id="micro-play-btn" title="Play/Stop captured loop">
-                                        <span class="micro-icon">&#9654;</span>
-                                    </button>
-                                    <button class="micro-transport-btn" id="micro-overdub-btn" title="Overdub on loop">
-                                        <span class="micro-icon">&#9673;</span>
-                                    </button>
-                                    <button class="micro-transport-btn" id="micro-freeze-btn" title="Freeze buffer">
-                                        <span class="micro-icon">&#10052;</span>
-                                    </button>
-                                    <button class="micro-transport-btn" id="micro-clear-btn" title="Clear buffer">
-                                        <span class="micro-icon">&#10005;</span>
-                                    </button>
+                        <!-- RACK DETAIL (Full Effect Views) -->
+                        <div class="rack-detail hidden flex-1 overflow-y-auto" id="rack-detail">
+
+                            <!-- SATURATION Detail View -->
+                            <div class="effect-detail hidden" id="saturation-detail" data-effect="saturation">
+                                <div class="p-3 border-b border-fd-border">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="flex items-center gap-2">
+                                            <div class="section-led saturation-led" id="saturation-detail-led"></div>
+                                            <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">SATURATION</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <div class="knob knob-small saturation-knob" id="satMix-detail-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white w-[32px] text-right" id="satMix-detail-value">100%</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Type Selector -->
+                                    <div class="flex justify-center gap-1 mb-4">
+                                        <button class="sat-type-btn active" data-type="0">SOFT</button>
+                                        <button class="sat-type-btn" data-type="1">TAPE</button>
+                                        <button class="sat-type-btn" data-type="2">TUBE</button>
+                                        <button class="sat-type-btn" data-type="3">FUZZ</button>
+                                    </div>
+
+                                    <!-- SOFT Parameters -->
+                                    <div class="sat-type-params" id="sat-soft-params">
+                                        <div class="grid grid-cols-3 gap-3">
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satSoftDrive-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satSoftDrive-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">DRIVE</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satSoftTone-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satSoftTone-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">TONE</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satSoftCurve-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satSoftCurve-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">CURVE</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- TAPE Parameters -->
+                                    <div class="sat-type-params hidden" id="sat-tape-params">
+                                        <div class="grid grid-cols-4 gap-2">
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satTapeDrive-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satTapeDrive-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">DRIVE</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satTapeBias-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satTapeBias-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">BIAS</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satTapeFlutter-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satTapeFlutter-value">0%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">FLUTTER</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satTapeTone-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satTapeTone-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">TONE</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- TUBE Parameters -->
+                                    <div class="sat-type-params hidden" id="sat-tube-params">
+                                        <div class="grid grid-cols-4 gap-2">
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satTubeDrive-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satTubeDrive-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">DRIVE</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satTubeBias-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satTubeBias-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">BIAS</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satTubeWarmth-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satTubeWarmth-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">WARMTH</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satTubeSag-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satTubeSag-value">0%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">SAG</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- FUZZ Parameters -->
+                                    <div class="sat-type-params hidden" id="sat-fuzz-params">
+                                        <div class="grid grid-cols-4 gap-2">
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satFuzzDrive-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satFuzzDrive-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">DRIVE</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satFuzzGate-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satFuzzGate-value">0%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">GATE</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satFuzzOctave-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satFuzzOctave-value">0%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">OCTAVE</span>
+                                            </div>
+                                            <div class="flex flex-col items-center gap-1">
+                                                <div class="knob knob-small saturation-knob" id="satFuzzTone-knob">
+                                                    <div class="knob-dot"></div>
+                                                </div>
+                                                <span class="font-mono text-[9px] text-white" id="satFuzzTone-value">50%</span>
+                                                <span class="font-display text-[7px] text-fd-text-dim">TONE</span>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <!-- Waveform visualization with playhead -->
-                            <div class="micro-waveform-container mb-2">
-                                <canvas id="micro-waveform-canvas" class="micro-waveform-canvas"></canvas>
-                                <div class="micro-playhead" id="micro-playhead"></div>
-                                <div class="micro-buffer-fill" id="micro-buffer-fill"></div>
+                            <!-- DEGRADE Detail View -->
+                            <div class="effect-detail hidden" id="degrade-detail" data-effect="degrade">
+                                <!-- LO-FI Section -->
+                                <div class="p-3 border-b border-fd-border">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="flex items-center gap-2">
+                                            <div class="section-led degrade-led active" id="lofi-led"></div>
+                                            <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">LO-FI</span>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2">
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small degrade-knob" id="degradeBit-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="degradeBit-value">16</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">BIT</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small degrade-knob" id="degradeSR-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="degradeSR-value">48k</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">SR</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small degrade-knob" id="degradeWobble-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="degradeWobble-value">0%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">WOB</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small degrade-knob" id="degradeVinyl-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="degradeVinyl-value">0%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">VINYL</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- MICRO LOOP Section -->
+                                <div class="p-3 border-b border-fd-border">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <div class="flex items-center gap-2">
+                                            <div class="section-led degrade-led" id="microloop-led"></div>
+                                            <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">MICRO LOOPER</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <button class="micro-transport-btn" id="micro-play-btn" title="Play/Stop">
+                                                <span class="micro-icon">&#9654;</span>
+                                            </button>
+                                            <button class="micro-transport-btn" id="micro-overdub-btn" title="Overdub">
+                                                <span class="micro-icon">&#9673;</span>
+                                            </button>
+                                            <button class="micro-transport-btn" id="micro-freeze-btn" title="Freeze">
+                                                <span class="micro-icon">&#10052;</span>
+                                            </button>
+                                            <button class="micro-transport-btn" id="micro-clear-btn" title="Clear">
+                                                <span class="micro-icon">&#10005;</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Waveform -->
+                                    <div class="micro-waveform-container mb-2">
+                                        <canvas id="micro-waveform-canvas" class="micro-waveform-canvas"></canvas>
+                                        <div class="micro-playhead" id="micro-playhead"></div>
+                                        <div class="micro-buffer-fill" id="micro-buffer-fill"></div>
+                                    </div>
+
+                                    <!-- Mode selector -->
+                                    <div class="flex justify-center gap-1 mb-2">
+                                        <button class="micro-mode-btn" id="micro-mode-env" data-mode="0" title="Envelope mode">ENV</button>
+                                        <button class="micro-mode-btn active" id="micro-mode-tape" data-mode="1" title="Tape mode">TAPE</button>
+                                        <button class="micro-mode-btn" id="micro-mode-stretch" data-mode="2" title="Stretch mode">STR</button>
+                                    </div>
+
+                                    <div class="text-center mb-2">
+                                        <span class="font-mono text-[8px] text-fd-text-dim" id="micro-mode-desc">TAPE: Speed control with tape-like wow</span>
+                                    </div>
+
+                                    <div class="grid grid-cols-5 gap-2 mb-2">
+                                        <div class="flex flex-col items-center gap-0.5">
+                                            <div class="knob knob-tiny degrade-knob" id="microClock-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[8px] text-white" id="microClock-value">8.0s</span>
+                                            <span class="font-display text-[6px] text-fd-text-dim">CLOCK</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-0.5">
+                                            <div class="knob knob-tiny degrade-knob" id="microLength-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[8px] text-white" id="microLength-value">100%</span>
+                                            <span class="font-display text-[6px] text-fd-text-dim">LENGTH</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-0.5">
+                                            <div class="knob knob-tiny degrade-knob" id="microSpeed-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[8px] text-white" id="microSpeed-value">1.0x</span>
+                                            <span class="font-display text-[6px] text-fd-text-dim">SPEED</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-0.5">
+                                            <div class="knob knob-tiny degrade-knob" id="microModify-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[8px] text-white" id="microModify-value">50%</span>
+                                            <span class="font-display text-[6px] text-fd-text-dim">MODIFY</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-0.5">
+                                            <div class="knob knob-tiny degrade-knob" id="microMix-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[8px] text-white" id="microMix-value">50%</span>
+                                            <span class="font-display text-[6px] text-fd-text-dim">MIX</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex justify-center items-center">
+                                        <button class="micro-reverse-btn" id="micro-reverse-btn" title="Reverse playback">
+                                            <span class="reverse-icon">&#8634;</span>
+                                            <span class="reverse-label">REVERSE</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- FILTER Section -->
+                                <div class="p-3">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="flex items-center gap-2">
+                                            <div class="section-led degrade-led active" id="filter-led"></div>
+                                            <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">FILTER</span>
+                                        </div>
+                                    </div>
+                                    <div class="filter-viz-container mb-3">
+                                        <canvas id="filter-viz-canvas" class="filter-viz-canvas"></canvas>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <div class="flex flex-col items-center gap-1" id="hp-group">
+                                            <div class="knob knob-small degrade-knob" id="degradeHP-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="degradeHP-value">20Hz</span>
+                                            <span class="filter-label font-display text-[7px] font-bold cursor-pointer active" id="hp-toggle-label" title="Toggle High-Pass">HP</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1" id="lp-group">
+                                            <div class="knob knob-small degrade-knob" id="degradeLP-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="degradeLP-value">20kHz</span>
+                                            <span class="filter-label font-display text-[7px] font-bold cursor-pointer active" id="lp-toggle-label" title="Toggle Low-Pass">LP</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <!-- Mode selector -->
-                            <div class="flex justify-center gap-1 mb-2">
-                                <button class="micro-mode-btn" id="micro-mode-env" data-mode="0" title="Envelope mode - input ducks when you play">ENV</button>
-                                <button class="micro-mode-btn active" id="micro-mode-tape" data-mode="1" title="Tape mode - variable speed playback">TAPE</button>
-                                <button class="micro-mode-btn" id="micro-mode-stretch" data-mode="2" title="Stretch mode - time-stretch without pitch change">STR</button>
+                            <!-- DELAY Detail View -->
+                            <div class="effect-detail hidden" id="delay-detail" data-effect="delay">
+                                <div class="p-3 border-b border-fd-border">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <div class="flex items-center gap-2">
+                                            <div class="section-led delay-led" id="delay-detail-led"></div>
+                                            <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">DELAY</span>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2">
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small delay-knob" id="delayTime-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="delayTime-value">300ms</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">TIME</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small delay-knob" id="feedback-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="feedback-value">40%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">FDBK</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small delay-knob" id="tone-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="tone-value">4.0kHz</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">TONE</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small delay-knob" id="mix-detail-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="mix-detail-value">50%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">MIX</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- CHARACTER Section -->
+                                <div class="p-3">
+                                    <div class="flex items-center gap-2 mb-3">
+                                        <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">CHARACTER</span>
+                                    </div>
+                                    <div class="grid grid-cols-4 gap-2">
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small delay-knob" id="age-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="age-value">25%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">AGE</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small delay-knob" id="modRate-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="modRate-value">0.5Hz</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">RATE</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small delay-knob" id="modDepth-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="modDepth-value">3ms</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">DEPTH</span>
+                                        </div>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <div class="knob knob-small delay-knob" id="warmth-knob">
+                                                <div class="knob-dot"></div>
+                                            </div>
+                                            <span class="font-mono text-[9px] text-white" id="warmth-value">30%</span>
+                                            <span class="font-display text-[7px] text-fd-text-dim">WARMTH</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <!-- Mode description -->
-                            <div class="text-center mb-2">
-                                <span class="font-mono text-[8px] text-fd-text-dim" id="micro-mode-desc">TAPE: Speed control with tape-like wow</span>
-                            </div>
-
-                            <!-- Row 1: Core micro-loop controls -->
-                            <div class="grid grid-cols-5 gap-2 mb-2">
-                                <div class="flex flex-col items-center gap-0.5">
-                                    <div class="knob knob-tiny degrade-knob" id="microClock-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[8px] text-white" id="microClock-value">8.0s</span>
-                                    <span class="font-display text-[6px] text-fd-text-dim">CLOCK</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-0.5">
-                                    <div class="knob knob-tiny degrade-knob" id="microLength-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[8px] text-white" id="microLength-value">100%</span>
-                                    <span class="font-display text-[6px] text-fd-text-dim">LENGTH</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-0.5">
-                                    <div class="knob knob-tiny degrade-knob" id="microSpeed-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[8px] text-white" id="microSpeed-value">1.0x</span>
-                                    <span class="font-display text-[6px] text-fd-text-dim">SPEED</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-0.5">
-                                    <div class="knob knob-tiny degrade-knob" id="microModify-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[8px] text-white" id="microModify-value">50%</span>
-                                    <span class="font-display text-[6px] text-fd-text-dim">MODIFY</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-0.5">
-                                    <div class="knob knob-tiny degrade-knob" id="microMix-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[8px] text-white" id="microMix-value">50%</span>
-                                    <span class="font-display text-[6px] text-fd-text-dim">MIX</span>
-                                </div>
-                            </div>
-
-                            <!-- Row 2: Reverse toggle -->
-                            <div class="flex justify-center items-center">
-                                <button class="micro-reverse-btn" id="micro-reverse-btn" title="Reverse playback direction">
-                                    <span class="reverse-icon">&#8634;</span>
-                                    <span class="reverse-label">REVERSE</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- FILTER Section -->
-                        <div class="p-3 flex-1 flex flex-col">
-                            <div class="flex items-center justify-between mb-3">
-                                <div class="flex items-center gap-2">
-                                    <div class="section-led degrade-led active" id="filter-led"></div>
-                                    <span class="font-display text-[8px] font-bold tracking-[1px] text-fd-text-dim uppercase">FILTER</span>
-                                </div>
-                            </div>
-                            <!-- Filter Visualization -->
-                            <div class="filter-viz-container mb-3">
-                                <canvas id="filter-viz-canvas" class="filter-viz-canvas"></canvas>
-                            </div>
-                            <div class="grid grid-cols-2 gap-3">
-                                <div class="flex flex-col items-center gap-1" id="hp-group">
-                                    <div class="knob knob-small degrade-knob" id="degradeHP-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeHP-value">20Hz</span>
-                                    <span class="filter-label font-display text-[7px] font-bold cursor-pointer active" id="hp-toggle-label" title="Toggle High-Pass">HP</span>
-                                </div>
-                                <div class="flex flex-col items-center gap-1" id="lp-group">
-                                    <div class="knob knob-small degrade-knob" id="degradeLP-knob">
-                                        <div class="knob-indicator"></div>
-                                    </div>
-                                    <span class="font-mono text-[9px] text-white" id="degradeLP-value">20kHz</span>
-                                    <span class="filter-label font-display text-[7px] font-bold cursor-pointer active" id="lp-toggle-label" title="Toggle Low-Pass">LP</span>
-                                </div>
-                            </div>
                         </div>
                     </section>
                 </div>
-            </div>
-
-            <!-- DELAY Tab Content -->
-            <div id="delay-tab" class="tab-content hidden flex flex-col gap-3 w-full">
-                <!-- DELAY Section -->
-                <section class="section-card bg-fd-card rounded-lg border border-fd-border p-4">
-                    <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
-                        // DELAY
-                    </h2>
-                    <div class="flex justify-center gap-10">
-                        <!-- TIME -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-large" id="delayTime-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-sm font-medium text-white" id="delayTime-value">300 ms</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TIME</span>
-                        </div>
-
-                        <!-- FEEDBACK -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-large" id="feedback-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-sm font-medium text-white" id="feedback-value">40%</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">FEEDBACK</span>
-                        </div>
-
-                        <!-- TONE -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-large" id="tone-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-sm font-medium text-white" id="tone-value">4.0 kHz</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">TONE</span>
-                        </div>
-
-                        <!-- MIX -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-large" id="mix-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-sm font-medium text-white" id="mix-value">50%</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">MIX</span>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- CHARACTER Section -->
-                <section class="section-card bg-fd-card rounded-lg border border-fd-border p-4">
-                    <h2 class="font-display text-[10px] font-bold tracking-[3px] text-fd-text-dim uppercase mb-4">
-                        // CHARACTER
-                    </h2>
-                    <div class="flex justify-center gap-10">
-                        <!-- AGE -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-medium" id="age-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-xs font-medium text-white" id="age-value">25%</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">AGE</span>
-                        </div>
-
-                        <!-- RATE -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-medium" id="modRate-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-xs font-medium text-white" id="modRate-value">0.5 Hz</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">RATE</span>
-                        </div>
-
-                        <!-- DEPTH -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-medium" id="modDepth-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-xs font-medium text-white" id="modDepth-value">3 ms</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">DEPTH</span>
-                        </div>
-
-                        <!-- WARMTH -->
-                        <div class="flex flex-col items-center gap-2">
-                            <div class="knob knob-medium" id="warmth-knob">
-                                <div class="knob-indicator"></div>
-                            </div>
-                            <span class="font-mono text-xs font-medium text-white" id="warmth-value">30%</span>
-                            <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">WARMTH</span>
-                        </div>
-                    </div>
-                </section>
             </div>
 
         </main>
@@ -829,13 +1089,13 @@
             </div>
         </div>
 
-        <!-- Volume Duck (hidden for now - LP filter is more effective) -->
-        <div class="xfade-section hidden">
+        <!-- Volume Duck -->
+        <div class="xfade-section">
             <div class="xfade-section-label">VOLUME DUCK</div>
             <div class="xfade-param-row">
-                <label class="xfade-label">Min Level (%)</label>
-                <input type="range" id="xfade-vol-depth" min="0" max="100" value="100" class="xfade-slider">
-                <span class="xfade-value" id="xfade-vol-depth-val">100</span>
+                <label class="xfade-label">Depth (%)</label>
+                <input type="range" id="xfade-vol-depth" min="0" max="100" value="50" class="xfade-slider">
+                <span class="xfade-value" id="xfade-vol-depth-val">50</span>
             </div>
         </div>
     </div>
@@ -843,3 +1103,4 @@
     <script src="main.js"></script>
 </body>
 </html>
+\

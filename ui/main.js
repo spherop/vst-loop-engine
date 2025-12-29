@@ -1,11 +1,7 @@
 // Loop Engine Plugin UI Controller
 // Implements JUCE WebView bindings without npm dependencies
 
-// ============================================================
-// VERSION - Increment this with each build to verify changes
-// ============================================================
-const UI_VERSION = "2.1.0";
-console.log(`%c[Loop Engine UI] Version ${UI_VERSION} loaded`, 'color: #4fc3f7; font-weight: bold;');
+// Loop Engine - Version is set in index.html
 
 // Promise handler for native function calls
 class PromiseHandler {
@@ -173,7 +169,9 @@ class KnobController {
 
         // Support both .knob-indicator (line) and .knob-dot (dot) styles
         this.indicator = this.element.querySelector('.knob-indicator') || this.element.querySelector('.knob-dot');
-        this.valueDisplay = document.getElementById(`${paramName}-value`);
+        // Allow custom value display element ID via options
+        const valueElementId = options.valueElementId || `${paramName}-value`;
+        this.valueDisplay = document.getElementById(valueElementId);
         this.paramName = paramName;
 
         this.minAngle = -135;
@@ -186,6 +184,9 @@ class KnobController {
         // Default value to use when resetting (optional)
         this.defaultValue = options.defaultValue !== undefined ? options.defaultValue : null;
 
+        // Auto-enable callback - called when knob is turned (for card knobs to auto-enable effect)
+        this.onTurnCallback = options.onTurn || null;
+
         // Chromatic/stepped mode options (for pitch knob)
         // When shiftStep is set, Shift+drag will snap to discrete steps
         this.shiftStep = options.shiftStep || null;  // e.g., 1/24 for semitones
@@ -197,6 +198,7 @@ class KnobController {
         this.isDragging = false;
         this.isShiftDrag = false;  // Track if Shift is held during drag
         this.lastY = 0;
+        this.justEndedDrag = false;  // Prevent click after drag
 
         this.setupEvents();
         this.setupJuceBinding();
@@ -204,6 +206,8 @@ class KnobController {
 
     setupEvents() {
         this.element.addEventListener('mousedown', (e) => {
+            // Stop propagation to prevent parent (card) from receiving click
+            e.stopPropagation();
             // Cmd+click (Mac) or Ctrl+click (Windows) to reset to default
             if (e.metaKey || e.ctrlKey) {
                 e.preventDefault();
@@ -238,6 +242,13 @@ class KnobController {
         this.element.addEventListener('dblclick', (e) => {
             e.preventDefault();
             this.resetToDefault();
+        });
+
+        // Prevent click from propagating to parent (e.g., pedal card) after drag
+        this.element.addEventListener('click', (e) => {
+            if (this.justEndedDrag) {
+                e.stopPropagation();
+            }
         });
     }
 
@@ -316,17 +327,27 @@ class KnobController {
         this.setValue(newValue);
         this.sendToJuce();
 
+        // Call onTurn callback (e.g., to auto-enable effect when card knob is turned)
+        if (this.onTurnCallback) {
+            this.onTurnCallback(newValue);
+        }
+
         this.lastY = e.clientY;
     }
 
     endDrag() {
         if (this.isDragging) {
             this.isDragging = false;
+            this.justEndedDrag = true;  // Prevent subsequent click from propagating
             this.element.classList.remove('active');
             this.element.classList.remove('adjusting');
             if (this.sliderState) {
                 this.sliderState.sliderDragEnded();
             }
+            // Clear the flag after a short delay (allows click event to be blocked)
+            setTimeout(() => {
+                this.justEndedDrag = false;
+            }, 50);
         }
     }
 
@@ -336,8 +357,7 @@ class KnobController {
         if (this.indicator) {
             // Different transform for dot vs line indicator styles
             if (this.indicator.classList.contains('knob-dot')) {
-                // Dot style: rotate around knob center using CSS transform-origin
-                // translateX(-50%) centers the dot, rotate spins around transform-origin
+                // Dot style: translateX(-50%) centers dot, rotate spins around transform-origin
                 this.indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
             } else {
                 // Line style: translateY(-100%) moves indicator up so bottom is at center
@@ -377,123 +397,22 @@ class TabController {
         this.tabs = document.querySelectorAll('.tab');
         this.contents = document.querySelectorAll('.tab-content');
         this.currentTab = 'looper';
-
-        // Delay LED toggle state
-        this.delayLed = document.getElementById('delay-led');
-        this.delayEnabled = true;
-        this.setDelayEnabledFn = getNativeFunction("setDelayEnabled");
-
-        // Degrade LED toggle state
-        this.degradeLed = document.getElementById('degrade-led');
-        this.degradeEnabled = true;
-        this.setDegradeEnabledFn = getNativeFunction("setDegradeEnabled");
-
+        // Note: Delay and Degrade LED toggles are handled by EffectsRackController
         this.setupEvents();
-        this.fetchInitialState();
-    }
-
-    async fetchInitialState() {
-        try {
-            // Fetch delay state
-            const getTempoStateFn = getNativeFunction("getTempoState");
-            const tempoState = await getTempoStateFn();
-            if (tempoState && typeof tempoState.delayEnabled !== 'undefined') {
-                this.delayEnabled = tempoState.delayEnabled;
-                this.updateDelayLed();
-            }
-        } catch (e) {
-            console.log('Could not fetch initial delay state');
-        }
-
-        try {
-            // Fetch degrade state
-            const getDegradeStateFn = getNativeFunction("getDegradeState");
-            const degradeState = await getDegradeStateFn();
-            if (degradeState && typeof degradeState.enabled !== 'undefined') {
-                this.degradeEnabled = degradeState.enabled;
-                this.updateDegradeLed();
-            }
-        } catch (e) {
-            console.log('Could not fetch initial degrade state');
-        }
     }
 
     setupEvents() {
+        // Tab switching only - LED toggles handled by EffectsRackController
         this.tabs.forEach(tab => {
             tab.addEventListener('click', (e) => {
-                // Check if the click was on the LED
-                if (e.target.classList.contains('tab-led')) {
-                    // LED click - toggle effect bypass based on which tab
-                    e.stopPropagation();
-                    const tabName = tab.dataset.tab;
-                    if (tabName === 'delay') {
-                        this.toggleDelayEnabled();
-                    } else if (tabName === 'degrade') {
-                        this.toggleDegradeEnabled();
-                    }
-                } else {
-                    // Regular tab click - switch tabs
-                    const tabName = tab.dataset.tab;
-                    this.switchTab(tabName);
+                // Ignore clicks on LEDs - those are handled elsewhere
+                if (e.target.classList.contains('tab-led') || e.target.classList.contains('section-led')) {
+                    return;
                 }
+                const tabName = tab.dataset.tab;
+                this.switchTab(tabName);
             });
         });
-
-        // Also add direct click handler on LEDs for safety
-        if (this.delayLed) {
-            this.delayLed.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.toggleDelayEnabled();
-            });
-        }
-        if (this.degradeLed) {
-            this.degradeLed.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this.toggleDegradeEnabled();
-            });
-        }
-    }
-
-    async toggleDelayEnabled() {
-        this.delayEnabled = !this.delayEnabled;
-        this.updateDelayLed();
-
-        try {
-            await this.setDelayEnabledFn(this.delayEnabled);
-            console.log(`[DELAY] Delay ${this.delayEnabled ? 'enabled' : 'disabled'}`);
-        } catch (e) {
-            console.error('Error toggling delay:', e);
-            // Revert on error
-            this.delayEnabled = !this.delayEnabled;
-            this.updateDelayLed();
-        }
-    }
-
-    async toggleDegradeEnabled() {
-        this.degradeEnabled = !this.degradeEnabled;
-        this.updateDegradeLed();
-
-        try {
-            await this.setDegradeEnabledFn(this.degradeEnabled);
-            console.log(`[DEGRADE] Degrade ${this.degradeEnabled ? 'enabled' : 'disabled'}`);
-        } catch (e) {
-            console.error('Error toggling degrade:', e);
-            // Revert on error
-            this.degradeEnabled = !this.degradeEnabled;
-            this.updateDegradeLed();
-        }
-    }
-
-    updateDelayLed() {
-        if (this.delayLed) {
-            this.delayLed.classList.toggle('active', this.delayEnabled);
-        }
-    }
-
-    updateDegradeLed() {
-        if (this.degradeLed) {
-            this.degradeLed.classList.toggle('active', this.degradeEnabled);
-        }
     }
 
     switchTab(tabName) {
@@ -3187,6 +3106,16 @@ class CrossfadeSettingsController {
         this.saveCrossfadeSettingsFn = getNativeFunction('saveCrossfadeSettings');
         this.loadCrossfadeSettingsFn = getNativeFunction('loadCrossfadeSettings');
 
+        console.log('[XFADE] Controller initialized');
+        console.log('[XFADE] Panel element:', this.panel ? 'found' : 'NOT FOUND');
+        console.log('[XFADE] Sliders:', {
+            preTime: this.preTimeSlider ? 'found' : 'NOT FOUND',
+            postTime: this.postTimeSlider ? 'found' : 'NOT FOUND',
+            filterFreq: this.filterFreqSlider ? 'found' : 'NOT FOUND',
+            filterDepth: this.filterDepthSlider ? 'found' : 'NOT FOUND'
+        });
+        console.log('[XFADE] Native fn:', this.setCrossfadeParamsFn ? 'available' : 'NOT AVAILABLE');
+
         // Enabled state
         this.enabled = true;
 
@@ -3194,6 +3123,12 @@ class CrossfadeSettingsController {
         this.updateEnabledUI();  // Initialize LED state before loading
         this.loadSettings();
         this.updateDisplays();
+
+        // Also send initial settings after a short delay to ensure JUCE backend is ready
+        setTimeout(() => {
+            console.log('[XFADE] Delayed initial send');
+            this.sendToPlugin();
+        }, 500);
     }
 
     setupEvents() {
@@ -3616,12 +3551,13 @@ class CrossfadeSettingsController {
                     this.enabled = settings.enabled !== false;  // Default to true
                     this.updateEnabledUI();
                     this.updateDisplays();
-                    this.sendToPlugin();
                 }
             } catch (e) {
                 console.log('[XFADE] No saved settings found, using defaults');
             }
         }
+        // Always send current settings to plugin on load (even with defaults)
+        this.sendToPlugin();
     }
 
     async saveSettings() {
@@ -3645,10 +3581,15 @@ class CrossfadeSettingsController {
     }
 
     async sendToPlugin() {
-        if (!this.setCrossfadeParamsFn) return;
+        console.log('[XFADE] sendToPlugin called, enabled=' + this.enabled);
+        if (!this.setCrossfadeParamsFn) {
+            console.warn('[XFADE] setCrossfadeParamsFn not available yet');
+            return;
+        }
 
         // If disabled, send zeros
         if (!this.enabled) {
+            console.log('[XFADE] Disabled - sending minimal params');
             try {
                 await this.setCrossfadeParamsFn(5, 5, 1.0, 0, 0, 0, 0.1, 1.0);  // Minimal effect
             } catch (e) {
@@ -3670,12 +3611,440 @@ class CrossfadeSettingsController {
         const smearAttack = parseInt(this.smearAttackSlider?.value || 10) / 100.0;  // 1-50% -> 0.01-0.5
         const smearLength = parseInt(this.smearLengthSlider?.value || 100) / 100.0;  // 25-200% -> 0.25-2.0
 
+        console.log(`[XFADE] Sending: pre=${preTimeMs}ms post=${postTimeMs}ms vol=${volDepth} filterFreq=${filterFreq}Hz filterDepth=${filterDepth}`);
+
         try {
             await this.setCrossfadeParamsFn(preTimeMs, postTimeMs, volDepth, filterFreq, filterDepth, smearAmount, smearAttack, smearLength);
             this.saveSettings();  // Save on every change
         } catch (e) {
             console.error('[XFADE] Error sending params:', e);
         }
+    }
+}
+
+// ============================================
+// EFFECTS RACK CONTROLLER
+// ============================================
+
+class EffectsRackController {
+    constructor() {
+        this.rackOverview = document.getElementById('rack-overview');
+        this.rackDetail = document.getElementById('rack-detail');
+        this.backBtn = document.getElementById('rack-back-btn');
+        this.currentEffect = null;
+
+        // Pedal cards
+        this.pedalCards = document.querySelectorAll('.pedal-card');
+
+        // Effect detail views
+        this.effectDetails = document.querySelectorAll('.effect-detail');
+
+        this.setupEventListeners();
+        console.log('[EffectsRack] Initialized');
+    }
+
+    setupEventListeners() {
+        // Expand buttons on pedal cards -> show detail view
+        const expandBtns = document.querySelectorAll('.pedal-expand-btn');
+        expandBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const effect = btn.dataset.effect;
+                this.showDetail(effect);
+            });
+        });
+
+        // Back button -> show overview
+        if (this.backBtn) {
+            this.backBtn.addEventListener('click', () => {
+                this.showOverview();
+            });
+        }
+
+        // LED clicks for bypass toggle
+        this.setupBypassLEDs();
+    }
+
+    setupBypassLEDs() {
+        // Use the same getNativeFunction wrapper that DegradeController uses
+        const setSaturationEnabledFn = getNativeFunction('setSaturationEnabled');
+        const setDelayEnabledFn = getNativeFunction('setDelayEnabled');
+
+        // Saturation LED toggle - both card and detail LEDs
+        const satLeds = [
+            document.getElementById('saturation-led'),
+            document.getElementById('saturation-detail-led')
+        ];
+        satLeds.forEach(led => {
+            if (led) {
+                led.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    // Toggle both LEDs in sync
+                    const isActive = !led.classList.contains('active');
+                    satLeds.forEach(l => l?.classList.toggle('active', isActive));
+                    try {
+                        await setSaturationEnabledFn(isActive);
+                        console.log(`[SATURATION] ${isActive ? 'enabled' : 'disabled'}`);
+                    } catch (err) {
+                        console.error('Error toggling saturation:', err);
+                    }
+                });
+            }
+        });
+
+        // Delay LED toggle - both card and detail LEDs
+        const delayLeds = [
+            document.getElementById('delay-led'),
+            document.getElementById('delay-detail-led')
+        ];
+        delayLeds.forEach(led => {
+            if (led) {
+                led.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    // Toggle both LEDs in sync
+                    const isActive = !led.classList.contains('active');
+                    delayLeds.forEach(l => l?.classList.toggle('active', isActive));
+                    try {
+                        await setDelayEnabledFn(isActive);
+                        console.log(`[DELAY] ${isActive ? 'enabled' : 'disabled'}`);
+                    } catch (err) {
+                        console.error('Error toggling delay:', err);
+                    }
+                });
+            }
+        });
+
+        // Degrade LED already handled by DegradeController
+    }
+
+    showDetail(effect) {
+        console.log(`[EffectsRack] Showing detail for: ${effect}`);
+        this.currentEffect = effect;
+
+        // Hide overview, show detail container
+        if (this.rackOverview) this.rackOverview.classList.add('hidden');
+        if (this.rackDetail) this.rackDetail.classList.remove('hidden');
+        if (this.backBtn) this.backBtn.classList.remove('hidden');
+
+        // Show only the selected effect detail
+        this.effectDetails.forEach(detail => {
+            if (detail.dataset.effect === effect) {
+                detail.classList.remove('hidden');
+            } else {
+                detail.classList.add('hidden');
+            }
+        });
+
+        // Reinitialize filter canvas when degrade detail is shown
+        // (canvas needs to be visible to get correct dimensions)
+        if (effect === 'degrade' && window.degradeController) {
+            // Use setTimeout to ensure DOM has updated
+            setTimeout(() => {
+                window.degradeController.setupCanvas();
+            }, 10);
+        }
+    }
+
+    showOverview() {
+        console.log('[EffectsRack] Showing overview');
+        this.currentEffect = null;
+
+        // Show overview, hide detail container
+        if (this.rackOverview) this.rackOverview.classList.remove('hidden');
+        if (this.rackDetail) this.rackDetail.classList.add('hidden');
+        if (this.backBtn) this.backBtn.classList.add('hidden');
+    }
+}
+
+// ============================================
+// SATURATION CONTROLLER
+// ============================================
+
+class SaturationController {
+    constructor() {
+        this.currentType = 0;  // 0=SOFT, 1=TAPE, 2=TUBE, 3=FUZZ
+        this.typeNames = ['SOFT', 'TAPE', 'TUBE', 'FUZZ'];
+
+        // Type selector buttons
+        this.typeButtons = document.querySelectorAll('.sat-type-btn');
+
+        // Type params containers
+        this.typeParams = {
+            soft: document.getElementById('sat-soft-params'),
+            tape: document.getElementById('sat-tape-params'),
+            tube: document.getElementById('sat-tube-params'),
+            fuzz: document.getElementById('sat-fuzz-params')
+        };
+
+        // Card type indicator
+        this.cardTypeIndicator = document.getElementById('sat-type-card');
+
+        // Get native functions
+        this.getSaturationStateFn = null;
+        this.setSaturationTypeFn = null;
+
+        this.setupNativeFunctions();
+        this.setupEventListeners();
+        this.setupKnobs();
+        this.pollState();
+
+        console.log('[Saturation] Initialized');
+    }
+
+    setupNativeFunctions() {
+        // Use the same getNativeFunction wrapper that works for Degrade
+        this.getSaturationStateFn = getNativeFunction('getSaturationState');
+        this.setSaturationTypeFn = getNativeFunction('setSaturationType');
+    }
+
+    setupEventListeners() {
+        // Type selector buttons
+        this.typeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const type = parseInt(btn.dataset.type);
+                this.setType(type);
+            });
+        });
+    }
+
+    setupKnobs() {
+        // Auto-enable saturation when any card knob is turned
+        const autoEnableSat = () => this.enableSaturation();
+
+        // Saturation Mix - card micro knob
+        this.satMixCardKnob = new KnobController('satMix-knob', 'satMix', {
+            formatValue: (v) => `${Math.round(v * 100)}%`,
+            onTurn: autoEnableSat
+        });
+
+        // Saturation Mix - detail knob (synced with card)
+        this.satMixDetailKnob = new KnobController('satMix-detail-knob', 'satMix', {
+            formatValue: (v) => `${Math.round(v * 100)}%`,
+            valueElementId: 'satMix-detail-value'
+        });
+
+        // Card drive knob - controls whichever type is active
+        // This is a "virtual" knob that maps to the current type's drive
+        this.setupCardDriveKnob();
+
+        // SOFT type knobs
+        new KnobController('satSoftDrive-knob', 'satSoftDrive', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satSoftTone-knob', 'satSoftTone', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satSoftCurve-knob', 'satSoftCurve', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+
+        // TAPE type knobs
+        new KnobController('satTapeDrive-knob', 'satTapeDrive', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satTapeBias-knob', 'satTapeBias', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satTapeFlutter-knob', 'satTapeFlutter', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satTapeTone-knob', 'satTapeTone', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+
+        // TUBE type knobs
+        new KnobController('satTubeDrive-knob', 'satTubeDrive', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satTubeBias-knob', 'satTubeBias', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satTubeWarmth-knob', 'satTubeWarmth', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satTubeSag-knob', 'satTubeSag', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+
+        // FUZZ type knobs
+        new KnobController('satFuzzDrive-knob', 'satFuzzDrive', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satFuzzGate-knob', 'satFuzzGate', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satFuzzOctave-knob', 'satFuzzOctave', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+        new KnobController('satFuzzTone-knob', 'satFuzzTone', {
+            formatValue: (v) => `${Math.round(v * 100)}%`
+        });
+    }
+
+    async setType(type) {
+        this.currentType = type;
+        console.log(`[Saturation] Setting type to ${this.typeNames[type]} (${type})`);
+
+        // Update UI
+        this.updateTypeUI();
+
+        // Send to plugin
+        if (this.setSaturationTypeFn) {
+            console.log(`[Saturation] Calling setSaturationTypeFn with type=${type}`);
+            try {
+                await this.setSaturationTypeFn(type);
+                console.log(`[Saturation] setSaturationTypeFn completed successfully`);
+            } catch (err) {
+                console.error(`[Saturation] setSaturationTypeFn failed:`, err);
+            }
+        } else {
+            console.error(`[Saturation] setSaturationTypeFn is not defined!`);
+        }
+    }
+
+    updateTypeUI() {
+        // Update type buttons
+        this.typeButtons.forEach(btn => {
+            const btnType = parseInt(btn.dataset.type);
+            btn.classList.toggle('active', btnType === this.currentType);
+        });
+
+        // Show/hide type params
+        Object.keys(this.typeParams).forEach((key, index) => {
+            if (this.typeParams[key]) {
+                this.typeParams[key].classList.toggle('hidden', index !== this.currentType);
+            }
+        });
+
+        // Update card type indicator
+        if (this.cardTypeIndicator) {
+            this.cardTypeIndicator.textContent = this.typeNames[this.currentType];
+        }
+
+        // Update card drive knob to match current type's drive value
+        this.updateCardDriveKnob();
+    }
+
+    // Enable saturation effect (called when card knobs are turned)
+    async enableSaturation() {
+        const satLeds = [
+            document.getElementById('saturation-led'),
+            document.getElementById('saturation-detail-led')
+        ];
+        // Check if already enabled
+        if (satLeds[0]?.classList.contains('active')) return;
+
+        // Enable it
+        satLeds.forEach(l => l?.classList.add('active'));
+        if (window.__JUCE__?.backend?.getNativeFunction) {
+            const setSatEnabled = window.__JUCE__.backend.getNativeFunction('setSaturationEnabled');
+            if (setSatEnabled) await setSatEnabled(true);
+        }
+    }
+
+    // Setup the card drive knob (maps to current type's drive)
+    setupCardDriveKnob() {
+        const driveKnob = document.getElementById('satDrive-card-knob');
+        if (!driveKnob) return;
+
+        const indicator = driveKnob.querySelector('.knob-dot');
+        let isDragging = false;
+        let lastY = 0;
+
+        const updateIndicator = (value) => {
+            const angle = -135 + 270 * value;
+            if (indicator) {
+                indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+            }
+        };
+
+        driveKnob.addEventListener('mousedown', (e) => {
+            e.stopPropagation();  // Prevent card click
+            isDragging = true;
+            lastY = e.clientY;
+            driveKnob.classList.add('active');
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaY = lastY - e.clientY;
+            const sensitivity = 0.005;
+
+            // Get current drive param based on type
+            const driveParam = this.getDriveParamName();
+            const sliderState = getSliderState(driveParam);
+            if (sliderState) {
+                let newValue = sliderState.getNormalisedValue() + deltaY * sensitivity;
+                newValue = Math.max(0, Math.min(1, newValue));
+                sliderState.setNormalisedValue(newValue);
+                updateIndicator(newValue);
+            }
+
+            // Auto-enable saturation
+            this.enableSaturation();
+
+            lastY = e.clientY;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                driveKnob.classList.remove('active');
+            }
+        });
+
+        // Prevent click propagation after drag
+        driveKnob.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Store reference for updating
+        this.cardDriveKnob = driveKnob;
+        this.cardDriveIndicator = indicator;
+    }
+
+    // Get the drive parameter name for the current type
+    getDriveParamName() {
+        const driveParams = ['satSoftDrive', 'satTapeDrive', 'satTubeDrive', 'satFuzzDrive'];
+        return driveParams[this.currentType] || 'satSoftDrive';
+    }
+
+    // Update card drive knob to match current type's value
+    updateCardDriveKnob() {
+        if (!this.cardDriveIndicator) return;
+        const driveParam = this.getDriveParamName();
+        const sliderState = getSliderState(driveParam);
+        if (sliderState) {
+            const value = sliderState.getNormalisedValue();
+            const angle = -135 + 270 * value;
+            this.cardDriveIndicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+        }
+    }
+
+    async pollState() {
+        if (!this.getSaturationStateFn) return;
+
+        try {
+            const state = await this.getSaturationStateFn();
+            if (state) {
+                // Update enabled state
+                const satLed = document.getElementById('saturation-led');
+                const satDetailLed = document.getElementById('saturation-detail-led');
+                if (satLed) satLed.classList.toggle('active', state.enabled);
+                if (satDetailLed) satDetailLed.classList.toggle('active', state.enabled);
+
+                // Update type if changed externally
+                if (state.type !== this.currentType) {
+                    this.currentType = state.type;
+                    this.updateTypeUI();
+                }
+            }
+        } catch (e) {
+            console.error('[Saturation] Error polling state:', e);
+        }
+
+        // Poll periodically
+        setTimeout(() => this.pollState(), 200);
     }
 }
 
@@ -3706,17 +4075,8 @@ function hideLoadingScreen() {
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
-    console.log(`Initializing Loop Engine UI v${UI_VERSION}...`);
+    console.log('Initializing Loop Engine UI...');
     console.log('JUCE available:', typeof window.__JUCE__ !== 'undefined');
-    console.log('JUCE object:', window.__JUCE__);
-    console.log('JUCE backend:', window.__JUCE__?.backend);
-    console.log('JUCE getNativeFunction:', typeof window.__JUCE__?.backend?.getNativeFunction);
-
-    // Set version in footer
-    const versionEl = document.getElementById('version-ticker');
-    if (versionEl) {
-        versionEl.textContent = `v${UI_VERSION}`;
-    }
 
     // Hide loading screen after a short delay to allow fonts to load
     setTimeout(hideLoadingScreen, 500);
@@ -3913,6 +4273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Delay Tab Knobs
 
     // Delay Time: 1ms - 2000ms (skewed range)
+    // Delay Time - detail knob
     new KnobController('delayTime-knob', 'delayTime', {
         formatValue: (v) => {
             // The parameter uses a skewed range, so we approximate
@@ -3924,9 +4285,41 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Feedback: 0% - 95%
+    // Delay Time - card micro knob (no value display needed)
+    // Auto-enable delay helper
+    const autoEnableDelay = async () => {
+        const delayLeds = [
+            document.getElementById('delay-led'),
+            document.getElementById('delay-detail-led')
+        ];
+        if (delayLeds[0]?.classList.contains('active')) return;
+        delayLeds.forEach(l => l?.classList.add('active'));
+        if (window.__JUCE__?.backend?.getNativeFunction) {
+            const setDelayEnabled = window.__JUCE__.backend.getNativeFunction('setDelayEnabled');
+            if (setDelayEnabled) await setDelayEnabled(true);
+        }
+    };
+
+    new KnobController('delayTime-card-knob', 'delayTime', {
+        formatValue: () => '',  // No value display for card knobs
+        onTurn: autoEnableDelay
+    });
+
+    // Feedback: 0% - 95% - detail knob
     new KnobController('feedback-knob', 'feedback', {
         formatValue: (v) => `${Math.round(v * 95)}%`
+    });
+
+    // Feedback - card micro knob
+    new KnobController('feedback-card-knob', 'feedback', {
+        formatValue: () => '',
+        onTurn: autoEnableDelay
+    });
+
+    // Mix - card micro knob
+    new KnobController('mix-knob', 'mix', {
+        formatValue: (v) => `${Math.round(v * 100)}%`,
+        onTurn: autoEnableDelay
     });
 
     // Tone: 200Hz - 12kHz (skewed range)
@@ -3940,9 +4333,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Mix: 0% - 100%
-    new KnobController('mix-knob', 'mix', {
-        formatValue: (v) => `${Math.round(v * 100)}%`
+    // Mix: 0% - 100% (detail knob)
+    new KnobController('mix-detail-knob', 'mix', {
+        formatValue: (v) => `${Math.round(v * 100)}%`,
+        valueElementId: 'mix-detail-value'
     });
 
     // BBD Character Controls
@@ -4026,6 +4420,20 @@ document.addEventListener('DOMContentLoaded', () => {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
+    // Degrade card micro knobs (no value display)
+    new KnobController('degradeBit-card-knob', 'degradeBit', {
+        formatValue: () => ''
+    });
+    new KnobController('degradeWobble-card-knob', 'degradeWobble', {
+        formatValue: () => ''
+    });
+    new KnobController('degradeVinyl-card-knob', 'degradeVinyl', {
+        formatValue: () => ''
+    });
+    new KnobController('degradeLP-card-knob', 'degradeLP', {
+        formatValue: () => ''
+    });
+
     // =========== MICRO LOOPER CONTROLS (MOOD-inspired) ===========
 
     // Micro Clock: controls buffer length (0% = 16s, 100% = 0.5s)
@@ -4071,8 +4479,8 @@ document.addEventListener('DOMContentLoaded', () => {
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
-    // Degrade section controller
-    new DegradeController();
+    // Degrade section controller (stored globally for canvas reinit)
+    window.degradeController = new DegradeController();
 
     // BPM display and tempo sync
     new BpmDisplayController();
@@ -4085,6 +4493,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Crossfade settings modal
     new CrossfadeSettingsController();
+
+    // Effects Rack controller
+    new EffectsRackController();
+
+    // Saturation controller
+    new SaturationController();
 
     // Reverse toggle - setup handled in LooperController
     looperController.setupReverseButton();

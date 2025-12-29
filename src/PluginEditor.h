@@ -55,6 +55,28 @@ private:
     juce::WebSliderRelay microSpeedRelay { "microSpeed" };
     juce::WebSliderRelay microMixRelay { "microMix" };
 
+    // Saturation parameter relays
+    juce::WebSliderRelay satMixRelay { "satMix" };
+    // Soft type
+    juce::WebSliderRelay satSoftDriveRelay { "satSoftDrive" };
+    juce::WebSliderRelay satSoftToneRelay { "satSoftTone" };
+    juce::WebSliderRelay satSoftCurveRelay { "satSoftCurve" };
+    // Tape type
+    juce::WebSliderRelay satTapeDriveRelay { "satTapeDrive" };
+    juce::WebSliderRelay satTapeBiasRelay { "satTapeBias" };
+    juce::WebSliderRelay satTapeFlutterRelay { "satTapeFlutter" };
+    juce::WebSliderRelay satTapeToneRelay { "satTapeTone" };
+    // Tube type
+    juce::WebSliderRelay satTubeDriveRelay { "satTubeDrive" };
+    juce::WebSliderRelay satTubeBiasRelay { "satTubeBias" };
+    juce::WebSliderRelay satTubeWarmthRelay { "satTubeWarmth" };
+    juce::WebSliderRelay satTubeSagRelay { "satTubeSag" };
+    // Fuzz type
+    juce::WebSliderRelay satFuzzDriveRelay { "satFuzzDrive" };
+    juce::WebSliderRelay satFuzzGateRelay { "satFuzzGate" };
+    juce::WebSliderRelay satFuzzOctaveRelay { "satFuzzOctave" };
+    juce::WebSliderRelay satFuzzToneRelay { "satFuzzTone" };
+
     juce::WebBrowserComponent webView;
 
     // Parameter attachments
@@ -93,6 +115,28 @@ private:
     juce::WebSliderParameterAttachment microModifyAttachment;
     juce::WebSliderParameterAttachment microSpeedAttachment;
     juce::WebSliderParameterAttachment microMixAttachment;
+
+    // Saturation parameter attachments
+    juce::WebSliderParameterAttachment satMixAttachment;
+    // Soft type
+    juce::WebSliderParameterAttachment satSoftDriveAttachment;
+    juce::WebSliderParameterAttachment satSoftToneAttachment;
+    juce::WebSliderParameterAttachment satSoftCurveAttachment;
+    // Tape type
+    juce::WebSliderParameterAttachment satTapeDriveAttachment;
+    juce::WebSliderParameterAttachment satTapeBiasAttachment;
+    juce::WebSliderParameterAttachment satTapeFlutterAttachment;
+    juce::WebSliderParameterAttachment satTapeToneAttachment;
+    // Tube type
+    juce::WebSliderParameterAttachment satTubeDriveAttachment;
+    juce::WebSliderParameterAttachment satTubeBiasAttachment;
+    juce::WebSliderParameterAttachment satTubeWarmthAttachment;
+    juce::WebSliderParameterAttachment satTubeSagAttachment;
+    // Fuzz type
+    juce::WebSliderParameterAttachment satFuzzDriveAttachment;
+    juce::WebSliderParameterAttachment satFuzzGateAttachment;
+    juce::WebSliderParameterAttachment satFuzzOctaveAttachment;
+    juce::WebSliderParameterAttachment satFuzzToneAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
 

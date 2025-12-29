@@ -5,6 +5,7 @@
 #include "DelayLine.h"
 #include "LoopEngine.h"
 #include "DegradeProcessor.h"
+#include "SaturationProcessor.h"
 #include "MicroLooper.h"
 
 class LoopEngineProcessor : public juce::AudioProcessor
@@ -77,6 +78,13 @@ public:
     bool getDegradeHPEnabled() const;
     bool getDegradeLPEnabled() const;
 
+    // Saturation controls
+    void setSaturationEnabled(bool enabled);
+    bool getSaturationEnabled() const;
+    void setSaturationType(int type);
+    int getSaturationType() const;
+    SaturationProcessor& getSaturationProcessor() { return saturationProcessor; }
+
     // Host transport sync
     void setHostTransportSync(bool enabled);
     bool getHostTransportSync() const;
@@ -95,6 +103,7 @@ private:
     DelayLine delayLineR;
     LoopEngine loopEngine;
     DegradeProcessor degradeProcessor;
+    SaturationProcessor saturationProcessor;
     MicroLooper microLooper;
 
     // Parameter pointers for efficient access
@@ -126,6 +135,28 @@ private:
     std::atomic<float>* microModifyParam = nullptr;
     std::atomic<float>* microSpeedParam = nullptr;
     std::atomic<float>* microMixParam = nullptr;
+
+    // Saturation parameters
+    std::atomic<float>* satMixParam = nullptr;
+    // Soft type
+    std::atomic<float>* satSoftDriveParam = nullptr;
+    std::atomic<float>* satSoftToneParam = nullptr;
+    std::atomic<float>* satSoftCurveParam = nullptr;
+    // Tape type
+    std::atomic<float>* satTapeDriveParam = nullptr;
+    std::atomic<float>* satTapeBiasParam = nullptr;
+    std::atomic<float>* satTapeFlutterParam = nullptr;
+    std::atomic<float>* satTapeToneParam = nullptr;
+    // Tube type
+    std::atomic<float>* satTubeDriveParam = nullptr;
+    std::atomic<float>* satTubeBiasParam = nullptr;
+    std::atomic<float>* satTubeWarmthParam = nullptr;
+    std::atomic<float>* satTubeSagParam = nullptr;
+    // Fuzz type
+    std::atomic<float>* satFuzzDriveParam = nullptr;
+    std::atomic<float>* satFuzzGateParam = nullptr;
+    std::atomic<float>* satFuzzOctaveParam = nullptr;
+    std::atomic<float>* satFuzzToneParam = nullptr;
 
     // Tempo sync state
     std::atomic<bool> tempoSyncEnabled { false };
