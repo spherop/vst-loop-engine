@@ -104,6 +104,23 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       processorRef.getLoopEngine().redo();
                       complete({});
                   })
+                  .withNativeFunction("setAdditiveRecording", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          bool active = static_cast<bool>(args[0]);
+                          processorRef.getLoopEngine().setAdditiveRecordingActive(active);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("canAddLayer", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      complete(processorRef.getLoopEngine().canAddLayer());
+                  })
+                  .withNativeFunction("isAdditiveRecordingActive", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      complete(processorRef.getLoopEngine().isAdditiveRecordingActive());
+                  })
                   .withNativeFunction("loopClear", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().clear();

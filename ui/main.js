@@ -502,6 +502,9 @@ class LooperController {
         this.undoFn = getNativeFunction("loopUndo");
         this.redoFn = getNativeFunction("loopRedo");
         this.clearFn = getNativeFunction("loopClear");
+        this.setAdditiveRecordingFn = getNativeFunction("setAdditiveRecording");
+        this.canAddLayerFn = getNativeFunction("canAddLayer");
+        this.isAdditiveRecordingActiveFn = getNativeFunction("isAdditiveRecordingActive");
         this.clearLayerFn = getNativeFunction("clearLayer");
         this.deleteLayerFn = getNativeFunction("deleteLayer");
         this.getStateFn = getNativeFunction("getLoopState");
@@ -609,6 +612,7 @@ class LooperController {
         this.undoBtn = document.getElementById('undo-btn');
         this.redoBtn = document.getElementById('redo-btn');
         this.clearBtn = document.getElementById('clear-btn');
+        this.addBtn = document.getElementById('add-btn');
         this.timeDisplay = document.getElementById('loop-time-display');
 
         if (this.recBtn) {
@@ -628,6 +632,50 @@ class LooperController {
         }
         if (this.clearBtn) {
             this.clearBtn.addEventListener('click', () => this.clear());
+        }
+
+        // ADD button - toggle for punch-in/out additive recording (Blooper-style)
+        // Track additive recording state locally
+        this.additiveRecordingActive = false;
+
+        if (this.addBtn) {
+            this.addBtn.addEventListener('click', async () => {
+                await this.toggleAdditiveRecording();
+            });
+        }
+    }
+
+    // Toggle additive recording on/off (punch-in/punch-out)
+    async toggleAdditiveRecording() {
+        try {
+            // Check if we're currently recording
+            const isActive = await this.isAdditiveRecordingActiveFn();
+
+            if (isActive) {
+                // PUNCH OUT - stop additive recording
+                await this.setAdditiveRecordingFn(false);
+                this.additiveRecordingActive = false;
+                this.addBtn.classList.remove('active');
+                console.log('[LOOPER] ADD punch OUT');
+            } else {
+                // Check if we can add a layer before punching in
+                const canAdd = await this.canAddLayerFn();
+                if (!canAdd) {
+                    console.log('[LOOPER] Cannot ADD - all 8 layers in use');
+                    // Visual feedback - flash the button red
+                    this.addBtn.classList.add('disabled-flash');
+                    setTimeout(() => this.addBtn.classList.remove('disabled-flash'), 300);
+                    return;
+                }
+
+                // PUNCH IN - start additive recording
+                await this.setAdditiveRecordingFn(true);
+                this.additiveRecordingActive = true;
+                this.addBtn.classList.add('active');
+                console.log('[LOOPER] ADD punch IN');
+            }
+        } catch (e) {
+            console.error('Error toggling additive recording:', e);
         }
     }
 

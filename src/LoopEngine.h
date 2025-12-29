@@ -953,6 +953,7 @@ public:
                 // This is where we stopped capturing, so we read backwards from here
                 smearPlaybackStart = smearWritePos;
                 smearActive = true;
+
             }
 
             // Check if we're APPROACHING the boundary (pre-boundary zone)
@@ -1392,6 +1393,122 @@ public:
         xfadeSmearAmount.store(smearAmount);
     }
 
+    // Check if we can add another layer (for ADD or DUB)
+    bool canAddLayer() const
+    {
+        return highestLayer < NUM_LAYERS - 1;
+    }
+
+    // Additive recording - Blooper-style punch-in/out toggle
+    // Creates a new layer, mutes all others, records effected audio directly into it
+    // Toggle on: punch in, start recording effected audio
+    // Toggle off: punch out, stop recording, unmute all layers
+    void setAdditiveRecordingActive(bool active)
+    {
+        if (active && !additiveRecordingActive.load())
+        {
+            // PUNCH IN - Start additive recording
+            if (masterLoopLength <= 0 || !hasContent())
+            {
+                DBG("ADD: Cannot start - no loop content");
+                return;
+            }
+
+            // Check if we have room for another layer
+            if (!canAddLayer())
+            {
+                DBG("ADD: Cannot start - all 8 layers in use");
+                return;
+            }
+
+            // Save current mute states for all layers
+            for (int i = 0; i < NUM_LAYERS; ++i)
+            {
+                additiveLayerMuteStates[i] = layers[i].getMuted();
+            }
+            additiveStartLayer = currentLayer;
+
+            // Blooper behavior: Recording after undo clears undone layers
+            clearUndoneLayers();
+
+            // Create a new layer for the additive recording
+            additiveTargetLayer = highestLayer + 1;
+            highestLayer = additiveTargetLayer;
+            currentLayer = additiveTargetLayer;
+
+            // DON'T mute source layers - we need them playing to capture the effected audio!
+            // The new layer will receive the effected audio from all playing layers
+
+            // Get current playhead position from layer 0 for sync
+            // getRawPlayhead() returns the raw sample position (not normalized)
+            float currentPlayhead = layers[0].getRawPlayhead();
+            int playheadSamples = static_cast<int>(currentPlayhead);
+
+            // Ensure playhead is within bounds
+            if (playheadSamples < 0) playheadSamples = 0;
+            if (playheadSamples >= masterLoopLength) playheadSamples = playheadSamples % masterLoopLength;
+
+            // Start overdubbing on the new layer (it will receive effected audio)
+            // Set up the layer with the master loop length and current playhead
+            layers[additiveTargetLayer].prepareForAdditiveRecording(masterLoopLength, playheadSamples);
+
+            additiveRecordingActive.store(true);
+            DBG("ADD PUNCH IN: Recording to layer " + juce::String(additiveTargetLayer + 1) +
+                " at playhead " + juce::String(playheadSamples));
+        }
+        else if (!active && additiveRecordingActive.load())
+        {
+            // PUNCH OUT - Stop additive recording
+            additiveRecordingActive.store(false);
+
+            // Stop the recording on the target layer
+            if (additiveTargetLayer >= 0 && additiveTargetLayer < NUM_LAYERS)
+            {
+                layers[additiveTargetLayer].stopAdditiveRecording();
+
+                // Check if we actually recorded anything
+                if (!layers[additiveTargetLayer].hasContent())
+                {
+                    // Nothing was recorded, remove this layer
+                    highestLayer = std::max(0, additiveTargetLayer - 1);
+                    currentLayer = additiveStartLayer >= 0 ? additiveStartLayer : 0;
+                    DBG("ADD PUNCH OUT: No content recorded, reverting to layer " + juce::String(currentLayer + 1));
+                }
+                else
+                {
+                    DBG("ADD PUNCH OUT: Layer " + juce::String(additiveTargetLayer + 1) + " recorded successfully");
+                }
+            }
+
+            // No need to restore mute states since we didn't change them
+
+            additiveTargetLayer = -1;
+            additiveStartLayer = -1;
+        }
+    }
+
+    bool isAdditiveRecordingActive() const
+    {
+        return additiveRecordingActive.load();
+    }
+
+    // Get the layer index currently being used for additive recording (-1 if not active)
+    int getAdditiveTargetLayer() const
+    {
+        return additiveTargetLayer;
+    }
+
+    // Called from PluginProcessor after effects chain to capture effected audio
+    // This writes directly into the additive target layer's buffer
+    void captureForAdditive(const juce::AudioBuffer<float>& buffer, int numSamples)
+    {
+        if (!additiveRecordingActive.load() || additiveTargetLayer < 0 || masterLoopLength <= 0)
+            return;
+
+        // Write the effected audio directly into the target layer
+        layers[additiveTargetLayer].writeAdditiveAudio(buffer, numSamples);
+    }
+
     // Flatten all non-muted layers into layer 1
     // This sums all active layer buffers into layer 1 and clears the others
     // SEAMLESS: preserves playhead position and continues playback without interruption
@@ -1542,6 +1659,13 @@ private:
     int smearCaptureLength = 0;      // How many samples captured before boundary
     int smearPlaybackStart = 0;      // Write position snapshot at boundary crossing
     bool smearActive = false;        // True when playing back smear buffer
+
+    // Additive recording state (Blooper-style punch-in/out)
+    // Toggle-based: creates new layer, mutes others, records effected audio directly
+    std::atomic<bool> additiveRecordingActive { false };
+    int additiveTargetLayer = -1;                 // Layer we're recording into during ADD
+    bool additiveLayerMuteStates[NUM_LAYERS];     // Saved mute states to restore on stop
+    int additiveStartLayer = -1;                  // Which layer was current when ADD started
 
     // Debug counter (member variable to avoid static issues)
     int xfadeDebugCounter = 0;

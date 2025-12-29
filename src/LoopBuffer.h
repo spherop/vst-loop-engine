@@ -775,6 +775,149 @@ public:
     void setPan(float p) { pan.store(std::clamp(p, -1.0f, 1.0f)); }
     float getPan() const { return pan.load(); }
 
+    // Apply soft clipping to entire buffer (for additive recording runaway prevention)
+    void applyBufferSoftClip()
+    {
+        if (loopLength <= 0)
+            return;
+
+        for (int i = 0; i < loopLength; ++i)
+        {
+            bufferL[i] = softClip(bufferL[i]);
+            bufferR[i] = softClip(bufferR[i]);
+        }
+        DBG("applyBufferSoftClip() - Applied soft clipping to " + juce::String(loopLength) + " samples");
+    }
+
+    // ============================================
+    // ADDITIVE RECORDING (Blooper-style punch-in/out)
+    // Records effected audio directly into this layer in realtime
+    // ============================================
+
+    // Prepare this layer for additive recording
+    // Sets up the buffer with the target loop length and syncs to current playhead
+    void prepareForAdditiveRecording(int targetLoopLength, int startPlayheadSamples)
+    {
+        // Safety checks
+        if (targetLoopLength <= 0 || targetLoopLength > maxLoopSamples)
+        {
+            DBG("prepareForAdditiveRecording() - INVALID targetLoopLength=" + juce::String(targetLoopLength));
+            return;
+        }
+
+        // Clear any existing content
+        clear();
+
+        // Set up the loop length to match master
+        loopLength = targetLoopLength;
+
+        // Clamp startPlayheadSamples to valid range
+        if (startPlayheadSamples < 0) startPlayheadSamples = 0;
+        if (startPlayheadSamples >= loopLength) startPlayheadSamples = startPlayheadSamples % loopLength;
+
+        // Initialize buffer (should already be allocated in prepare())
+        // Use safe bounds
+        int fillEnd = std::min(loopLength, static_cast<int>(bufferL.size()));
+        std::fill(bufferL.begin(), bufferL.begin() + fillEnd, 0.0f);
+        std::fill(bufferR.begin(), bufferR.begin() + fillEnd, 0.0f);
+
+        // Set playhead to match the current position
+        playHead = static_cast<float>(startPlayheadSamples);
+        writeHead = startPlayheadSamples;
+
+        // Mark as playing (so it contributes to output and advances playhead)
+        state = State::Playing;
+        hasContentFlag = false;  // Will be set true when we write content
+
+        // Track that we're in additive recording mode
+        additiveRecordingMode = true;
+        additiveWriteHead = startPlayheadSamples;
+
+        DBG("prepareForAdditiveRecording() - loopLength=" + juce::String(loopLength) +
+            " startPlayhead=" + juce::String(startPlayheadSamples));
+    }
+
+    // Write effected audio into this layer (called from PluginProcessor)
+    // Writes at the current additive write head position
+    void writeAdditiveAudio(const juce::AudioBuffer<float>& buffer, int numSamples)
+    {
+        if (!additiveRecordingMode || loopLength <= 0)
+            return;
+
+        // Safety: ensure we have valid buffer size
+        const int bufferSize = static_cast<int>(bufferL.size());
+        if (bufferSize <= 0 || loopLength > bufferSize)
+            return;
+
+        const int numChannels = buffer.getNumChannels();
+        const float* leftIn = numChannels > 0 ? buffer.getReadPointer(0) : nullptr;
+        const float* rightIn = numChannels > 1 ? buffer.getReadPointer(1) : nullptr;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            // Ensure write head is in bounds
+            if (additiveWriteHead < 0 || additiveWriteHead >= loopLength)
+            {
+                additiveWriteHead = additiveWriteHead % loopLength;
+                if (additiveWriteHead < 0) additiveWriteHead = 0;
+            }
+
+            // Soft clip the input to prevent runaway accumulation
+            float sampleL = leftIn ? softClip(leftIn[i]) : 0.0f;
+            float sampleR = rightIn ? softClip(rightIn[i]) : sampleL;
+
+            // Write to buffer at current position
+            bufferL[additiveWriteHead] = sampleL;
+            bufferR[additiveWriteHead] = sampleR;
+
+            // Track if we've written any significant content
+            if (std::abs(sampleL) > 0.001f || std::abs(sampleR) > 0.001f)
+            {
+                hasContentFlag = true;
+            }
+
+            // Advance write head with wrap
+            additiveWriteHead++;
+            if (additiveWriteHead >= loopLength)
+            {
+                additiveWriteHead = 0;
+            }
+        }
+
+        // Sync playhead with write head during additive recording
+        playHead = static_cast<float>(additiveWriteHead);
+    }
+
+    // Stop additive recording mode
+    void stopAdditiveRecording()
+    {
+        if (!additiveRecordingMode)
+            return;
+
+        additiveRecordingMode = false;
+
+        // Keep state as Playing if we have content
+        if (hasContentFlag)
+        {
+            state = State::Playing;
+            DBG("stopAdditiveRecording() - Layer has content, continuing playback");
+        }
+        else
+        {
+            state = State::Idle;
+            DBG("stopAdditiveRecording() - No content recorded");
+        }
+
+        // Invalidate waveform cache to show new content
+        waveformCacheDirty = true;
+    }
+
+    // Check if currently in additive recording mode
+    bool isInAdditiveRecordingMode() const
+    {
+        return additiveRecordingMode;
+    }
+
     // Get waveform data for UI visualization (downsampled)
     // Works during recording (uses writeHead) and playback (uses loopLength)
     // ALWAYS applies current fade multiplier so waveform visually reflects faded audio
@@ -853,6 +996,11 @@ private:
     int overdubFadeOutCounter = 0;  // Counts down from OVERDUB_FADE_SAMPLES to 0 when overdub ends
     bool isOverdubFadingOut = false;  // True during fade-out after overdub stops
     bool skipFirstBlock = false;      // Skip first audio block to avoid residual audio from state transitions
+
+    // Additive recording mode (Blooper-style punch-in/out)
+    bool additiveRecordingMode = false;  // True when receiving effected audio from ADD mode
+    int additiveWriteHead = 0;           // Write position for additive recording
+    bool hasContentFlag = false;         // Track if any audio was actually written
 
     // Block-based pitch shifter (efficient, processes entire blocks)
     StereoBlockPitchShifter blockPitchShifter;

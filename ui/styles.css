@@ -785,6 +785,40 @@ html, body {
     color: #f44336;
 }
 
+/* ADD Button - Additive Recording (Blooper-style effect reprinting) */
+.transport-btn.add-btn:hover {
+    border-color: #ff9800;
+}
+
+.transport-btn.add-btn:hover .transport-icon {
+    color: #ff9800;
+}
+
+.transport-btn.add-btn.active {
+    background: linear-gradient(180deg, #ff9800 0%, #f57c00 100%);
+    border-color: #ffb74d;
+    box-shadow: 0 0 16px rgba(255, 152, 0, 0.6);
+}
+
+.transport-btn.add-btn.active .transport-icon {
+    color: #000;
+    text-shadow: none;
+}
+
+.transport-btn.add-btn.active .transport-label {
+    color: #000;
+}
+
+/* Disabled flash animation for ADD when 8 layers reached */
+.transport-btn.add-btn.disabled-flash {
+    animation: disabled-flash 0.3s ease-out;
+}
+
+@keyframes disabled-flash {
+    0% { border-color: #f44336; box-shadow: 0 0 12px rgba(244, 67, 54, 0.6); }
+    100% { border-color: var(--fd-border); box-shadow: none; }
+}
+
 /* Reverse Button */
 .transport-btn.reverse:hover {
     border-color: var(--looper-accent);

@@ -784,6 +784,14 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         }
     }
 
+    // Capture for additive recording if active
+    // This captures AFTER effects (sat, degrade, reverb) but BEFORE delay
+    // "What you hear is what you get" - effected loop + input combined
+    if (loopEngine.isAdditiveRecordingActive())
+    {
+        loopEngine.captureForAdditive(buffer, numSamples);
+    }
+
     // Apply sub bass processing (octave-down generator) to the COMBINED output
     // This runs on the final mixed signal (loop + input) so it always has content
     if (subBassProcessor.getEnabled())
