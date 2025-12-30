@@ -104,14 +104,19 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       processorRef.getLoopEngine().redo();
                       complete({});
                   })
-                  .withNativeFunction("setAdditiveRecording", [this](const juce::Array<juce::var>& args, auto complete)
+                  .withNativeFunction("setAdditiveModeEnabled", [this](const juce::Array<juce::var>& args, auto complete)
                   {
+                      // Toggle ADD+ mode on/off (does NOT start recording)
                       if (args.size() > 0)
                       {
-                          bool active = static_cast<bool>(args[0]);
-                          processorRef.getLoopEngine().setAdditiveRecordingActive(active);
+                          bool enabled = static_cast<bool>(args[0]);
+                          processorRef.getLoopEngine().setAdditiveModeEnabled(enabled);
                       }
                       complete({});
+                  })
+                  .withNativeFunction("isAdditiveModeEnabled", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      complete(processorRef.getLoopEngine().isAdditiveModeEnabled());
                   })
                   .withNativeFunction("canAddLayer", [this](const juce::Array<juce::var>&, auto complete)
                   {
@@ -119,6 +124,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   })
                   .withNativeFunction("isAdditiveRecordingActive", [this](const juce::Array<juce::var>&, auto complete)
                   {
+                      // Returns true when actually capturing (mode ON + overdubbing)
                       complete(processorRef.getLoopEngine().isAdditiveRecordingActive());
                   })
                   .withNativeFunction("loopClear", [this](const juce::Array<juce::var>&, auto complete)
@@ -341,6 +347,17 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       for (bool muted : muteStates)
                           muteArray.add(muted);
                       result->setProperty("layerMutes", muteArray);
+
+                      // Get layer types (override vs regular) for each layer
+                      juce::Array<juce::var> overrideArray;
+                      int highestLayer = loopEngine.getHighestLayer();
+                      for (int i = 1; i <= highestLayer; ++i)
+                          overrideArray.add(loopEngine.isLayerOverride(i));
+                      result->setProperty("layerOverrides", overrideArray);
+
+                      // ADD+ mode state
+                      result->setProperty("additiveModeEnabled", loopEngine.isAdditiveModeEnabled());
+                      result->setProperty("additiveRecordingActive", loopEngine.isAdditiveRecordingActive());
 
                       // Input monitoring data
                       result->setProperty("inputLevelL", loopEngine.getInputLevelL());

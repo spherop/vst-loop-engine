@@ -167,6 +167,13 @@ public:
     {
         LoopBuffer::State currentState = getCurrentState();
 
+        // If additive capture is active, stop it (PLAY stops DUB in ADD+ mode)
+        if (additiveRecordingActive.load())
+        {
+            DBG("play() - Stopping ADD+ capture");
+            stopAdditiveCapture();
+        }
+
         // If currently overdubbing, just stop the overdub (smooth transition)
         // Don't restart playback - keep position and continue playing
         if (currentState == LoopBuffer::State::Overdubbing)
@@ -335,7 +342,8 @@ public:
         DBG("LoopEngine::overdub() called, currentState=" + juce::String(static_cast<int>(currentState)) +
             " currentLayer=" + juce::String(currentLayer) +
             " highestLayer=" + juce::String(highestLayer) +
-            " hasContent=" + juce::String(layers[0].hasContent() ? "true" : "false"));
+            " hasContent=" + juce::String(layers[0].hasContent() ? "true" : "false") +
+            " additiveModeEnabled=" + juce::String(additiveModeEnabled.load() ? "true" : "false"));
 
         // Ensure masterLoopLength is set if layer 0 has content
         // This handles the case where fixed-length recording auto-stopped
@@ -345,6 +353,19 @@ public:
             masterLoopLength = layers[0].getLoopLengthSamples();
             highestLayer = std::max(highestLayer, 0);
             DBG("overdub() - Fixed masterLoopLength from layer 0: " + juce::String(masterLoopLength));
+        }
+
+        // If ADD+ mode is enabled, start additive capture instead of normal overdub
+        // Additive mode captures the effected output and creates override layers
+        if (additiveModeEnabled.load() && hasContent())
+        {
+            if (!additiveRecordingActive.load())
+            {
+                startAdditiveCapture();
+                DBG("overdub() - Started ADD+ capture mode");
+            }
+            // Don't do normal overdub when in ADD+ mode - we're just capturing
+            return;
         }
 
         if (currentState == LoopBuffer::State::Playing)
@@ -713,6 +734,25 @@ public:
             DBG("processBlock() - Fixed masterLoopLength from layer 0: " + juce::String(masterLoopLength));
         }
 
+        // Override layer skip logic (v7.1.0)
+        // Override layers are "mixdown" layers - they contain the full mix
+        // and by definition mute all Regular layers below them.
+        //
+        // Key fix: Only skip layers if the override layer is PLAYING (has content and not idle)
+        // If we're still building the override layer, don't skip anything yet.
+        int highestOverride = -1;
+        for (int i = highestLayer; i >= 0; --i)
+        {
+            if (layers[i].hasContent() &&
+                layers[i].isOverrideLayer() &&
+                !layers[i].getMuted() &&
+                layers[i].getState() != LoopBuffer::State::Idle)
+            {
+                highestOverride = i;
+                break;
+            }
+        }
+
         for (int i = 0; i <= highestLayer; ++i)
         {
             bool hasContent = layers[i].hasContent();
@@ -730,6 +770,18 @@ public:
                 dummyBuffer.clear();
                 layers[i].processBlock(dummyBuffer);
                 // Don't mix muted layer into output
+                continue;
+            }
+
+            // Override layer skip: if there's an override layer above this one,
+            // skip all Regular layers below it (they're "muted" by the mixdown)
+            // Only skip Regular layers - override layers always play
+            if (highestOverride >= 0 && i < highestOverride && !layers[i].isOverrideLayer())
+            {
+                // This Regular layer is below an override layer - skip it
+                // Still advance playhead to stay in sync
+                dummyBuffer.clear();
+                layers[i].processBlock(dummyBuffer);
                 continue;
             }
 
@@ -954,6 +1006,8 @@ public:
                 smearPlaybackStart = smearWritePos;
                 smearActive = true;
 
+                // Handle additive recording reprint at loop boundary
+                handleLoopBoundaryForAdditive();
             }
 
             // Check if we're APPROACHING the boundary (pre-boundary zone)
@@ -1399,92 +1453,190 @@ public:
         return highestLayer < NUM_LAYERS - 1;
     }
 
-    // Additive recording - Blooper-style punch-in/out toggle
-    // Creates a new layer, mutes all others, records effected audio directly into it
-    // Toggle on: punch in, start recording effected audio
-    // Toggle off: punch out, stop recording, unmute all layers
-    void setAdditiveRecordingActive(bool active)
+    // Get layer type for UI display (1-indexed)
+    bool isLayerOverride(int layer) const
     {
-        if (active && !additiveRecordingActive.load())
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
         {
-            // PUNCH IN - Start additive recording
-            if (masterLoopLength <= 0 || !hasContent())
-            {
-                DBG("ADD: Cannot start - no loop content");
-                return;
-            }
-
-            // Check if we have room for another layer
-            if (!canAddLayer())
-            {
-                DBG("ADD: Cannot start - all 8 layers in use");
-                return;
-            }
-
-            // Save current mute states for all layers
-            for (int i = 0; i < NUM_LAYERS; ++i)
-            {
-                additiveLayerMuteStates[i] = layers[i].getMuted();
-            }
-            additiveStartLayer = currentLayer;
-
-            // Blooper behavior: Recording after undo clears undone layers
-            clearUndoneLayers();
-
-            // Create a new layer for the additive recording
-            additiveTargetLayer = highestLayer + 1;
-            highestLayer = additiveTargetLayer;
-            currentLayer = additiveTargetLayer;
-
-            // DON'T mute source layers - we need them playing to capture the effected audio!
-            // The new layer will receive the effected audio from all playing layers
-
-            // Get current playhead position from layer 0 for sync
-            // getRawPlayhead() returns the raw sample position (not normalized)
-            float currentPlayhead = layers[0].getRawPlayhead();
-            int playheadSamples = static_cast<int>(currentPlayhead);
-
-            // Ensure playhead is within bounds
-            if (playheadSamples < 0) playheadSamples = 0;
-            if (playheadSamples >= masterLoopLength) playheadSamples = playheadSamples % masterLoopLength;
-
-            // Start overdubbing on the new layer (it will receive effected audio)
-            // Set up the layer with the master loop length and current playhead
-            layers[additiveTargetLayer].prepareForAdditiveRecording(masterLoopLength, playheadSamples);
-
-            additiveRecordingActive.store(true);
-            DBG("ADD PUNCH IN: Recording to layer " + juce::String(additiveTargetLayer + 1) +
-                " at playhead " + juce::String(playheadSamples));
+            return layers[idx].isOverrideLayer();
         }
-        else if (!active && additiveRecordingActive.load())
+        return false;
+    }
+
+    // Find the highest override layer index (0-indexed, -1 if none)
+    // All regular layers below this should be muted during playback
+    int findHighestOverrideLayer() const
+    {
+        for (int i = highestLayer; i >= 0; --i)
         {
-            // PUNCH OUT - Stop additive recording
-            additiveRecordingActive.store(false);
-
-            // Stop the recording on the target layer
-            if (additiveTargetLayer >= 0 && additiveTargetLayer < NUM_LAYERS)
+            if (layers[i].hasContent() && layers[i].isOverrideLayer())
             {
-                layers[additiveTargetLayer].stopAdditiveRecording();
-
-                // Check if we actually recorded anything
-                if (!layers[additiveTargetLayer].hasContent())
-                {
-                    // Nothing was recorded, remove this layer
-                    highestLayer = std::max(0, additiveTargetLayer - 1);
-                    currentLayer = additiveStartLayer >= 0 ? additiveStartLayer : 0;
-                    DBG("ADD PUNCH OUT: No content recorded, reverting to layer " + juce::String(currentLayer + 1));
-                }
-                else
-                {
-                    DBG("ADD PUNCH OUT: Layer " + juce::String(additiveTargetLayer + 1) + " recorded successfully");
-                }
+                return i;
             }
-
-            // No need to restore mute states since we didn't change them
-
-            additiveTargetLayer = -1;
-            additiveStartLayer = -1;
         }
+        return -1;  // No override layers
+    }
+
+    // ============================================================
+    // ADD+ MODE - Blooper-style effect compounding
+    // ============================================================
+    //
+    // ADD+ is a MODE TOGGLE that modifies DUB behavior:
+    //   - When ADD+ is OFF: DUB works normally (adds new layers)
+    //   - When ADD+ is ON: DUB creates/updates OVERRIDE layers (mixdown layers)
+    //
+    // Override layers:
+    //   - Contain the full effected mix (loop + input + effects)
+    //   - Automatically mute all Regular layers below them
+    //   - Each loop cycle overwrites the SAME override layer (compounding effects)
+    //   - Press DUB again while capturing to create a NEW stacked override layer
+    //
+    // Flow when ADD+ is ON:
+    //   1. First DUB: Create override layer, start capturing
+    //   2. Each loop boundary: OVERWRITE the same override layer with new capture
+    //   3. Press DUB again: Create NEW override layer on top, continue capturing
+    //   4. Press PLAY: Stop capturing, keep current override layers
+
+    // Toggle ADD+ mode on/off (does NOT start recording)
+    void setAdditiveModeEnabled(bool enabled)
+    {
+        additiveModeEnabled.store(enabled);
+        DBG("ADD+ MODE: " + juce::String(enabled ? "ENABLED" : "DISABLED"));
+
+        // If disabling while actively capturing, stop capture
+        if (!enabled && additiveRecordingActive.load())
+        {
+            stopAdditiveCapture();
+        }
+    }
+
+    bool isAdditiveModeEnabled() const
+    {
+        return additiveModeEnabled.load();
+    }
+
+    // Start additive capture (called when DUB is pressed while ADD+ mode is ON)
+    // If already capturing, this creates a NEW override layer on top
+    void startAdditiveCapture()
+    {
+        if (!additiveModeEnabled.load())
+        {
+            DBG("ADD+ CAPTURE: Cannot start - ADD+ mode not enabled");
+            return;
+        }
+
+        if (masterLoopLength <= 0 || !hasContent())
+        {
+            DBG("ADD+ CAPTURE: Cannot start - no loop content");
+            return;
+        }
+
+        // If already capturing, pressing DUB creates a NEW override layer on top
+        if (additiveRecordingActive.load())
+        {
+            // Force create a new layer for the NEXT capture cycle
+            additiveCreateNewLayer = true;
+            DBG("ADD+ CAPTURE: Will create NEW override layer on next boundary");
+            return;
+        }
+
+        // Allocate capture buffer if needed
+        if (additiveCaptureBuffer.getNumSamples() < masterLoopLength)
+        {
+            additiveCaptureBuffer.setSize(2, masterLoopLength);
+        }
+        additiveCaptureBuffer.clear();
+        additiveCaptureWritePos = 0;
+        additiveNeedsReprint = false;
+        additiveCreateNewLayer = true;  // First capture always creates new layer
+        additiveTargetLayer = -1;       // No target yet
+
+        additiveRecordingActive.store(true);
+        DBG("ADD+ CAPTURE: Started capturing effected output");
+    }
+
+    // Stop additive capture (called when DUB ends while in ADD+ mode)
+    void stopAdditiveCapture()
+    {
+        if (!additiveRecordingActive.load())
+            return;
+
+        additiveRecordingActive.store(false);
+
+        // If we have enough captured, update/create the override layer now
+        if (additiveCaptureWritePos >= masterLoopLength)
+        {
+            updateOrCreateOverrideLayer();
+        }
+
+        additiveNeedsReprint = false;
+        additiveCaptureWritePos = 0;
+        additiveTargetLayer = -1;
+        additiveCreateNewLayer = false;
+        DBG("ADD+ CAPTURE: Stopped");
+    }
+
+    // Called from processBlock when loop boundary is crossed
+    void handleLoopBoundaryForAdditive()
+    {
+        if (!additiveRecordingActive.load())
+            return;
+
+        // If we have a full loop captured, update/create override layer
+        if (additiveCaptureWritePos >= masterLoopLength)
+        {
+            updateOrCreateOverrideLayer();
+
+            // Reset for next cycle if still capturing
+            additiveCaptureBuffer.clear();
+            additiveCaptureWritePos = 0;
+            DBG("ADD+ BOUNDARY: Updated override layer, starting new capture cycle");
+        }
+    }
+
+    // Update existing override layer OR create new one based on additiveCreateNewLayer flag
+    void updateOrCreateOverrideLayer()
+    {
+        if (additiveCaptureWritePos < masterLoopLength)
+        {
+            DBG("ADD+ UPDATE: Not enough captured audio");
+            return;
+        }
+
+        // Get current playback state
+        const float savedPlayhead = layers[0].getRawPlayhead();
+        const LoopBuffer::State savedState = layers[0].getState();
+
+        if (additiveCreateNewLayer || additiveTargetLayer < 0)
+        {
+            // Create NEW override layer
+            if (highestLayer >= NUM_LAYERS - 1)
+            {
+                DBG("ADD+ CREATE: Max layers reached, overwriting top layer instead");
+                // Overwrite the top layer instead
+                additiveTargetLayer = highestLayer;
+            }
+            else
+            {
+                int newLayerIdx = highestLayer + 1;
+                highestLayer = newLayerIdx;
+                currentLayer = newLayerIdx;
+                additiveTargetLayer = newLayerIdx;
+                DBG("ADD+ CREATE: Created new override layer " + juce::String(newLayerIdx + 1));
+            }
+            additiveCreateNewLayer = false;  // Only create once per DUB press
+        }
+
+        // Update the target layer with captured audio
+        layers[additiveTargetLayer].setFromBufferSeamless(additiveCaptureBuffer, masterLoopLength, savedPlayhead, savedState);
+        layers[additiveTargetLayer].setLayerType(LoopBuffer::LayerType::Override);
+        layers[additiveTargetLayer].applyBufferSoftClip();
+
+        currentLayer = additiveTargetLayer;
+
+        DBG("ADD+ UPDATE: Updated override layer " + juce::String(additiveTargetLayer + 1) +
+            " with " + juce::String(masterLoopLength) + " samples");
     }
 
     bool isAdditiveRecordingActive() const
@@ -1492,21 +1644,35 @@ public:
         return additiveRecordingActive.load();
     }
 
-    // Get the layer index currently being used for additive recording (-1 if not active)
-    int getAdditiveTargetLayer() const
-    {
-        return additiveTargetLayer;
-    }
-
     // Called from PluginProcessor after effects chain to capture effected audio
-    // This writes directly into the additive target layer's buffer
     void captureForAdditive(const juce::AudioBuffer<float>& buffer, int numSamples)
     {
-        if (!additiveRecordingActive.load() || additiveTargetLayer < 0 || masterLoopLength <= 0)
+        if (!additiveRecordingActive.load() || masterLoopLength <= 0)
             return;
 
-        // Write the effected audio directly into the target layer
-        layers[additiveTargetLayer].writeAdditiveAudio(buffer, numSamples);
+        // Ensure buffer is allocated
+        if (additiveCaptureBuffer.getNumSamples() < masterLoopLength)
+            return;
+
+        const int numChannels = std::min(buffer.getNumChannels(), 2);
+
+        // Get the current playhead position to sync capture with playback
+        int playheadSamples = static_cast<int>(layers[0].getRawPlayhead());
+        if (playheadSamples < 0) playheadSamples = 0;
+        if (playheadSamples >= masterLoopLength) playheadSamples = playheadSamples % masterLoopLength;
+
+        // Write to capture buffer at playhead-synced position
+        for (int i = 0; i < numSamples; ++i)
+        {
+            int writePos = (playheadSamples + i) % masterLoopLength;
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                additiveCaptureBuffer.setSample(ch, writePos, buffer.getSample(ch, i));
+            }
+        }
+
+        // Track total samples captured
+        additiveCaptureWritePos += numSamples;
     }
 
     // Flatten all non-muted layers into layer 1
@@ -1660,12 +1826,16 @@ private:
     int smearPlaybackStart = 0;      // Write position snapshot at boundary crossing
     bool smearActive = false;        // True when playing back smear buffer
 
-    // Additive recording state (Blooper-style punch-in/out)
-    // Toggle-based: creates new layer, mutes others, records effected audio directly
-    std::atomic<bool> additiveRecordingActive { false };
-    int additiveTargetLayer = -1;                 // Layer we're recording into during ADD
-    bool additiveLayerMuteStates[NUM_LAYERS];     // Saved mute states to restore on stop
-    int additiveStartLayer = -1;                  // Which layer was current when ADD started
+    // Additive mode state (Blooper-style effect compounding)
+    // additiveModeEnabled = toggle state (UI button)
+    // additiveRecordingActive = actually capturing (mode ON + DUB pressed)
+    std::atomic<bool> additiveModeEnabled { false };      // ADD+ mode toggle
+    std::atomic<bool> additiveRecordingActive { false };  // Currently capturing
+    bool additiveNeedsReprint = false;            // True when capture is complete
+    juce::AudioBuffer<float> additiveCaptureBuffer;  // Buffer to capture effected audio
+    int additiveCaptureWritePos = 0;              // Tracks total samples captured
+    int additiveTargetLayer = -1;                 // Which override layer we're updating (-1 = none)
+    bool additiveCreateNewLayer = false;          // If true, next boundary creates NEW override layer
 
     // Debug counter (member variable to avoid static issues)
     int xfadeDebugCounter = 0;

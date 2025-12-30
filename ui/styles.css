@@ -1109,6 +1109,41 @@ html, body {
     box-shadow: 0 0 12px var(--looper-accent-glow);
 }
 
+/* Override layer (ADD+ type) - orange/amber styling */
+.layer-btn.override-layer {
+    background: #ff9800 !important;
+    border-color: #ffb74d !important;
+    color: #0a0a0a !important;
+}
+
+.layer-btn.override-layer:hover {
+    background: #f57c00 !important;
+    border-color: #ffa726 !important;
+}
+
+.layer-btn.override-layer.active {
+    background: #ffb74d !important;
+    border-color: #ffc107 !important;
+    box-shadow: 0 0 12px rgba(255, 152, 0, 0.6) !important;
+}
+
+/* ADD+ badge for override layers */
+.layer-btn.override-layer::before {
+    content: '+';
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    font-size: 8px;
+    font-weight: 900;
+    color: #fff;
+    background: #ff5722;
+    border-radius: 50%;
+    width: 12px;
+    height: 12px;
+    line-height: 12px;
+    text-align: center;
+}
+
 /* Muted layer (right-click to toggle) */
 .layer-btn.muted {
     background: linear-gradient(180deg, #1a1010 0%, #0f0808 100%) !important;
@@ -3824,6 +3859,24 @@ html, body {
 
 .mixer-channel.has-content {
     border-color: var(--looper-accent-dim);
+}
+
+/* Override layer (ADD+ type) styling for mixer channels */
+.mixer-channel.override-layer {
+    border-color: #ff9800 !important;
+    background: linear-gradient(180deg, #1f1610 0%, #150f08 100%);
+}
+
+.mixer-channel.override-layer .channel-label {
+    color: #ff9800;
+    text-shadow: 0 0 4px rgba(255, 152, 0, 0.4);
+}
+
+.mixer-channel.override-layer .channel-label::after {
+    content: '+';
+    font-size: 8px;
+    vertical-align: super;
+    color: #ffb74d;
 }
 
 .mixer-channel.muted {

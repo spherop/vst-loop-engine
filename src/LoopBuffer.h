@@ -22,6 +22,14 @@ public:
         Overdubbing = 3
     };
 
+    // Layer type for Blooper-style ADD+ functionality
+    // Override layers mute all regular layers below them
+    enum class LayerType
+    {
+        Regular = 0,    // Normal layer (DUB, initial recording)
+        Override = 1    // ADD+ layer - mutes all regular layers below when playing
+    };
+
     LoopBuffer() = default;
 
     void prepare(double sampleRate, int samplesPerBlock)
@@ -92,6 +100,9 @@ public:
         blockPitchShifter.reset();
         phaseVocoder.reset();
         initGrains();
+
+        // Reset layer type to Regular
+        layerType = LayerType::Regular;
 
         // Invalidate waveform cache
         waveformCacheDirty = true;
@@ -767,6 +778,11 @@ public:
     void setMuted(bool muted) { isMuted.store(muted); }
     bool getMuted() const { return isMuted.load(); }
 
+    // Layer type control (Regular vs Override/ADD+)
+    void setLayerType(LayerType type) { layerType = type; }
+    LayerType getLayerType() const { return layerType; }
+    bool isOverrideLayer() const { return layerType == LayerType::Override; }
+
     // Per-layer volume (0.0 to ~1.41 for +3dB boost)
     void setVolume(float vol) { volume.store(std::clamp(vol, 0.0f, 2.0f)); }
     float getVolume() const { return volume.load(); }
@@ -974,6 +990,7 @@ private:
     std::atomic<float> pan { 0.0f };         // Per-layer pan (-1.0 to 1.0)
     std::atomic<bool> fadeActive { false };  // True when fade should apply during playback (any layer is recording)
     std::atomic<State> state { State::Idle };
+    LayerType layerType { LayerType::Regular };  // Layer type (Regular or Override/ADD+)
 
     // Preset loop length (0 = free/unlimited)
     int targetLoopLength = 0;

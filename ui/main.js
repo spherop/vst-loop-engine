@@ -502,8 +502,9 @@ class LooperController {
         this.undoFn = getNativeFunction("loopUndo");
         this.redoFn = getNativeFunction("loopRedo");
         this.clearFn = getNativeFunction("loopClear");
-        this.setAdditiveRecordingFn = getNativeFunction("setAdditiveRecording");
+        this.setAdditiveModeEnabledFn = getNativeFunction("setAdditiveModeEnabled");
         this.canAddLayerFn = getNativeFunction("canAddLayer");
+        this.isAdditiveModeEnabledFn = getNativeFunction("isAdditiveModeEnabled");
         this.isAdditiveRecordingActiveFn = getNativeFunction("isAdditiveRecordingActive");
         this.clearLayerFn = getNativeFunction("clearLayer");
         this.deleteLayerFn = getNativeFunction("deleteLayer");
@@ -518,6 +519,8 @@ class LooperController {
 
         // Track layer content states
         this.layerContentStates = [false, false, false, false, false, false, false, false];
+        // Track which layers are override (ADD+) layers
+        this.layerOverrideStates = [false, false, false, false, false, false, false, false];
 
         // Waveform crossfade animation state
         // Store smoothed waveform amplitudes for smooth visual transitions
@@ -634,48 +637,35 @@ class LooperController {
             this.clearBtn.addEventListener('click', () => this.clear());
         }
 
-        // ADD button - toggle for punch-in/out additive recording (Blooper-style)
-        // Track additive recording state locally
+        // ADD+ button - MODE TOGGLE for additive recording (Blooper-style)
+        // When ADD+ mode is ON, DUB creates override layers instead of normal layers
+        // Track mode state locally
+        this.additiveModeEnabled = false;
         this.additiveRecordingActive = false;
 
         if (this.addBtn) {
             this.addBtn.addEventListener('click', async () => {
-                await this.toggleAdditiveRecording();
+                await this.toggleAdditiveMode();
             });
         }
     }
 
-    // Toggle additive recording on/off (punch-in/punch-out)
-    async toggleAdditiveRecording() {
+    // Toggle ADD+ mode on/off (mode toggle, not recording toggle)
+    async toggleAdditiveMode() {
         try {
-            // Check if we're currently recording
-            const isActive = await this.isAdditiveRecordingActiveFn();
+            // Toggle the mode
+            this.additiveModeEnabled = !this.additiveModeEnabled;
+            await this.setAdditiveModeEnabledFn(this.additiveModeEnabled);
 
-            if (isActive) {
-                // PUNCH OUT - stop additive recording
-                await this.setAdditiveRecordingFn(false);
-                this.additiveRecordingActive = false;
-                this.addBtn.classList.remove('active');
-                console.log('[LOOPER] ADD punch OUT');
-            } else {
-                // Check if we can add a layer before punching in
-                const canAdd = await this.canAddLayerFn();
-                if (!canAdd) {
-                    console.log('[LOOPER] Cannot ADD - all 8 layers in use');
-                    // Visual feedback - flash the button red
-                    this.addBtn.classList.add('disabled-flash');
-                    setTimeout(() => this.addBtn.classList.remove('disabled-flash'), 300);
-                    return;
-                }
-
-                // PUNCH IN - start additive recording
-                await this.setAdditiveRecordingFn(true);
-                this.additiveRecordingActive = true;
+            if (this.additiveModeEnabled) {
                 this.addBtn.classList.add('active');
-                console.log('[LOOPER] ADD punch IN');
+                console.log('[LOOPER] ADD+ mode ENABLED - DUB will create override layers');
+            } else {
+                this.addBtn.classList.remove('active');
+                console.log('[LOOPER] ADD+ mode DISABLED - DUB will create normal layers');
             }
         } catch (e) {
-            console.error('Error toggling additive recording:', e);
+            console.error('Error toggling ADD+ mode:', e);
         }
     }
 
@@ -1780,14 +1770,17 @@ class LooperController {
         }
     }
 
-    updateLayerUI(currentLayer, highestLayer) {
+    updateLayerUI(currentLayer, highestLayer, layerOverrides = null) {
         this.currentLayer = currentLayer;
         this.highestLayer = highestLayer;
+        if (layerOverrides) {
+            this.layerOverrideStates = layerOverrides;
+        }
 
         this.layerBtns.forEach(async btn => {
             const layer = parseInt(btn.dataset.layer);
             const idx = layer - 1;  // 0-indexed
-            btn.classList.remove('active', 'has-content');
+            btn.classList.remove('active', 'has-content', 'override-layer');
 
             // Reset inline styles
             btn.style.background = '';
@@ -1799,14 +1792,26 @@ class LooperController {
                 btn.classList.add('active');
             }
 
+            // Check if this is an override (ADD+) layer
+            const isOverride = this.layerOverrideStates && this.layerOverrideStates[idx];
+
             // Use actual content state instead of just highestLayer
             if (this.layerContentStates[idx]) {
                 btn.classList.add('has-content');
-                // Apply the layer-specific color from layerColors array
-                const layerColor = this.layerColors[idx % this.layerColors.length];
-                btn.style.background = layerColor;
-                btn.style.borderColor = layerColor;
-                btn.style.color = '#0a0a0a';
+
+                // Override layers get special styling - orange/amber color
+                if (isOverride) {
+                    btn.classList.add('override-layer');
+                    btn.style.background = '#ff9800';  // Orange for ADD+ layers
+                    btn.style.borderColor = '#ffb74d';
+                    btn.style.color = '#0a0a0a';
+                } else {
+                    // Apply the layer-specific color from layerColors array
+                    const layerColor = this.layerColors[idx % this.layerColors.length];
+                    btn.style.background = layerColor;
+                    btn.style.borderColor = layerColor;
+                    btn.style.color = '#0a0a0a';
+                }
 
                 // Fetch and set volume/pan CSS variables for visual feedback
                 try {
@@ -1822,7 +1827,8 @@ class LooperController {
 
                 // Add glow if this is also the active layer
                 if (layer === currentLayer) {
-                    btn.style.boxShadow = `0 0 12px ${layerColor}80`;  // 50% opacity glow
+                    const glowColor = isOverride ? '#ff9800' : this.layerColors[idx % this.layerColors.length];
+                    btn.style.boxShadow = `0 0 12px ${glowColor}80`;  // 50% opacity glow
                 }
             }
         });
@@ -1905,7 +1911,26 @@ class LooperController {
                             // Fetch actual layer content states when layer changes
                             this.updateLayerContentStates();
                         }
-                        this.updateLayerUI(state.layer, state.highestLayer);
+                        // Pass override states for ADD+ layer styling
+                        this.updateLayerUI(state.layer, state.highestLayer, state.layerOverrides);
+                    }
+
+                    // Sync ADD+ mode state from backend
+                    if (typeof state.additiveModeEnabled !== 'undefined') {
+                        if (state.additiveModeEnabled !== this.additiveModeEnabled) {
+                            this.additiveModeEnabled = state.additiveModeEnabled;
+                            if (this.addBtn) {
+                                if (this.additiveModeEnabled) {
+                                    this.addBtn.classList.add('active');
+                                } else {
+                                    this.addBtn.classList.remove('active');
+                                }
+                            }
+                        }
+                    }
+                    // Track capture state for potential visual feedback
+                    if (typeof state.additiveRecordingActive !== 'undefined') {
+                        this.additiveRecordingActive = state.additiveRecordingActive;
                     }
 
                     // DISABLED: Don't let polling overwrite reverse state
@@ -4386,11 +4411,14 @@ class MixerViewController {
             if (channel && channel.channelEl) {
                 const hasContent = btn.classList.contains('has-content');
                 const isMuted = btn.classList.contains('muted');
+                const isOverride = btn.classList.contains('override-layer');
 
                 channel.hasContent = hasContent;
                 channel.muted = isMuted;
+                channel.isOverride = isOverride;
                 channel.channelEl.classList.toggle('has-content', hasContent);
                 channel.channelEl.classList.toggle('muted', isMuted);
+                channel.channelEl.classList.toggle('override-layer', isOverride);
                 if (channel.muteBtn) {
                     channel.muteBtn.classList.toggle('active', isMuted);
                 }
