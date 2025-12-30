@@ -784,12 +784,24 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         }
     }
 
+    // Apply MixBus stencil AFTER effects
+    // Where MixBus has content, replace the effected layer output with MixBus audio
+    // Where MixBus is empty, the effected layers "poke through"
+    loopEngine.applyMixBusStencil(buffer, inputPassthroughBuffer, numSamples);
+
     // Capture for additive recording if active
     // This captures AFTER effects (sat, degrade, reverb) but BEFORE delay
     // "What you hear is what you get" - effected loop + input combined
     if (loopEngine.isAdditiveRecordingActive())
     {
         loopEngine.captureForAdditive(buffer, numSamples);
+    }
+
+    // Capture for MixBus recording if active
+    // Same capture point as additive - after effects, before delay
+    if (loopEngine.isMixBusRecording())
+    {
+        loopEngine.captureForMixBus(buffer, numSamples);
     }
 
     // Apply sub bass processing (octave-down generator) to the COMBINED output

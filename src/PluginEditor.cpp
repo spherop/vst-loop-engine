@@ -127,6 +127,47 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       // Returns true when actually capturing (mode ON + overdubbing)
                       complete(processorRef.getLoopEngine().isAdditiveRecordingActive());
                   })
+                  // ============================================================
+                  // MIX BUS CONTROLS
+                  // ============================================================
+                  .withNativeFunction("toggleMixBusRecording", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().toggleMixBusRecording();
+                      complete({});
+                  })
+                  .withNativeFunction("startMixBusRecording", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().startMixBusRecording();
+                      complete({});
+                  })
+                  .withNativeFunction("stopMixBusRecording", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().stopMixBusRecording();
+                      complete({});
+                  })
+                  .withNativeFunction("isMixBusRecording", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      complete(processorRef.getLoopEngine().isMixBusRecording());
+                  })
+                  .withNativeFunction("clearMixBus", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().clearMixBus();
+                      complete({});
+                  })
+                  .withNativeFunction("setMixBusMuted", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getLoopEngine().setMixBusMuted(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("isMixBusMuted", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      complete(processorRef.getLoopEngine().isMixBusMuted());
+                  })
+                  .withNativeFunction("mixBusHasContent", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      complete(processorRef.getLoopEngine().mixBusHasAnyContent());
+                  })
                   .withNativeFunction("loopClear", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().clear();
@@ -358,6 +399,29 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       // ADD+ mode state
                       result->setProperty("additiveModeEnabled", loopEngine.isAdditiveModeEnabled());
                       result->setProperty("additiveRecordingActive", loopEngine.isAdditiveRecordingActive());
+
+                      // MIX BUS state
+                      result->setProperty("mixBusRecording", loopEngine.isMixBusRecording());
+                      result->setProperty("mixBusHasContent", loopEngine.mixBusHasAnyContent());
+                      result->setProperty("mixBusMuted", loopEngine.isMixBusMuted());
+                      result->setProperty("mixBusPeakLevel", loopEngine.getMixBusPeakLevel());
+
+                      // MixBus waveform data for visualization
+                      if (loopEngine.mixBusHasAnyContent())
+                      {
+                          auto mixBusWaveform = loopEngine.getMixBusWaveformData(100);
+                          juce::Array<juce::var> mixBusWfArray;
+                          for (float val : mixBusWaveform)
+                              mixBusWfArray.add(val);
+                          result->setProperty("mixBusWaveform", mixBusWfArray);
+
+                          // Content mask for showing where MixBus overrides layers
+                          auto mixBusMask = loopEngine.getMixBusContentMaskDownsampled(100);
+                          juce::Array<juce::var> maskArray;
+                          for (bool hasContent : mixBusMask)
+                              maskArray.add(hasContent);
+                          result->setProperty("mixBusContentMask", maskArray);
+                      }
 
                       // Input monitoring data
                       result->setProperty("inputLevelL", loopEngine.getInputLevelL());

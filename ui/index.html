@@ -156,6 +156,10 @@
                                     <span class="transport-icon">&#9679;</span>
                                     <span class="transport-label">REC</span>
                                 </button>
+                                <button id="mix-btn" class="transport-btn mix" title="MixBus Recording - punch in/out to capture effected output">
+                                    <span class="transport-icon">&#9699;</span>
+                                    <span class="transport-label">MIX</span>
+                                </button>
                                 <button id="loop-play-btn" class="transport-btn play">
                                     <span class="transport-icon">&#9658;</span>
                                     <span class="transport-label">PLAY</span>
@@ -607,6 +611,46 @@
                                         <button class="channel-solo" id="solo-8" title="Solo">S</button>
                                     </div>
                                 </div>
+                                <!-- MixBus Channel -->
+                                <div class="mixer-channel mixer-channel-bus" data-layer="bus">
+                                    <div class="channel-label">BUS</div>
+                                    <div class="channel-vu">
+                                        <div class="vu-meter">
+                                            <div class="vu-needle" id="vu-needle-bus"></div>
+                                            <div class="vu-scale">
+                                                <span class="vu-mark" style="--angle: -45deg">-20</span>
+                                                <span class="vu-mark" style="--angle: -22deg">-10</span>
+                                                <span class="vu-mark" style="--angle: 0deg">0</span>
+                                                <span class="vu-mark vu-red" style="--angle: 22deg">+3</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-fader">
+                                        <div class="fader-scale">
+                                            <span class="fader-mark fader-mark-red">+3</span>
+                                            <span class="fader-mark fader-mark-yellow">0</span>
+                                            <span class="fader-mark fader-mark-green">-10</span>
+                                            <span class="fader-mark fader-mark-green">-20</span>
+                                            <span class="fader-mark">-inf</span>
+                                        </div>
+                                        <input type="range" class="fader" id="fader-bus" min="0" max="127" value="100" orient="vertical" disabled>
+                                        <div class="fader-track">
+                                            <div class="fader-zone fader-zone-red"></div>
+                                            <div class="fader-zone fader-zone-yellow"></div>
+                                            <div class="fader-zone fader-zone-green"></div>
+                                            <div class="fader-meter" id="fader-meter-bus"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-pan">
+                                        <div class="pan-knob pan-knob-disabled" id="pan-knob-bus">
+                                            <div class="pan-indicator"></div>
+                                        </div>
+                                    </div>
+                                    <div class="channel-buttons">
+                                        <button class="channel-mute" id="mute-bus" title="Mute MixBus">M</button>
+                                        <button class="channel-clear" id="clear-bus" title="Clear MixBus">C</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </section>
@@ -617,16 +661,19 @@
                             <!-- Layer Indicators (left) -->
                             <div class="flex items-center gap-2">
                                 <span class="font-display text-[8px] font-bold tracking-[2px] text-fd-text-dim uppercase">LAYER</span>
-                                <div class="layer-indicators flex gap-2">
-                                    <button class="layer-btn active" data-layer="1">1</button>
-                                    <button class="layer-btn" data-layer="2">2</button>
-                                    <button class="layer-btn" data-layer="3">3</button>
-                                    <button class="layer-btn" data-layer="4">4</button>
-                                    <button class="layer-btn" data-layer="5">5</button>
-                                    <button class="layer-btn" data-layer="6">6</button>
-                                    <button class="layer-btn" data-layer="7">7</button>
-                                    <button class="layer-btn" data-layer="8">8</button>
+                                <div class="layer-indicators flex gap-1.5">
+                                    <button class="layer-btn layer-btn-large active" data-layer="1">1</button>
+                                    <button class="layer-btn layer-btn-large" data-layer="2">2</button>
+                                    <button class="layer-btn layer-btn-large" data-layer="3">3</button>
+                                    <button class="layer-btn layer-btn-large" data-layer="4">4</button>
+                                    <button class="layer-btn layer-btn-large" data-layer="5">5</button>
+                                    <button class="layer-btn layer-btn-large" data-layer="6">6</button>
+                                    <button class="layer-btn layer-btn-large" data-layer="7">7</button>
+                                    <button class="layer-btn layer-btn-large" data-layer="8">8</button>
                                 </div>
+                                <button class="bus-btn" id="bus-btn" title="MixBus - click to mute/unmute">
+                                    <span class="bus-label">BUS</span>
+                                </button>
                                 <button class="flatten-btn" id="flatten-btn" title="Flatten all unmuted layers into layer 1">
                                     <span class="flatten-icon">⊞</span>
                                 </button>
@@ -653,7 +700,7 @@
                                         <path d="M7 16l4-8 4 6 4-10"/>
                                     </svg>
                                 </button>
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v7.2.0</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v8.5.1</span>
                             </div>
 
                             <!-- Controls (center) -->

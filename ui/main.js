@@ -446,7 +446,9 @@ class TabController {
                     looperController.drawWaveform(
                         looperController.lastWaveformData,
                         looperController.lastLayerWaveforms,
-                        looperController.lastLayerMutes
+                        looperController.lastLayerMutes,
+                        looperController.lastMixBusWaveform,
+                        looperController.lastMixBusContentMask
                     );
                 } else {
                     looperController.drawEmptyWaveform();
@@ -514,6 +516,18 @@ class LooperController {
         this.resetParamsFn = getNativeFunction("resetLoopParams");
         this.setInputMutedFn = getNativeFunction("setInputMuted");
 
+        // MixBus native functions
+        this.toggleMixBusRecordingFn = getNativeFunction("toggleMixBusRecording");
+        this.stopMixBusRecordingFn = getNativeFunction("stopMixBusRecording");
+        this.clearMixBusFn = getNativeFunction("clearMixBus");
+        this.setMixBusMutedFn = getNativeFunction("setMixBusMuted");
+
+        // MixBus state
+        this.mixBusRecording = false;
+        this.mixBusHasContent = false;
+        this.mixBusMuted = false;
+        this.mixBusPeakLevel = 0;
+
         // Input monitoring state
         this.inputMuted = false;
 
@@ -550,6 +564,7 @@ class LooperController {
         this.setupInputMonitor();
         this.setupLoopLengthSelector();
         this.setupLayers();
+        this.setupMixBus();
         this.setupWaveform();
         this.setupZoomControls();
         this.setupRecordingOverlay();
@@ -616,6 +631,7 @@ class LooperController {
         this.redoBtn = document.getElementById('redo-btn');
         this.clearBtn = document.getElementById('clear-btn');
         this.addBtn = document.getElementById('add-btn');
+        this.mixBtn = document.getElementById('mix-btn');
         this.timeDisplay = document.getElementById('loop-time-display');
 
         if (this.recBtn) {
@@ -637,6 +653,13 @@ class LooperController {
             this.clearBtn.addEventListener('click', () => this.clear());
         }
 
+        // MIX button - toggle MixBus recording (punch in/out)
+        if (this.mixBtn) {
+            this.mixBtn.addEventListener('click', async () => {
+                await this.toggleMixBusRecording();
+            });
+        }
+
         // ADD+ button - MODE TOGGLE for additive recording (Blooper-style)
         // When ADD+ mode is ON, DUB creates override layers instead of normal layers
         // Track mode state locally
@@ -647,6 +670,29 @@ class LooperController {
             this.addBtn.addEventListener('click', async () => {
                 await this.toggleAdditiveMode();
             });
+        }
+    }
+
+    // Toggle MixBus recording on/off (punch in/out)
+    async toggleMixBusRecording() {
+        try {
+            await this.toggleMixBusRecordingFn();
+            // State will be updated via polling
+            console.log('[LOOPER] MixBus recording toggled');
+        } catch (e) {
+            console.error('Error toggling MixBus recording:', e);
+        }
+    }
+
+    // Stop MixBus recording (punch out only)
+    async stopMixBusRecording() {
+        try {
+            await this.stopMixBusRecordingFn();
+            this.mixBusRecording = false;
+            this.updateMixBusUI();
+            console.log('[LOOPER] MixBus recording stopped');
+        } catch (e) {
+            console.error('Error stopping MixBus recording:', e);
         }
     }
 
@@ -666,6 +712,89 @@ class LooperController {
             }
         } catch (e) {
             console.error('Error toggling ADD+ mode:', e);
+        }
+    }
+
+    // Setup MixBus controls (BUS indicator button, mixer channel controls)
+    setupMixBus() {
+        this.busBtn = document.getElementById('bus-btn');
+        this.busMixerChannel = document.querySelector('.mixer-channel-bus');
+        this.busMuteBtn = document.getElementById('mute-bus');
+        this.busClearBtn = document.getElementById('clear-bus');
+
+        // BUS indicator button - click to toggle mute
+        if (this.busBtn) {
+            this.busBtn.addEventListener('click', async () => {
+                await this.toggleMixBusMute();
+            });
+        }
+
+        // Mixer channel mute button
+        if (this.busMuteBtn) {
+            this.busMuteBtn.addEventListener('click', async () => {
+                await this.toggleMixBusMute();
+            });
+        }
+
+        // Mixer channel clear button
+        if (this.busClearBtn) {
+            this.busClearBtn.addEventListener('click', async () => {
+                await this.clearMixBus();
+            });
+        }
+    }
+
+    async toggleMixBusMute() {
+        try {
+            this.mixBusMuted = !this.mixBusMuted;
+            await this.setMixBusMutedFn(this.mixBusMuted);
+            this.updateMixBusUI();
+            console.log(`[LOOPER] MixBus ${this.mixBusMuted ? 'muted' : 'unmuted'}`);
+        } catch (e) {
+            console.error('Error toggling MixBus mute:', e);
+        }
+    }
+
+    async clearMixBus() {
+        try {
+            await this.clearMixBusFn();
+            console.log('[LOOPER] MixBus cleared');
+        } catch (e) {
+            console.error('Error clearing MixBus:', e);
+        }
+    }
+
+    // Update MixBus UI elements based on current state
+    updateMixBusUI() {
+        // Update MIX transport button
+        // Only show active state when recording - no has-content tint
+        // (content is indicated via BUS button and mixer channel instead)
+        if (this.mixBtn) {
+            this.mixBtn.classList.toggle('active', this.mixBusRecording);
+        }
+
+        // Update BUS indicator button
+        if (this.busBtn) {
+            this.busBtn.classList.toggle('has-content', this.mixBusHasContent);
+            this.busBtn.classList.toggle('recording', this.mixBusRecording);
+            this.busBtn.classList.toggle('muted', this.mixBusMuted);
+        }
+
+        // Update mixer channel
+        if (this.busMixerChannel) {
+            this.busMixerChannel.classList.toggle('has-content', this.mixBusHasContent);
+            this.busMixerChannel.classList.toggle('recording', this.mixBusRecording);
+            this.busMixerChannel.classList.toggle('muted', this.mixBusMuted);
+        }
+
+        // Update mute button appearance
+        if (this.busMuteBtn) {
+            this.busMuteBtn.classList.toggle('active', this.mixBusMuted);
+        }
+
+        // Disable REC/DUB button when MIX is recording
+        if (this.recBtn) {
+            this.recBtn.classList.toggle('mix-disabled', this.mixBusRecording);
         }
     }
 
@@ -1132,7 +1261,9 @@ class LooperController {
                     this.drawWaveform(
                         this.lastWaveformData,
                         this.lastLayerWaveforms,
-                        this.lastLayerMutes
+                        this.lastLayerMutes,
+                        this.lastMixBusWaveform,
+                        this.lastMixBusContentMask
                     );
                 }
             });
@@ -1274,11 +1405,13 @@ class LooperController {
         this.ctx.fillText('No loop recorded', width / 2, height / 2 + 4);
     }
 
-    drawWaveform(waveformData, layerWaveforms, layerMutes) {
+    drawWaveform(waveformData, layerWaveforms, layerMutes, mixBusWaveform, mixBusContentMask) {
         // Store the last waveform data for redrawing after tab switches
         this.lastWaveformData = waveformData;
         this.lastLayerWaveforms = layerWaveforms;
         this.lastLayerMutes = layerMutes;
+        this.lastMixBusWaveform = mixBusWaveform;
+        this.lastMixBusContentMask = mixBusContentMask;
 
         if (!this.ctx) {
             return;
@@ -1287,8 +1420,9 @@ class LooperController {
         // Check if we have any content to draw
         const hasLayerData = layerWaveforms && layerWaveforms.length > 0;
         const hasBasicData = waveformData && waveformData.length > 0;
+        const hasMixBusData = mixBusWaveform && mixBusWaveform.length > 0;
 
-        if (!hasLayerData && !hasBasicData) {
+        if (!hasLayerData && !hasBasicData && !hasMixBusData) {
             this.drawEmptyWaveform();
             return;
         }
@@ -1456,6 +1590,54 @@ class LooperController {
             }
         }
 
+        // ============================================================
+        // MIXBUS WAVEFORM OVERLAY
+        // ============================================================
+        // Draw MixBus waveform on top of layers where it has content
+        // This visually shows where MixBus is "masking" the layers
+        if (hasMixBusData && mixBusContentMask) {
+            const barWidth = zoomedWidth / mixBusWaveform.length;
+            const mixBusColor = '#9c27b0';  // Purple for MixBus
+
+            // First pass: draw semi-transparent overlay where MixBus has content
+            // This dims the layer waveforms underneath
+            this.ctx.fillStyle = 'rgba(10, 10, 10, 0.5)';
+            for (let i = 0; i < mixBusContentMask.length; i++) {
+                if (mixBusContentMask[i]) {
+                    const x = (i * barWidth) - offsetX;
+                    if (x + barWidth > 0 && x < width) {
+                        this.ctx.fillRect(x, 0, Math.max(1, barWidth), height);
+                    }
+                }
+            }
+
+            // Second pass: draw MixBus waveform in purple
+            this.ctx.fillStyle = mixBusColor + 'cc';  // 80% opacity
+            for (let i = 0; i < mixBusWaveform.length; i++) {
+                if (mixBusContentMask[i] && mixBusWaveform[i] > 0) {
+                    const amplitude = mixBusWaveform[i] * (height * 0.35);
+                    const x = (i * barWidth) - offsetX;
+                    if (x + barWidth > 0 && x < width && amplitude > 0.5) {
+                        this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
+                    }
+                }
+            }
+
+            // Third pass: draw thin purple line at top/bottom to show MixBus regions
+            this.ctx.fillStyle = mixBusColor + '60';  // 40% opacity
+            for (let i = 0; i < mixBusContentMask.length; i++) {
+                if (mixBusContentMask[i]) {
+                    const x = (i * barWidth) - offsetX;
+                    if (x + barWidth > 0 && x < width) {
+                        // Top indicator line
+                        this.ctx.fillRect(x, 0, Math.max(1, barWidth), 2);
+                        // Bottom indicator line
+                        this.ctx.fillRect(x, height - 2, Math.max(1, barWidth), 2);
+                    }
+                }
+            }
+        }
+
         // Draw loop region boundaries as vertical lines
         const startX = (this.loopStart * zoomedWidth) - offsetX;
         const endX = (this.loopEnd * zoomedWidth) - offsetX;
@@ -1597,6 +1779,10 @@ class LooperController {
 
     async play() {
         try {
+            // Stop MixBus recording if active
+            if (this.mixBusRecording) {
+                await this.stopMixBusRecording();
+            }
             await this.playFn();
             this.updateTransportUI('playing');
         } catch (e) {
@@ -1606,6 +1792,10 @@ class LooperController {
 
     async stop() {
         try {
+            // Stop MixBus recording if active
+            if (this.mixBusRecording) {
+                await this.stopMixBusRecording();
+            }
             await this.stopFn();
             this.updateTransportUI('idle');
         } catch (e) {
@@ -1933,6 +2123,32 @@ class LooperController {
                         this.additiveRecordingActive = state.additiveRecordingActive;
                     }
 
+                    // Sync MixBus state from backend
+                    if (typeof state.mixBusRecording !== 'undefined' ||
+                        typeof state.mixBusHasContent !== 'undefined' ||
+                        typeof state.mixBusMuted !== 'undefined') {
+                        let needsUpdate = false;
+                        if (typeof state.mixBusRecording !== 'undefined' && state.mixBusRecording !== this.mixBusRecording) {
+                            this.mixBusRecording = state.mixBusRecording;
+                            needsUpdate = true;
+                        }
+                        if (typeof state.mixBusHasContent !== 'undefined' && state.mixBusHasContent !== this.mixBusHasContent) {
+                            this.mixBusHasContent = state.mixBusHasContent;
+                            needsUpdate = true;
+                        }
+                        if (typeof state.mixBusMuted !== 'undefined' && state.mixBusMuted !== this.mixBusMuted) {
+                            this.mixBusMuted = state.mixBusMuted;
+                            needsUpdate = true;
+                        }
+                        // Store peak level for mixer VU meter
+                        if (typeof state.mixBusPeakLevel !== 'undefined') {
+                            this.mixBusPeakLevel = state.mixBusPeakLevel;
+                        }
+                        if (needsUpdate) {
+                            this.updateMixBusUI();
+                        }
+                    }
+
                     // DISABLED: Don't let polling overwrite reverse state
                     // The button click is the source of truth for reverse
                     // if (typeof state.isReversed !== 'undefined' && !this.reverseButtonPending) {
@@ -1948,7 +2164,14 @@ class LooperController {
                         if (state.layerWaveforms && state.layerWaveforms.length > 1) {
                             console.log(`[WAVEFORM] ${state.layerWaveforms.length} layers, mutes:`, state.layerMutes);
                         }
-                        this.drawWaveform(state.waveform, state.layerWaveforms, state.layerMutes);
+                        // Pass MixBus data if available
+                        this.drawWaveform(
+                            state.waveform,
+                            state.layerWaveforms,
+                            state.layerMutes,
+                            state.mixBusWaveform,
+                            state.mixBusContentMask
+                        );
                     }
 
                     // Sync layer mute UI states from backend
@@ -4323,6 +4546,10 @@ class MixerViewController {
             });
         }
 
+        // BUS channel VU meter
+        this.busVuNeedle = document.getElementById('vu-needle-bus');
+        this.busFaderMeter = document.getElementById('fader-meter-bus');
+
         // Native functions
         this.setLayerVolumeFn = getNativeFunction('setLayerVolume');
         this.setLayerPanFn = getNativeFunction('setLayerPan');
@@ -4622,6 +4849,11 @@ class MixerViewController {
                         });
                     }
                 }
+
+                // Update BUS channel meter from looperController state
+                if (looperController && looperController.mixBusPeakLevel !== undefined) {
+                    this.updateBusVUMeter(looperController.mixBusPeakLevel);
+                }
             } catch (e) {
                 // Silently ignore polling errors
             }
@@ -4706,6 +4938,55 @@ class MixerViewController {
 
             // Add clipping class if in red zone (above 0dB)
             channel.faderMeter.classList.toggle('clipping', level > 1.0);
+        }
+    }
+
+    // Update BUS channel VU meter (similar to updateVUMeter but for the MixBus)
+    updateBusVUMeter(level) {
+        if (!this.busVuNeedle) return;
+
+        // Convert linear level to dB
+        const minDb = -48;
+        const maxDb = 6;
+        let db = minDb;
+        if (level > 0.00001) {
+            db = 20 * Math.log10(level);
+            db = Math.max(minDb, Math.min(maxDb, db));
+        }
+
+        // Map dB to angle (same as updateVUMeter)
+        let angle;
+        if (db <= -48) {
+            angle = -45;
+        } else if (db <= -20) {
+            angle = -45 + (db + 48) * (20 / 28);
+        } else if (db <= -3) {
+            angle = -25 + (db + 20) * (25 / 17);
+        } else if (db <= 0) {
+            angle = (db + 3) * (8 / 3);
+        } else {
+            angle = 8 + db * (17 / 6);
+        }
+
+        this.busVuNeedle.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+
+        // Update BUS fader meter bar
+        if (this.busFaderMeter) {
+            let meterHeight;
+            if (level <= 0.00001) {
+                meterHeight = 0;
+            } else {
+                const dbLevel = 20 * Math.log10(level);
+                if (dbLevel <= -48) {
+                    meterHeight = 0;
+                } else if (dbLevel <= 0) {
+                    meterHeight = ((dbLevel + 48) / 48) * 79;
+                } else {
+                    meterHeight = 79 + Math.min(dbLevel / 6, 1) * 21;
+                }
+            }
+            this.busFaderMeter.style.height = `${meterHeight}%`;
+            this.busFaderMeter.classList.toggle('clipping', level > 1.0);
         }
     }
 

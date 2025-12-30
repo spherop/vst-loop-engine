@@ -35,10 +35,19 @@ public:
         smearCaptureLength = 0;
         smearActive = false;
 
+        // Initialize MixBus buffer (will be resized when loop length is known)
+        mixBusBuffer.setSize(2, samplesPerBlock);
+        mixBusBuffer.clear();
+
         // Reset state
         currentLayer = 0;
         highestLayer = 0;
         masterLoopLength = 0;
+
+        // Reset MixBus state
+        mixBusHasContent = false;
+        mixBusMuted = false;
+        mixBusRecording = false;
     }
 
     // Transport controls - Blooper-style workflow:
@@ -458,6 +467,14 @@ public:
 
     void undo()
     {
+        // If MixBus has content, first undo clears it
+        if (mixBusHasContent)
+        {
+            clearMixBus();
+            DBG("undo() - cleared MixBus");
+            return;
+        }
+
         if (currentLayer > 0)
         {
             // Mute the current layer instead of stopping it completely
@@ -894,6 +911,9 @@ public:
                 buffer.addFrom(ch, 0, inputBuffer, ch, 0, numSamples);
             }
         }
+
+        // NOTE: MixBus stencil logic is handled in PluginProcessor.cpp AFTER effects
+        // This ensures MixBus audio (which was captured post-effects) plays back correctly
 
         // Measure pre-clip peak levels and count clip events for diagnostics
         float peakPreClipL = 0.0f;
@@ -1675,6 +1695,324 @@ public:
         additiveCaptureWritePos += numSamples;
     }
 
+    // ============================================================
+    // MIX BUS CONTROLS
+    // ============================================================
+
+    // Start recording to MixBus (punch in)
+    void startMixBusRecording()
+    {
+        if (masterLoopLength <= 0 || !hasContent())
+        {
+            DBG("MIXBUS: Cannot record - no loop content, masterLoopLength=" + juce::String(masterLoopLength));
+            return;
+        }
+
+        // Ensure MixBus buffer is properly sized
+        if (mixBusBuffer.getNumSamples() < masterLoopLength)
+        {
+            DBG("MIXBUS: Resizing buffer from " + juce::String(mixBusBuffer.getNumSamples()) +
+                " to " + juce::String(masterLoopLength));
+            mixBusBuffer.setSize(2, masterLoopLength);
+        }
+
+        // Ensure content mask is properly sized
+        if (mixBusContentMask.size() < static_cast<size_t>(masterLoopLength))
+        {
+            DBG("MIXBUS: Resizing content mask to " + juce::String(masterLoopLength));
+            mixBusContentMask.resize(static_cast<size_t>(masterLoopLength), false);
+        }
+
+        mixBusRecording.store(true);
+        DBG("MIXBUS: Recording started (punch in), bufferSize=" + juce::String(mixBusBuffer.getNumSamples()) +
+            ", maskSize=" + juce::String(static_cast<int>(mixBusContentMask.size())));
+    }
+
+    // Stop recording to MixBus (punch out)
+    void stopMixBusRecording()
+    {
+        if (!mixBusRecording.load())
+            return;
+
+        mixBusRecording.store(false);
+
+        // Check if we actually have content now
+        updateMixBusHasContent();
+
+        DBG("MIXBUS: Recording stopped (punch out), hasContent=" +
+            juce::String(mixBusHasContent ? "true" : "false"));
+    }
+
+    // Toggle MixBus recording (punch in/out)
+    void toggleMixBusRecording()
+    {
+        if (mixBusRecording.load())
+            stopMixBusRecording();
+        else
+            startMixBusRecording();
+    }
+
+    bool isMixBusRecording() const
+    {
+        return mixBusRecording.load();
+    }
+
+    // Called from PluginProcessor to capture effected audio to MixBus
+    void captureForMixBus(const juce::AudioBuffer<float>& buffer, int numSamples)
+    {
+        if (!mixBusRecording.load() || masterLoopLength <= 0)
+            return;
+
+        // Ensure buffer is allocated
+        if (mixBusBuffer.getNumSamples() < masterLoopLength)
+        {
+            DBG("MIXBUS CAPTURE: Buffer too small! " + juce::String(mixBusBuffer.getNumSamples()) +
+                " < " + juce::String(masterLoopLength));
+            return;
+        }
+
+        // Ensure mask is allocated
+        if (mixBusContentMask.size() < static_cast<size_t>(masterLoopLength))
+        {
+            DBG("MIXBUS CAPTURE: Mask too small! " + juce::String(static_cast<int>(mixBusContentMask.size())) +
+                " < " + juce::String(masterLoopLength));
+            return;
+        }
+
+        const int numChannels = std::min(buffer.getNumChannels(), 2);
+
+        // Get playhead position synced with layer 0
+        int playheadSamples = static_cast<int>(layers[0].getRawPlayhead());
+        if (playheadSamples < 0) playheadSamples = 0;
+        if (playheadSamples >= masterLoopLength) playheadSamples = playheadSamples % masterLoopLength;
+
+        // Track peak for debugging
+        float peakLevel = 0.0f;
+
+        // Write to MixBus buffer and mark content mask
+        for (int i = 0; i < numSamples; ++i)
+        {
+            int writePos = (playheadSamples + i) % masterLoopLength;
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                float sample = buffer.getSample(ch, i);
+                mixBusBuffer.setSample(ch, writePos, sample);
+                if (std::abs(sample) > peakLevel) peakLevel = std::abs(sample);
+            }
+            // Mark this position as having content
+            mixBusContentMask[static_cast<size_t>(writePos)] = true;
+        }
+
+        // Update peak level for VU meter
+        float curPeak = mixBusPeakLevel.load();
+        mixBusPeakLevel.store(peakLevel > curPeak ? peakLevel : curPeak * 0.95f);
+
+        mixBusHasContent = true;
+    }
+
+    // Get MixBus audio for playback at current position
+    // Returns true if MixBus has content at this position (layers should be muted)
+    bool getMixBusAudioAtPosition(int samplePos, float& outL, float& outR) const
+    {
+        if (!mixBusHasContent || mixBusMuted || masterLoopLength <= 0)
+        {
+            outL = 0.0f;
+            outR = 0.0f;
+            return false;
+        }
+
+        if (samplePos < 0 || samplePos >= masterLoopLength)
+            samplePos = samplePos % masterLoopLength;
+
+        // Check if this position has content
+        if (static_cast<size_t>(samplePos) < mixBusContentMask.size() &&
+            mixBusContentMask[static_cast<size_t>(samplePos)])
+        {
+            outL = mixBusBuffer.getSample(0, samplePos);
+            outR = mixBusBuffer.getNumChannels() > 1 ? mixBusBuffer.getSample(1, samplePos) : outL;
+            return true;  // MixBus has content here - mute layers
+        }
+
+        outL = 0.0f;
+        outR = 0.0f;
+        return false;  // No content - layers should play through
+    }
+
+    // Check if MixBus has content at a specific sample position
+    bool mixBusHasContentAtPosition(int samplePos) const
+    {
+        if (!mixBusHasContent || mixBusMuted || masterLoopLength <= 0)
+            return false;
+
+        if (samplePos < 0) samplePos = 0;
+        if (samplePos >= masterLoopLength) samplePos = samplePos % masterLoopLength;
+
+        return static_cast<size_t>(samplePos) < mixBusContentMask.size() &&
+               mixBusContentMask[static_cast<size_t>(samplePos)];
+    }
+
+    // Apply MixBus stencil to a buffer (called from PluginProcessor AFTER effects)
+    // This replaces layer output with MixBus audio where MixBus has content
+    // The inputBuffer is the clean input that should be preserved (added to output)
+    void applyMixBusStencil(juce::AudioBuffer<float>& buffer,
+                            const juce::AudioBuffer<float>& inputBuffer,
+                            int numSamples)
+    {
+        if (!mixBusHasContent || mixBusMuted || masterLoopLength <= 0)
+            return;
+
+        const int numChannels = std::min(buffer.getNumChannels(), 2);
+
+        // Get current playhead position (synced with layer 0)
+        int playheadSamples = static_cast<int>(layers[0].getRawPlayhead());
+        if (playheadSamples < 0) playheadSamples = 0;
+
+        float mixBusPeak = 0.0f;
+
+        for (int s = 0; s < numSamples; ++s)
+        {
+            int samplePos = (playheadSamples + s) % masterLoopLength;
+
+            // Check if MixBus has content at this position
+            if (mixBusHasContentAtPosition(samplePos))
+            {
+                // MixBus has content - replace layer output with MixBus audio
+                float mixL = mixBusBuffer.getSample(0, samplePos);
+                float mixR = mixBusBuffer.getNumChannels() > 1 ?
+                             mixBusBuffer.getSample(1, samplePos) : mixL;
+
+                // Replace buffer content at this sample (MixBus + input)
+                buffer.setSample(0, s, mixL + inputBuffer.getSample(0, s));
+                if (numChannels > 1)
+                    buffer.setSample(1, s, mixR + inputBuffer.getSample(1, s));
+
+                // Track peak for VU meter
+                float absL = std::abs(mixL);
+                float absR = std::abs(mixR);
+                if (absL > mixBusPeak) mixBusPeak = absL;
+                if (absR > mixBusPeak) mixBusPeak = absR;
+            }
+            // else: effected layer output stays in buffer (poke through)
+        }
+
+        // Update MixBus peak level
+        float curPeak = mixBusPeakLevel.load();
+        mixBusPeakLevel.store(mixBusPeak > curPeak ? mixBusPeak : curPeak * 0.92f);
+    }
+
+    // Clear MixBus content
+    void clearMixBus()
+    {
+        mixBusBuffer.clear();
+        std::fill(mixBusContentMask.begin(), mixBusContentMask.end(), false);
+        mixBusHasContent = false;
+        mixBusRecording.store(false);
+        DBG("MIXBUS: Cleared");
+    }
+
+    // Mute/unmute MixBus
+    void setMixBusMuted(bool muted)
+    {
+        mixBusMuted = muted;
+        DBG("MIXBUS: " + juce::String(muted ? "Muted" : "Unmuted"));
+    }
+
+    bool isMixBusMuted() const { return mixBusMuted; }
+    bool mixBusHasAnyContent() const { return mixBusHasContent; }
+    float getMixBusPeakLevel() const { return mixBusPeakLevel.load(); }
+
+    // Get MixBus waveform data for UI visualization
+    // Returns per-sample content mask (true = has content) along with waveform amplitude
+    std::vector<float> getMixBusWaveformData(int numPoints) const
+    {
+        std::vector<float> waveform(numPoints, 0.0f);
+
+        if (!mixBusHasContent || masterLoopLength <= 0 || mixBusBuffer.getNumSamples() < masterLoopLength)
+            return waveform;
+
+        const int samplesPerPoint = masterLoopLength / numPoints;
+        if (samplesPerPoint <= 0)
+            return waveform;
+
+        for (int i = 0; i < numPoints; ++i)
+        {
+            int startSample = i * samplesPerPoint;
+            int endSample = std::min(startSample + samplesPerPoint, masterLoopLength);
+
+            float maxVal = 0.0f;
+            bool hasContent = false;
+
+            for (int s = startSample; s < endSample; ++s)
+            {
+                // Check if this sample position has content
+                if (static_cast<size_t>(s) < mixBusContentMask.size() && mixBusContentMask[static_cast<size_t>(s)])
+                {
+                    hasContent = true;
+                    float valL = std::abs(mixBusBuffer.getSample(0, s));
+                    float valR = mixBusBuffer.getNumChannels() > 1 ? std::abs(mixBusBuffer.getSample(1, s)) : valL;
+                    float val = std::max(valL, valR);
+                    if (val > maxVal) maxVal = val;
+                }
+            }
+
+            // Only set waveform value if this region has content
+            waveform[i] = hasContent ? maxVal : 0.0f;
+        }
+
+        // Normalize
+        float maxWaveform = 0.0f;
+        for (float v : waveform)
+            if (v > maxWaveform) maxWaveform = v;
+
+        if (maxWaveform > 0.0f)
+        {
+            for (float& v : waveform)
+                v /= maxWaveform;
+        }
+
+        return waveform;
+    }
+
+    // Get MixBus content mask for UI (which regions have content)
+    std::vector<bool> getMixBusContentMaskDownsampled(int numPoints) const
+    {
+        std::vector<bool> mask(numPoints, false);
+
+        if (!mixBusHasContent || masterLoopLength <= 0)
+            return mask;
+
+        const int samplesPerPoint = masterLoopLength / numPoints;
+        if (samplesPerPoint <= 0)
+            return mask;
+
+        for (int i = 0; i < numPoints; ++i)
+        {
+            int startSample = i * samplesPerPoint;
+            int endSample = std::min(startSample + samplesPerPoint, masterLoopLength);
+
+            // Check if ANY sample in this region has content
+            for (int s = startSample; s < endSample; ++s)
+            {
+                if (static_cast<size_t>(s) < mixBusContentMask.size() && mixBusContentMask[static_cast<size_t>(s)])
+                {
+                    mask[i] = true;
+                    break;
+                }
+            }
+        }
+
+        return mask;
+    }
+
+private:
+    // Update mixBusHasContent flag by scanning the mask
+    void updateMixBusHasContent()
+    {
+        mixBusHasContent = std::any_of(mixBusContentMask.begin(), mixBusContentMask.end(),
+                                        [](bool b) { return b; });
+    }
+
+public:
     // Flatten all non-muted layers into layer 1
     // This sums all active layer buffers into layer 1 and clears the others
     // SEAMLESS: preserves playhead position and continues playback without interruption
@@ -1836,6 +2174,31 @@ private:
     int additiveCaptureWritePos = 0;              // Tracks total samples captured
     int additiveTargetLayer = -1;                 // Which override layer we're updating (-1 = none)
     bool additiveCreateNewLayer = false;          // If true, next boundary creates NEW override layer
+
+    // ============================================================
+    // MIX BUS - Single stereo mixdown layer with stencil behavior
+    // ============================================================
+    //
+    // The MixBus is a special layer that:
+    //   - Captures effected output (layers + input + effects) when recording
+    //   - Acts as a "stencil" during playback - where it has audio, it plays and mutes layers
+    //   - Where the MixBus is silent/empty, regular layers "poke through"
+    //   - Can be muted (then all regular layers play normally)
+    //   - Can be cleared via UNDO or dedicated clear
+    //
+    // Recording flow:
+    //   1. Press MIX button to punch in
+    //   2. Effected output writes to MixBus buffer at playhead position
+    //   3. Press MIX again (or PLAY) to punch out
+    //   4. MixBus now has content at recorded positions
+    //
+    juce::AudioBuffer<float> mixBusBuffer;        // The MixBus audio buffer (same length as loop)
+    std::vector<bool> mixBusContentMask;          // Per-sample mask: true = has content, false = empty
+    std::atomic<bool> mixBusRecording { false };  // Currently recording to MixBus
+    bool mixBusHasContent = false;                // Does MixBus have any content?
+    bool mixBusMuted = false;                     // Is MixBus muted?
+    float mixBusPlayhead = 0.0f;                  // MixBus playhead position (synced with layer 0)
+    std::atomic<float> mixBusPeakLevel { 0.0f };  // Peak level for VU meter
 
     // Debug counter (member variable to avoid static issues)
     int xfadeDebugCounter = 0;

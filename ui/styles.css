@@ -711,6 +711,22 @@ html, body {
     color: #ef5350 !important;
 }
 
+/* REC button disabled when MIX is active */
+.transport-btn.rec.mix-disabled {
+    opacity: 0.4;
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
+.transport-btn.rec.mix-disabled .transport-icon {
+    color: #444;
+    animation: none;
+}
+
+.transport-btn.rec.mix-disabled .transport-label {
+    color: #444;
+}
+
 /* Play Button */
 .transport-btn.play:hover {
     border-color: #4caf50;
@@ -817,6 +833,53 @@ html, body {
 @keyframes disabled-flash {
     0% { border-color: #f44336; box-shadow: 0 0 12px rgba(244, 67, 54, 0.6); }
     100% { border-color: var(--fd-border); box-shadow: none; }
+}
+
+/* MIX Button - MixBus punch-in/out recording */
+/* Default inactive state - matches other transport buttons */
+.transport-btn.mix .transport-icon {
+    color: #555;
+}
+
+.transport-btn.mix .transport-label {
+    color: #444;
+}
+
+.transport-btn.mix:hover {
+    border-color: #9c27b0;
+}
+
+.transport-btn.mix:hover .transport-icon {
+    color: #9c27b0;
+}
+
+.transport-btn.mix.active {
+    background: linear-gradient(180deg, #4a1a4a 0%, #2a0a2a 100%);
+    border-color: #e040fb;
+    box-shadow: 0 0 24px rgba(224, 64, 251, 0.7), inset 0 0 12px rgba(156, 39, 176, 0.3);
+}
+
+.transport-btn.mix.active .transport-icon {
+    color: #f8bbd9;
+    text-shadow: 0 0 8px rgba(224, 64, 251, 0.8);
+    animation: pulse-mix 0.8s ease-in-out infinite;
+}
+
+.transport-btn.mix.active .transport-label {
+    color: #e040fb;
+    font-weight: 800;
+    text-shadow: 0 0 6px rgba(224, 64, 251, 0.6);
+}
+
+@keyframes pulse-mix {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
 }
 
 /* Reverse Button */
@@ -1076,6 +1139,14 @@ html, body {
     overflow: visible;
 }
 
+/* Larger layer buttons (100% larger = 48x48) */
+.layer-btn.layer-btn-large {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+    border-radius: 6px;
+}
+
 .layer-btn:hover {
     border-color: #555;
     color: #888;
@@ -1253,6 +1324,89 @@ html, body {
 .flatten-icon {
     font-size: 12px;
     font-weight: bold;
+}
+
+/* ============================================
+   BUS INDICATOR BUTTON
+   ============================================ */
+
+.bus-btn {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid #2a2a2a;
+    background: linear-gradient(180deg, #151515 0%, #0a0a0a 100%);
+    color: #444;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    overflow: visible;
+    margin-left: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.bus-label {
+    letter-spacing: 0.5px;
+}
+
+.bus-btn:hover {
+    border-color: #9c27b0;
+    color: #ba68c8;
+}
+
+/* BUS button when MixBus has content */
+.bus-btn.has-content {
+    background: #9c27b0;
+    border-color: #9c27b0;
+    color: #0a0a0a;
+    font-weight: 800;
+}
+
+.bus-btn.has-content:hover {
+    background: #7b1fa2;
+    border-color: #ba68c8;
+    color: #0a0a0a;
+}
+
+/* BUS button when recording to MixBus */
+.bus-btn.recording {
+    background: linear-gradient(180deg, #2a152a 0%, #1a081a 100%);
+    border-color: #9c27b0;
+    color: #ce93d8;
+    box-shadow: 0 0 12px rgba(156, 39, 176, 0.5);
+    animation: pulse-bus 1s ease-in-out infinite;
+}
+
+@keyframes pulse-bus {
+    0%, 100% { box-shadow: 0 0 12px rgba(156, 39, 176, 0.5); }
+    50% { box-shadow: 0 0 20px rgba(156, 39, 176, 0.8); }
+}
+
+/* BUS button when muted */
+.bus-btn.muted {
+    background: linear-gradient(180deg, #1a1010 0%, #0f0808 100%);
+    border-color: #553333;
+    color: #664444;
+    opacity: 0.7;
+}
+
+.bus-btn.muted::after {
+    content: 'M';
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    font-size: 7px;
+    color: #ff4444;
+    background: #1a0a0a;
+    border: 1px solid #553333;
+    border-radius: 2px;
+    padding: 0 2px;
+    line-height: 1;
 }
 
 /* ============================================
@@ -4326,6 +4480,57 @@ html, body {
 .mixer-channel[data-layer="8"] .channel-label { color: #9ccc65; text-shadow: 0 0 6px rgba(156, 204, 101, 0.5); }
 .mixer-channel[data-layer="8"].has-content { border-color: #9ccc65; }
 .mixer-channel[data-layer="8"] .vu-meter { border-color: #9ccc65; }
+
+/* MixBus Channel: Purple */
+.mixer-channel[data-layer="bus"] .channel-label { color: #9c27b0; text-shadow: 0 0 6px rgba(156, 39, 176, 0.5); }
+.mixer-channel[data-layer="bus"].has-content { border-color: #9c27b0; }
+.mixer-channel[data-layer="bus"] .vu-meter { border-color: #9c27b0; }
+
+/* MixBus channel special styling */
+.mixer-channel-bus {
+    border-left: 2px solid #9c27b0;
+    margin-left: 8px;
+}
+
+.mixer-channel-bus.recording {
+    border-color: #9c27b0;
+    box-shadow: 0 0 12px rgba(156, 39, 176, 0.3);
+}
+
+.mixer-channel-bus .channel-label {
+    font-weight: 800;
+}
+
+/* Clear button for MixBus (replaces solo button) */
+.channel-clear {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    border: 1px solid #444;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    color: #666;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+
+.channel-clear:hover {
+    border-color: #f44336;
+    color: #f44336;
+    background: linear-gradient(180deg, #1f1515 0%, #140a0a 100%);
+}
+
+.channel-clear:active {
+    transform: scale(0.95);
+}
+
+/* Disabled pan knob for bus */
+.pan-knob-disabled {
+    opacity: 0.3;
+    pointer-events: none;
+}
 
 /* ============================================
    PAN KNOB (Mini)
