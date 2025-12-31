@@ -521,12 +521,17 @@ class LooperController {
         this.stopMixBusRecordingFn = getNativeFunction("stopMixBusRecording");
         this.clearMixBusFn = getNativeFunction("clearMixBus");
         this.setMixBusMutedFn = getNativeFunction("setMixBusMuted");
+        this.toggleMixBusCompoundModeFn = getNativeFunction("toggleMixBusCompoundMode");
 
         // MixBus state
         this.mixBusRecording = false;
         this.mixBusHasContent = false;
         this.mixBusMuted = false;
         this.mixBusPeakLevel = 0;
+        this.mixBusCompoundMode = false;
+
+        // Double-click detection for compound mode toggle
+        this.mixBtnLastClickTime = 0;
 
         // Input monitoring state
         this.inputMuted = false;
@@ -653,10 +658,27 @@ class LooperController {
             this.clearBtn.addEventListener('click', () => this.clear());
         }
 
-        // MIX button - toggle MixBus recording (punch in/out)
+        // MIX button - single click toggles recording, double-click toggles compound mode
         if (this.mixBtn) {
             this.mixBtn.addEventListener('click', async () => {
-                await this.toggleMixBusRecording();
+                const now = Date.now();
+                const timeSinceLastClick = now - this.mixBtnLastClickTime;
+                this.mixBtnLastClickTime = now;
+
+                // Double-click detection (within 300ms)
+                if (timeSinceLastClick < 300) {
+                    // Double-click: toggle compound mode
+                    await this.toggleMixBusCompoundMode();
+                    console.log('[LOOPER] MIX double-click - compound mode toggled');
+                } else {
+                    // Single click: toggle recording (with small delay to detect double-click)
+                    setTimeout(async () => {
+                        // Only trigger if no second click happened
+                        if (Date.now() - this.mixBtnLastClickTime >= 280) {
+                            await this.toggleMixBusRecording();
+                        }
+                    }, 300);
+                }
             });
         }
 
@@ -693,6 +715,18 @@ class LooperController {
             console.log('[LOOPER] MixBus recording stopped');
         } catch (e) {
             console.error('Error stopping MixBus recording:', e);
+        }
+    }
+
+    // Toggle MixBus compound mode (double-click on MIX button)
+    // In compound mode, MixBus re-captures each cycle creating feedback effects
+    async toggleMixBusCompoundMode() {
+        try {
+            await this.toggleMixBusCompoundModeFn();
+            // State will be updated via polling
+            console.log('[LOOPER] MixBus compound mode toggled');
+        } catch (e) {
+            console.error('Error toggling MixBus compound mode:', e);
         }
     }
 
@@ -771,6 +805,7 @@ class LooperController {
         // (content is indicated via BUS button and mixer channel instead)
         if (this.mixBtn) {
             this.mixBtn.classList.toggle('active', this.mixBusRecording);
+            this.mixBtn.classList.toggle('compound', this.mixBusCompoundMode);
         }
 
         // Update BUS indicator button
@@ -2143,6 +2178,11 @@ class LooperController {
                         // Store peak level for mixer VU meter
                         if (typeof state.mixBusPeakLevel !== 'undefined') {
                             this.mixBusPeakLevel = state.mixBusPeakLevel;
+                        }
+                        // Sync compound mode state
+                        if (typeof state.mixBusCompoundMode !== 'undefined' && state.mixBusCompoundMode !== this.mixBusCompoundMode) {
+                            this.mixBusCompoundMode = state.mixBusCompoundMode;
+                            needsUpdate = true;
                         }
                         if (needsUpdate) {
                             this.updateMixBusUI();

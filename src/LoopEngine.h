@@ -3,9 +3,27 @@
 #include "LoopBuffer.h"
 #include <array>
 #include <atomic>
+#include <cmath>
 
 class LoopEngine
 {
+private:
+    // Safe sample processing - prevents NaN/Inf and applies soft clipping
+    static inline float safeSample(float sample)
+    {
+        // Check for NaN or Inf - reset to 0
+        if (std::isnan(sample) || std::isinf(sample))
+            return 0.0f;
+
+        // Soft clip using tanh-style curve, transparent below 0.9
+        if (std::abs(sample) > 0.9f)
+        {
+            return std::tanh(sample * 1.5f) * 0.95f;
+        }
+        return sample;
+    }
+
+
 public:
     static constexpr int NUM_LAYERS = 8;
 
@@ -48,6 +66,7 @@ public:
         mixBusHasContent = false;
         mixBusMuted = false;
         mixBusRecording = false;
+        mixBusCompoundMode = false;
     }
 
     // Transport controls - Blooper-style workflow:
@@ -1789,6 +1808,15 @@ public:
         // Track peak for debugging
         float peakLevel = 0.0f;
 
+        // In compound mode, fill entire loop with content on first capture
+        const bool compoundMode = mixBusCompoundMode.load();
+        if (compoundMode && !mixBusHasContent)
+        {
+            // Initialize entire mask to true for compound mode
+            std::fill(mixBusContentMask.begin(), mixBusContentMask.end(), true);
+            DBG("MIXBUS: Compound mode - marking entire loop as content");
+        }
+
         // Write to MixBus buffer and mark content mask
         for (int i = 0; i < numSamples; ++i)
         {
@@ -1796,6 +1824,10 @@ public:
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 float sample = buffer.getSample(ch, i);
+
+                // Apply safety processing (NaN/Inf check + soft clip)
+                sample = safeSample(sample);
+
                 mixBusBuffer.setSample(ch, writePos, sample);
                 if (std::abs(sample) > peakLevel) peakLevel = std::abs(sample);
             }
@@ -1851,17 +1883,15 @@ public:
                mixBusContentMask[static_cast<size_t>(samplePos)];
     }
 
-    // Apply MixBus stencil to a buffer (called from PluginProcessor AFTER effects)
-    // This replaces layer output with MixBus audio where MixBus has content
-    // The inputBuffer is the clean input that should be preserved (added to output)
-    void applyMixBusStencil(juce::AudioBuffer<float>& buffer,
-                            const juce::AudioBuffer<float>& inputBuffer,
-                            int numSamples)
+    // Inject MixBus content into loopPlaybackBuffer BEFORE effects
+    // This ensures MixBus audio goes through Sat → Degrade → Reverb
+    // Where MixBus has content, it replaces layer audio; where empty, layers "poke through"
+    void injectMixBusToPlayback(juce::AudioBuffer<float>& loopPlaybackBuffer, int numSamples)
     {
         if (!mixBusHasContent || mixBusMuted || masterLoopLength <= 0)
             return;
 
-        const int numChannels = std::min(buffer.getNumChannels(), 2);
+        const int numChannels = std::min(loopPlaybackBuffer.getNumChannels(), 2);
 
         // Get current playhead position (synced with layer 0)
         int playheadSamples = static_cast<int>(layers[0].getRawPlayhead());
@@ -1876,15 +1906,15 @@ public:
             // Check if MixBus has content at this position
             if (mixBusHasContentAtPosition(samplePos))
             {
-                // MixBus has content - replace layer output with MixBus audio
-                float mixL = mixBusBuffer.getSample(0, samplePos);
+                // MixBus has content - replace layer playback with MixBus audio
+                float mixL = safeSample(mixBusBuffer.getSample(0, samplePos));
                 float mixR = mixBusBuffer.getNumChannels() > 1 ?
-                             mixBusBuffer.getSample(1, samplePos) : mixL;
+                             safeSample(mixBusBuffer.getSample(1, samplePos)) : mixL;
 
-                // Replace buffer content at this sample (MixBus + input)
-                buffer.setSample(0, s, mixL + inputBuffer.getSample(0, s));
+                // Replace loop playback content (this will go through effects next)
+                loopPlaybackBuffer.setSample(0, s, mixL);
                 if (numChannels > 1)
-                    buffer.setSample(1, s, mixR + inputBuffer.getSample(1, s));
+                    loopPlaybackBuffer.setSample(1, s, mixR);
 
                 // Track peak for VU meter
                 float absL = std::abs(mixL);
@@ -1892,7 +1922,7 @@ public:
                 if (absL > mixBusPeak) mixBusPeak = absL;
                 if (absR > mixBusPeak) mixBusPeak = absR;
             }
-            // else: effected layer output stays in buffer (poke through)
+            // else: layer playback stays in buffer (poke through)
         }
 
         // Update MixBus peak level
@@ -1920,6 +1950,22 @@ public:
     bool isMixBusMuted() const { return mixBusMuted; }
     bool mixBusHasAnyContent() const { return mixBusHasContent; }
     float getMixBusPeakLevel() const { return mixBusPeakLevel.load(); }
+
+    // Compound mode: when enabled, MixBus re-captures each cycle creating feedback effects
+    void setMixBusCompoundMode(bool enabled)
+    {
+        mixBusCompoundMode.store(enabled);
+        DBG("MIXBUS: Compound mode " + juce::String(enabled ? "ENABLED" : "DISABLED"));
+    }
+
+    bool isMixBusCompoundMode() const { return mixBusCompoundMode.load(); }
+
+    void toggleMixBusCompoundMode()
+    {
+        bool newState = !mixBusCompoundMode.load();
+        mixBusCompoundMode.store(newState);
+        DBG("MIXBUS: Compound mode toggled to " + juce::String(newState ? "ON" : "OFF"));
+    }
 
     // Get MixBus waveform data for UI visualization
     // Returns per-sample content mask (true = has content) along with waveform amplitude
@@ -2199,6 +2245,7 @@ private:
     bool mixBusMuted = false;                     // Is MixBus muted?
     float mixBusPlayhead = 0.0f;                  // MixBus playhead position (synced with layer 0)
     std::atomic<float> mixBusPeakLevel { 0.0f };  // Peak level for VU meter
+    std::atomic<bool> mixBusCompoundMode { false }; // Compound mode: re-captures each cycle for feedback effects
 
     // Debug counter (member variable to avoid static issues)
     int xfadeDebugCounter = 0;

@@ -709,7 +709,12 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     saturationProcessor.setFuzzOctave(satFuzzOctaveParam->load() / 100.0f);
     saturationProcessor.setFuzzTone(satFuzzToneParam->load() / 100.0f);
 
-    // Signal flow: Loop -> Saturation -> Degrade -> Delay
+    // Signal flow: Loop/MixBus -> Saturation -> Degrade -> Reverb -> Delay
+
+    // Inject MixBus content into loopPlaybackBuffer BEFORE effects
+    // This ensures MixBus audio goes through the full effects chain (Sat, Degrade, Reverb)
+    // Where MixBus has content, it replaces layers; where empty, layers "poke through"
+    loopEngine.injectMixBusToPlayback(loopPlaybackBuffer, numSamples);
 
     // Apply saturation ONLY to the loop playback buffer (before degrade)
     if (saturationProcessor.isEnabled())
@@ -784,10 +789,9 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         }
     }
 
-    // Apply MixBus stencil AFTER effects
-    // Where MixBus has content, replace the effected layer output with MixBus audio
-    // Where MixBus is empty, the effected layers "poke through"
-    loopEngine.applyMixBusStencil(buffer, inputPassthroughBuffer, numSamples);
+    // NOTE: MixBus injection now happens BEFORE effects (see line ~717)
+    // so MixBus audio goes through Saturation -> Degrade -> Reverb
+    // This enables compound mode to accumulate effects each cycle
 
     // Capture for additive recording if active
     // This captures AFTER effects (sat, degrade, reverb) but BEFORE delay
@@ -870,6 +874,30 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
                 const float dry = channelR[sample];
                 const float wet = delayLineR.processSample(dry);
                 channelR[sample] = dry * (1.0f - mix) + wet * mix;
+            }
+        }
+    }
+
+    // Final safety pass: sanitize any NaN/Inf values and apply soft limiting
+    // This prevents buzzing from bad data after state transitions (STOP, etc.)
+    for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
+    {
+        float* data = buffer.getWritePointer(ch);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float sample = data[i];
+
+            // Check for NaN or Inf - reset to zero
+            if (std::isnan(sample) || std::isinf(sample))
+            {
+                data[i] = 0.0f;
+                continue;
+            }
+
+            // Soft limit extreme values to prevent harsh clipping
+            if (std::abs(sample) > 0.95f)
+            {
+                data[i] = std::tanh(sample * 1.2f) * 0.95f;
             }
         }
     }

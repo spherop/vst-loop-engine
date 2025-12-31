@@ -28,6 +28,12 @@
     --reverb-accent: #26c6da;
     --reverb-accent-dim: #00acc1;
     --reverb-accent-glow: rgba(38, 198, 218, 0.4);
+
+    /* MixBus colors (hot pink/magenta - distinct from layer purple) */
+    --bus-accent: #e91e63;
+    --bus-accent-dim: #c2185b;
+    --bus-accent-glow: rgba(233, 30, 99, 0.4);
+    --bus-accent-light: #f48fb1;
 }
 
 * {
@@ -846,29 +852,29 @@ html, body {
 }
 
 .transport-btn.mix:hover {
-    border-color: #9c27b0;
+    border-color: var(--bus-accent);
 }
 
 .transport-btn.mix:hover .transport-icon {
-    color: #9c27b0;
+    color: var(--bus-accent);
 }
 
 .transport-btn.mix.active {
-    background: linear-gradient(180deg, #4a1a4a 0%, #2a0a2a 100%);
-    border-color: #e040fb;
-    box-shadow: 0 0 24px rgba(224, 64, 251, 0.7), inset 0 0 12px rgba(156, 39, 176, 0.3);
+    background: linear-gradient(180deg, #4a1a2a 0%, #2a0a1a 100%);
+    border-color: var(--bus-accent);
+    box-shadow: 0 0 24px var(--bus-accent-glow), inset 0 0 12px rgba(233, 30, 99, 0.3);
 }
 
 .transport-btn.mix.active .transport-icon {
-    color: #f8bbd9;
-    text-shadow: 0 0 8px rgba(224, 64, 251, 0.8);
+    color: var(--bus-accent-light);
+    text-shadow: 0 0 8px rgba(233, 30, 99, 0.8);
     animation: pulse-mix 0.8s ease-in-out infinite;
 }
 
 .transport-btn.mix.active .transport-label {
-    color: #e040fb;
+    color: var(--bus-accent);
     font-weight: 800;
-    text-shadow: 0 0 6px rgba(224, 64, 251, 0.6);
+    text-shadow: 0 0 6px var(--bus-accent-glow);
 }
 
 @keyframes pulse-mix {
@@ -879,6 +885,50 @@ html, body {
     50% {
         opacity: 0.7;
         transform: scale(1.1);
+    }
+}
+
+/* MIX Compound Mode - feedback loop indicator */
+.transport-btn.mix.compound {
+    border-color: #ff9800;
+    box-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
+}
+
+.transport-btn.mix.compound .transport-icon {
+    color: #ff9800;
+}
+
+.transport-btn.mix.compound .transport-label {
+    color: #ff9800;
+}
+
+/* Compound + Active (recording with feedback) */
+.transport-btn.mix.compound.active {
+    background: linear-gradient(180deg, #4a2a1a 0%, #2a1a0a 100%);
+    border-color: #ffb74d;
+    box-shadow: 0 0 24px rgba(255, 152, 0, 0.7), inset 0 0 12px rgba(255, 152, 0, 0.3);
+}
+
+.transport-btn.mix.compound.active .transport-icon {
+    color: #ffe0b2;
+    text-shadow: 0 0 8px rgba(255, 152, 0, 0.8);
+    animation: pulse-compound 0.6s ease-in-out infinite;
+}
+
+.transport-btn.mix.compound.active .transport-label {
+    color: #ffb74d;
+    font-weight: 800;
+    text-shadow: 0 0 6px rgba(255, 152, 0, 0.6);
+}
+
+@keyframes pulse-compound {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.8;
+        transform: scale(1.15);
     }
 }
 
@@ -1355,36 +1405,36 @@ html, body {
 }
 
 .bus-btn:hover {
-    border-color: #9c27b0;
-    color: #ba68c8;
+    border-color: var(--bus-accent);
+    color: var(--bus-accent-light);
 }
 
 /* BUS button when MixBus has content */
 .bus-btn.has-content {
-    background: #9c27b0;
-    border-color: #9c27b0;
+    background: var(--bus-accent);
+    border-color: var(--bus-accent);
     color: #0a0a0a;
     font-weight: 800;
 }
 
 .bus-btn.has-content:hover {
-    background: #7b1fa2;
-    border-color: #ba68c8;
+    background: var(--bus-accent-dim);
+    border-color: var(--bus-accent-light);
     color: #0a0a0a;
 }
 
 /* BUS button when recording to MixBus */
 .bus-btn.recording {
-    background: linear-gradient(180deg, #2a152a 0%, #1a081a 100%);
-    border-color: #9c27b0;
-    color: #ce93d8;
-    box-shadow: 0 0 12px rgba(156, 39, 176, 0.5);
+    background: linear-gradient(180deg, #2a1520 0%, #1a0810 100%);
+    border-color: var(--bus-accent);
+    color: var(--bus-accent-light);
+    box-shadow: 0 0 12px var(--bus-accent-glow);
     animation: pulse-bus 1s ease-in-out infinite;
 }
 
 @keyframes pulse-bus {
-    0%, 100% { box-shadow: 0 0 12px rgba(156, 39, 176, 0.5); }
-    50% { box-shadow: 0 0 20px rgba(156, 39, 176, 0.8); }
+    0%, 100% { box-shadow: 0 0 12px var(--bus-accent-glow); }
+    50% { box-shadow: 0 0 20px rgba(233, 30, 99, 0.8); }
 }
 
 /* BUS button when muted */
@@ -4482,19 +4532,19 @@ html, body {
 .mixer-channel[data-layer="8"] .vu-meter { border-color: #9ccc65; }
 
 /* MixBus Channel: Purple */
-.mixer-channel[data-layer="bus"] .channel-label { color: #9c27b0; text-shadow: 0 0 6px rgba(156, 39, 176, 0.5); }
-.mixer-channel[data-layer="bus"].has-content { border-color: #9c27b0; }
-.mixer-channel[data-layer="bus"] .vu-meter { border-color: #9c27b0; }
+.mixer-channel[data-layer="bus"] .channel-label { color: var(--bus-accent); text-shadow: 0 0 6px var(--bus-accent-glow); }
+.mixer-channel[data-layer="bus"].has-content { border-color: var(--bus-accent); }
+.mixer-channel[data-layer="bus"] .vu-meter { border-color: var(--bus-accent); }
 
 /* MixBus channel special styling */
 .mixer-channel-bus {
-    border-left: 2px solid #9c27b0;
+    border-left: 2px solid var(--bus-accent);
     margin-left: 8px;
 }
 
 .mixer-channel-bus.recording {
-    border-color: #9c27b0;
-    box-shadow: 0 0 12px rgba(156, 39, 176, 0.3);
+    border-color: var(--bus-accent);
+    box-shadow: 0 0 12px var(--bus-accent-glow);
 }
 
 .mixer-channel-bus .channel-label {

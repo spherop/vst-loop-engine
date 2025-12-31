@@ -168,6 +168,21 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                   {
                       complete(processorRef.getLoopEngine().mixBusHasAnyContent());
                   })
+                  .withNativeFunction("setMixBusCompoundMode", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getLoopEngine().setMixBusCompoundMode(static_cast<bool>(args[0]));
+                      complete({});
+                  })
+                  .withNativeFunction("toggleMixBusCompoundMode", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getLoopEngine().toggleMixBusCompoundMode();
+                      complete({});
+                  })
+                  .withNativeFunction("isMixBusCompoundMode", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      complete(processorRef.getLoopEngine().isMixBusCompoundMode());
+                  })
                   .withNativeFunction("loopClear", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getLoopEngine().clear();
@@ -405,6 +420,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("mixBusHasContent", loopEngine.mixBusHasAnyContent());
                       result->setProperty("mixBusMuted", loopEngine.isMixBusMuted());
                       result->setProperty("mixBusPeakLevel", loopEngine.getMixBusPeakLevel());
+                      result->setProperty("mixBusCompoundMode", loopEngine.isMixBusCompoundMode());
 
                       // MixBus waveform data for visualization
                       if (loopEngine.mixBusHasAnyContent())
