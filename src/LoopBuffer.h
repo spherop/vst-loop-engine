@@ -56,10 +56,10 @@ public:
         clear();
 
         // Prepare smoothed values
-        playbackRateSmoothed.reset(sampleRate, 0.05);  // 50ms smoothing
+        playbackRateSmoothed.reset(sampleRate, 0.02);  // 20ms smoothing (faster to reduce crackle)
         playbackRateSmoothed.setCurrentAndTargetValue(1.0f);
 
-        pitchRatioSmoothed.reset(sampleRate, 0.02);  // 20ms smoothing for pitch (faster response)
+        pitchRatioSmoothed.reset(sampleRate, 0.015);  // 15ms smoothing for pitch (faster response)
         pitchRatioSmoothed.setCurrentAndTargetValue(1.0f);
 
         fadeSmoothed.reset(sampleRate, 0.1);  // 100ms smoothing for fade
@@ -109,6 +109,14 @@ public:
         cachedWaveform.clear();
         cachedPeakLevel = 0.0f;
         lastCachedWriteHead = 0;
+
+        // Reset anti-aliasing filter state
+        antiAliasLpfL = 0.0f;
+        antiAliasLpfR = 0.0f;
+        prevOutputL = 0.0f;
+        prevOutputR = 0.0f;
+        prevInputL = 0.0f;
+        prevInputR = 0.0f;
     }
 
     // Copy content from another LoopBuffer (for layer shuffling)
@@ -682,6 +690,21 @@ public:
             rawL *= fadeToApply;
             rawR *= fadeToApply;
 
+            // Apply anti-aliasing low-pass filter when playing at high speeds
+            // This prevents aliasing artifacts that cause crackling
+            const float currentRate = playbackRateSmoothed.getCurrentValue();
+            if (currentRate > 1.01f)
+            {
+                // One-pole low-pass filter with cutoff tracking the speed
+                // Higher speed = lower cutoff to prevent aliasing
+                // Coefficient: 0.5 at 2x speed, 0.25 at 4x speed, etc.
+                const float lpfCoeff = std::min(0.9f, 1.0f / currentRate);
+                antiAliasLpfL = lpfCoeff * rawL + (1.0f - lpfCoeff) * antiAliasLpfL;
+                antiAliasLpfR = lpfCoeff * rawR + (1.0f - lpfCoeff) * antiAliasLpfR;
+                rawL = antiAliasLpfL;
+                rawR = antiAliasLpfR;
+            }
+
             pitchInputL[i] = rawL;
             pitchInputR[i] = rawR;
 
@@ -734,9 +757,20 @@ public:
         {
             float outL = pitchOutputL[i] * vol * panL;
             float outR = pitchOutputR[i] * vol * panR;
-            leftChannel[i] = outL + leftChannel[i];
+
+            // DC blocker to remove any DC offset that accumulates during speed changes
+            // Uses a simple high-pass filter: y[n] = x[n] - x[n-1] + 0.995 * y[n-1]
+            const float dcBlockCoeff = 0.995f;
+            float filteredL = outL - prevInputL + dcBlockCoeff * prevOutputL;
+            float filteredR = outR - prevInputR + dcBlockCoeff * prevOutputR;
+            prevInputL = outL;
+            prevInputR = outR;
+            prevOutputL = filteredL;
+            prevOutputR = filteredR;
+
+            leftChannel[i] = filteredL + leftChannel[i];
             if (rightChannel)
-                rightChannel[i] = outR + rightChannel[i];
+                rightChannel[i] = filteredR + rightChannel[i];
         }
     }
 
@@ -773,6 +807,8 @@ public:
 
     bool hasContent() const { return loopLength > 0; }
     bool getIsReversed() const { return isReversed.load(); }
+    bool getReversed() const { return isReversed.load(); }
+    float getPlaybackRate() const { return playbackRateSmoothed.getTargetValue(); }
 
     // Mute control
     void setMuted(bool muted) { isMuted.store(muted); }
@@ -1039,6 +1075,15 @@ private:
     // Legacy sample-by-sample phase vocoder (kept for compatibility)
     StereoPhaseVocoder phaseVocoder;
 
+    // Anti-aliasing low-pass filter state (one-pole)
+    // Used when playback rate > 1.0 to prevent aliasing
+    float antiAliasLpfL = 0.0f;
+    float antiAliasLpfR = 0.0f;
+    float prevOutputL = 0.0f;  // For DC blocker
+    float prevOutputR = 0.0f;
+    float prevInputL = 0.0f;
+    float prevInputR = 0.0f;
+
     // Update waveform cache if needed (called from getWaveformData and getBufferPeakLevel)
     void updateWaveformCacheIfNeeded() const
     {
@@ -1249,6 +1294,17 @@ private:
         readWithCrossfade(rawL, rawR, playHead, effectiveStart, effectiveEnd);
         rawL *= fadeToApply;
         rawR *= fadeToApply;
+
+        // Apply anti-aliasing low-pass filter when playing at high speeds
+        const float currentRate = playbackRateSmoothed.getCurrentValue();
+        if (currentRate > 1.01f)
+        {
+            const float lpfCoeff = std::min(0.9f, 1.0f / currentRate);
+            antiAliasLpfL = lpfCoeff * rawL + (1.0f - lpfCoeff) * antiAliasLpfL;
+            antiAliasLpfR = lpfCoeff * rawR + (1.0f - lpfCoeff) * antiAliasLpfR;
+            rawL = antiAliasLpfL;
+            rawR = antiAliasLpfR;
+        }
 
         float loopL, loopR;
 
@@ -1545,16 +1601,35 @@ private:
         }
     }
 
+    // Hermite (cubic) interpolation for smoother variable-speed playback
+    // This significantly reduces crackling compared to linear interpolation
     float readWithInterpolation(const std::vector<float>& buffer, float position) const
     {
         if (loopLength <= 0)
             return 0.0f;
 
-        const int idx0 = static_cast<int>(position) % loopLength;
-        const int idx1 = (idx0 + 1) % loopLength;
+        // Get surrounding sample indices (need 4 points for cubic)
+        const int idx1 = static_cast<int>(position) % loopLength;
+        const int idx0 = (idx1 - 1 + loopLength) % loopLength;  // Previous sample
+        const int idx2 = (idx1 + 1) % loopLength;
+        const int idx3 = (idx1 + 2) % loopLength;
+
         const float frac = position - std::floor(position);
 
-        return buffer[idx0] * (1.0f - frac) + buffer[idx1] * frac;
+        // Get samples
+        const float y0 = buffer[idx0];
+        const float y1 = buffer[idx1];
+        const float y2 = buffer[idx2];
+        const float y3 = buffer[idx3];
+
+        // Hermite interpolation coefficients
+        const float c0 = y1;
+        const float c1 = 0.5f * (y2 - y0);
+        const float c2 = y0 - 2.5f * y1 + 2.0f * y2 - 0.5f * y3;
+        const float c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);
+
+        // Evaluate polynomial
+        return ((c3 * frac + c2) * frac + c1) * frac + c0;
     }
 
     // Real-time crossfade reading for seamless loop boundaries

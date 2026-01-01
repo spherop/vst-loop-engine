@@ -202,6 +202,15 @@ public:
             stopAdditiveCapture();
         }
 
+        // Stop MixBus recording if active
+        if (mixBusRecording.load())
+        {
+            stopMixBusRecording();
+        }
+
+        // Disable compound mode on play
+        mixBusCompoundMode.store(false);
+
         // If currently overdubbing, just stop the overdub (smooth transition)
         // Don't restart playback - keep position and continue playing
         if (currentState == LoopBuffer::State::Overdubbing)
@@ -228,7 +237,23 @@ public:
         {
             layers[i].stop();
         }
-        DBG("LoopEngine::stop() - All layers stopped");
+
+        // Stop MixBus recording if active
+        if (mixBusRecording.load())
+        {
+            stopMixBusRecording();
+        }
+
+        // Stop additive recording if active
+        if (additiveRecordingActive.load())
+        {
+            stopAdditiveCapture();
+        }
+
+        // Disable compound mode on stop
+        mixBusCompoundMode.store(false);
+
+        DBG("LoopEngine::stop() - All layers stopped, MixBus/additive recording stopped");
     }
 
     // Clear a specific layer (1-indexed for UI)
@@ -559,6 +584,11 @@ public:
         currentLayer = 0;
         highestLayer = 0;
 
+        // Always clear MixBus on CLR
+        clearMixBus();
+        // Also disable compound mode
+        mixBusCompoundMode.store(false);
+
         // If we were actively playing/recording, preserve the length and start overdubbing
         if (wasActive && preservedLength > 0)
         {
@@ -567,13 +597,13 @@ public:
             // startOverdubOnNewLayer sets up buffer and puts layer in Overdubbing state
             layers[0].startOverdubOnNewLayer(masterLoopLength);
             DBG("clear() - Active state: preserved loop length " + juce::String(masterLoopLength) +
-                " and started DUB on layer 0");
+                " and started DUB on layer 0, MixBus cleared");
         }
         else
         {
             // Stopped/idle: full reset including loop length so user can create fresh loop
             masterLoopLength = 0;
-            DBG("clear() - Idle state: full reset, loop length cleared");
+            DBG("clear() - Idle state: full reset, loop length cleared, MixBus cleared");
         }
     }
 
@@ -1886,6 +1916,26 @@ public:
     // Inject MixBus content into loopPlaybackBuffer BEFORE effects
     // This ensures MixBus audio goes through Sat → Degrade → Reverb
     // Where MixBus has content, it replaces layer audio; where empty, layers "poke through"
+    // Helper to read from MixBus buffer with linear interpolation
+    float readMixBusWithInterpolation(int channel, float position) const
+    {
+        if (masterLoopLength <= 0 || channel >= mixBusBuffer.getNumChannels())
+            return 0.0f;
+
+        // Wrap position
+        while (position < 0) position += masterLoopLength;
+        while (position >= masterLoopLength) position -= masterLoopLength;
+
+        const int idx0 = static_cast<int>(position) % masterLoopLength;
+        const int idx1 = (idx0 + 1) % masterLoopLength;
+        const float frac = position - std::floor(position);
+
+        const float s0 = mixBusBuffer.getSample(channel, idx0);
+        const float s1 = mixBusBuffer.getSample(channel, idx1);
+
+        return safeSample(s0 * (1.0f - frac) + s1 * frac);
+    }
+
     void injectMixBusToPlayback(juce::AudioBuffer<float>& loopPlaybackBuffer, int numSamples)
     {
         if (!mixBusHasContent || mixBusMuted || masterLoopLength <= 0)
@@ -1893,23 +1943,33 @@ public:
 
         const int numChannels = std::min(loopPlaybackBuffer.getNumChannels(), 2);
 
-        // Get current playhead position (synced with layer 0)
-        int playheadSamples = static_cast<int>(layers[0].getRawPlayhead());
-        if (playheadSamples < 0) playheadSamples = 0;
+        // Get current playhead position (synced with layer 0) - this includes speed/pitch adjustments
+        float playheadPos = layers[0].getRawPlayhead();
+        if (playheadPos < 0) playheadPos = 0;
+
+        // Get playback rate from layer 0 to advance MixBus at same rate
+        const float playbackRate = layers[0].getPlaybackRate();
+        const bool reversed = layers[0].getReversed();
 
         float mixBusPeak = 0.0f;
 
         for (int s = 0; s < numSamples; ++s)
         {
-            int samplePos = (playheadSamples + s) % masterLoopLength;
+            // Calculate position with wrapping
+            float samplePos = playheadPos;
+            while (samplePos < 0) samplePos += masterLoopLength;
+            while (samplePos >= masterLoopLength) samplePos -= masterLoopLength;
+
+            int intPos = static_cast<int>(samplePos);
 
             // Check if MixBus has content at this position
-            if (mixBusHasContentAtPosition(samplePos))
+            if (mixBusHasContentAtPosition(intPos))
             {
                 // MixBus has content - replace layer playback with MixBus audio
-                float mixL = safeSample(mixBusBuffer.getSample(0, samplePos));
+                // Use interpolation for smooth playback at variable speeds
+                float mixL = readMixBusWithInterpolation(0, samplePos);
                 float mixR = mixBusBuffer.getNumChannels() > 1 ?
-                             safeSample(mixBusBuffer.getSample(1, samplePos)) : mixL;
+                             readMixBusWithInterpolation(1, samplePos) : mixL;
 
                 // Replace loop playback content (this will go through effects next)
                 loopPlaybackBuffer.setSample(0, s, mixL);
@@ -1923,6 +1983,12 @@ public:
                 if (absR > mixBusPeak) mixBusPeak = absR;
             }
             // else: layer playback stays in buffer (poke through)
+
+            // Advance position at same rate as layer 0
+            if (reversed)
+                playheadPos -= playbackRate;
+            else
+                playheadPos += playbackRate;
         }
 
         // Update MixBus peak level
@@ -2059,25 +2125,31 @@ private:
     }
 
 public:
-    // Flatten all non-muted layers into layer 1
-    // This sums all active layer buffers into layer 1 and clears the others
+    // Flatten all non-muted layers into layer 1, with MixBus as stencil overlay
+    // Where MixBus has content, it replaces the layer sum; where empty, layers poke through
+    // This sums all active layer buffers into layer 1 and clears the others + MixBus
     // SEAMLESS: preserves playhead position and continues playback without interruption
     void flattenLayers()
     {
-        if (masterLoopLength <= 0 || !layers[0].hasContent())
+        // Check if we have anything to flatten
+        bool hasLayers = (masterLoopLength > 0 && layers[0].hasContent());
+        bool hasMixBus = (mixBusHasContent && !mixBusMuted);
+
+        if (!hasLayers && !hasMixBus)
         {
             DBG("flattenLayers() - Nothing to flatten");
             return;
         }
 
-        // Only flatten if there's more than one layer
-        if (highestLayer == 0)
+        // Allow flatten even with single layer if MixBus has content
+        if (highestLayer == 0 && !hasMixBus)
         {
-            DBG("flattenLayers() - Only one layer, nothing to flatten");
+            DBG("flattenLayers() - Only one layer and no MixBus, nothing to flatten");
             return;
         }
 
-        DBG("flattenLayers() - Flattening " + juce::String(highestLayer + 1) + " layers into layer 1 (seamless)");
+        DBG("flattenLayers() - Flattening " + juce::String(highestLayer + 1) + " layers" +
+            (hasMixBus ? " + MixBus stencil" : "") + " into layer 1 (seamless)");
 
         // Capture current playback state BEFORE modifying anything
         const float savedPlayhead = layers[0].getRawPlayhead();
@@ -2103,6 +2175,33 @@ public:
             }
         }
 
+        // Apply MixBus as stencil overlay if it has content
+        // Where MixBus has content, replace the layer sum; where empty, keep layers
+        if (hasMixBus && mixBusBuffer.getNumSamples() >= masterLoopLength)
+        {
+            DBG("  Applying MixBus stencil overlay");
+            int mixBusSamples = 0;
+
+            for (int s = 0; s < masterLoopLength; ++s)
+            {
+                if (mixBusHasContentAtPosition(s))
+                {
+                    // MixBus has content at this position - replace layer sum with MixBus
+                    float mixL = safeSample(mixBusBuffer.getSample(0, s));
+                    float mixR = mixBusBuffer.getNumChannels() > 1 ?
+                                 safeSample(mixBusBuffer.getSample(1, s)) : mixL;
+
+                    flattenedBuffer.setSample(0, s, mixL);
+                    if (numChannels > 1)
+                        flattenedBuffer.setSample(1, s, mixR);
+
+                    mixBusSamples++;
+                }
+                // else: layer sum stays at this position (poke through)
+            }
+            DBG("  MixBus stencil applied to " + juce::String(mixBusSamples) + " samples");
+        }
+
         // Soft clip the summed buffer to prevent clipping
         for (int ch = 0; ch < numChannels; ++ch)
         {
@@ -2122,11 +2221,28 @@ public:
         // Replace layer 0's buffer content in-place while preserving playback state
         layers[0].setFromBufferSeamless(flattenedBuffer, masterLoopLength, savedPlayhead, savedState);
 
+        // Reset all layer volumes and pans to default
+        for (int i = 0; i < NUM_LAYERS; ++i)
+        {
+            layers[i].setVolume(1.0f);  // Default volume
+            layers[i].setPan(0.0f);     // Center pan
+            layers[i].setMuted(false);  // Unmute
+        }
+
+        // Clear MixBus after consolidation (it's now baked into layer 0)
+        if (hasMixBus)
+        {
+            clearMixBus();
+            DBG("  MixBus cleared after consolidation");
+        }
+
         // Reset state
         currentLayer = 0;
         highestLayer = 0;
 
-        DBG("flattenLayers() - Complete, layer 1 now contains flattened audio, playback continues at " + juce::String(savedPlayhead));
+        DBG("flattenLayers() - Complete, layer 1 now contains flattened audio" +
+            juce::String(hasMixBus ? " with MixBus overlay" : "") +
+            ", playback continues at " + juce::String(savedPlayhead));
     }
 
     // Get target loop length in samples (0 = unlimited)

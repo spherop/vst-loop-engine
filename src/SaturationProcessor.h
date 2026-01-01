@@ -345,7 +345,7 @@ private:
         const float flutter = tapeFlutterSmooth.getNextValue();
         const float tone = tapeToneSmooth.getNextValue();
 
-        // TAPE: Warm, compressed, dark - characteristic tape sound
+        // TAPE: Warm, compressed, harmonically rich - classic tape sound
 
         // Apply flutter (pitch wobble) - more pronounced
         if (flutter > 0.001f)
@@ -359,48 +359,52 @@ private:
             float wow = std::sin(tapeFlutterPhase * wowRate * 2.0f * juce::MathConstants<float>::pi);
             float flut = std::sin(tapeFlutterPhase * flutterRate * 2.0f * juce::MathConstants<float>::pi);
 
-            // More audible flutter effect
-            float modulation = (wow * 0.6f + flut * 0.4f) * flutter * 0.008f;
+            // More audible flutter effect - doubled intensity
+            float modulation = (wow * 0.6f + flut * 0.4f) * flutter * 0.016f;
             float pitchMod = 1.0f + modulation;
             left *= pitchMod;
             right *= pitchMod;
         }
 
-        // Drive: more aggressive compression (1x to 15x)
-        const float gain = 1.0f + drive * 14.0f;
+        // Drive: higher range for more obvious saturation (1x to 25x)
+        const float gain = 1.0f + drive * 24.0f;
         float satL = left * gain;
         float satR = right * gain;
 
         // Bias: stronger asymmetry for more even harmonics
-        const float biasOffset = (bias - 0.5f) * 0.5f;
+        const float biasOffset = (bias - 0.5f) * 0.6f;
         satL += biasOffset;
         satR += biasOffset;
 
-        // Tape saturation with compression
+        // Tape saturation with compression - apply twice for more obvious effect
         satL = processTapeSaturation(satL);
         satR = processTapeSaturation(satR);
 
-        // Remove DC
-        satL -= biasOffset * 0.4f;
-        satR -= biasOffset * 0.4f;
+        // Second stage of lighter saturation for extra harmonic richness
+        satL = processTapeSaturation(satL * 1.5f) * 0.8f;
+        satR = processTapeSaturation(satR * 1.5f) * 0.8f;
 
-        // Output compensation - aggressive to maintain perceived unity
-        const float compensation = 1.0f / std::max(1.0f, gain * 0.75f);
+        // Remove DC
+        satL -= biasOffset * 0.3f;
+        satR -= biasOffset * 0.3f;
+
+        // Output compensation - maintain perceived unity
+        const float compensation = 1.2f / std::sqrt(gain);
         satL *= compensation;
         satR *= compensation;
 
         // Strong head bump: bass boost around 80-100Hz
-        const float bumpCoeff = 0.997f;  // Lower = more bass
+        const float bumpCoeff = 0.996f;  // Slightly lower for more bass
         tapeHeadBumpStateL = tapeHeadBumpStateL * bumpCoeff + satL * (1.0f - bumpCoeff);
         tapeHeadBumpStateR = tapeHeadBumpStateR * bumpCoeff + satR * (1.0f - bumpCoeff);
 
-        // More pronounced low bump
-        satL += tapeHeadBumpStateL * 0.4f;
-        satR += tapeHeadBumpStateR * 0.4f;
+        // More pronounced low bump (increased from 0.4 to 0.6)
+        satL += tapeHeadBumpStateL * 0.6f;
+        satR += tapeHeadBumpStateR * 0.6f;
 
-        // Aggressive high cut - tape is DARK
-        // tone 0 = very dark (~1.5kHz), tone 1 = warmer (~6kHz)
-        const float highCutFreq = 1500.0f + tone * 4500.0f;
+        // High cut - still dark but not as aggressive
+        // tone 0 = dark (~2kHz), tone 1 = warmer (~10kHz)
+        const float highCutFreq = 2000.0f + tone * 8000.0f;
         const float highCutCoeff = std::exp(-2.0f * juce::MathConstants<float>::pi * highCutFreq / static_cast<float>(currentSampleRate));
 
         tapeHighCutStateL = tapeHighCutStateL * highCutCoeff + satL * (1.0f - highCutCoeff);
@@ -603,8 +607,8 @@ private:
             gateGainR = (fuzzGateEnvR > threshold) ? 1.0f : fuzzGateEnvR / threshold;
         }
 
-        // Extreme drive for fuzz (1x to 100x)
-        const float gain = 1.0f + drive * 99.0f;
+        // Moderate drive for fuzz (1x to 30x) - reduced from 100x for volume consistency
+        const float gain = 1.0f + drive * 29.0f;
         float satL = left * gain * gateGainL;
         float satR = right * gain * gateGainR;
 
@@ -630,9 +634,9 @@ private:
             satR = satR * (1.0f - octave) + octR * octave;
         }
 
-        // Output compensation - scale with drive for more consistent volume
-        // Hard clipping sounds louder at high drive, so reduce more
-        const float compensation = 0.4f / std::max(1.0f, 1.0f + drive * 0.5f);
+        // Output compensation - much stronger to maintain unity gain
+        // Clipping naturally limits output, so we just need to scale back the drive boost
+        const float compensation = 0.7f / std::sqrt(gain);
         satL *= compensation;
         satR *= compensation;
 

@@ -29,6 +29,17 @@ public:
         STRETCH  // Time-stretch mode - length without pitch change
     };
 
+    // Scale modes for pitch quantization
+    enum class Scale
+    {
+        FREE,       // No quantization - continuous speed
+        CHROMATIC,  // All 12 semitones
+        MAJOR,      // Major scale intervals (1, 2, 3, 4, 5, 6, 7)
+        MINOR,      // Natural minor scale
+        PENTATONIC, // Pentatonic scale (1, 2, 3, 5, 6)
+        OCTAVES     // Only octaves (1x, 0.5x, 2x)
+    };
+
     MicroLooper() = default;
 
     void prepare(double sampleRate, int /*samplesPerBlock*/)
@@ -230,8 +241,34 @@ public:
         // Small dead zone around 1x for easy normal speed
         if (std::abs(speed - 1.0f) < 0.08f) speed = 1.0f;
 
+        // Apply scale quantization if not FREE mode
+        speed = quantizeToScale(speed);
+
         playbackSpeedSmooth.setTargetValue(speed);
     }
+
+    // Scale mode selection
+    void setScale(Scale scale)
+    {
+        currentScale = scale;
+    }
+
+    void setScale(int scaleIndex)
+    {
+        switch (scaleIndex)
+        {
+            case 0: currentScale = Scale::FREE; break;
+            case 1: currentScale = Scale::CHROMATIC; break;
+            case 2: currentScale = Scale::MAJOR; break;
+            case 3: currentScale = Scale::MINOR; break;
+            case 4: currentScale = Scale::PENTATONIC; break;
+            case 5: currentScale = Scale::OCTAVES; break;
+            default: currentScale = Scale::FREE; break;
+        }
+    }
+
+    Scale getScale() const { return currentScale; }
+    int getScaleIndex() const { return static_cast<int>(currentScale); }
 
     // Reverse toggle
     void setReverse(bool reverse)
@@ -428,6 +465,7 @@ private:
 
     float overdubLevel = 0.7f;
     Mode currentMode = Mode::TAPE;
+    Scale currentScale = Scale::FREE;  // Default to no quantization
 
     // Smoothed parameters
     juce::SmoothedValue<float> playbackSpeedSmooth;
@@ -448,6 +486,102 @@ private:
     // STRETCH mode state
     float stretchGrainPos = 0.0f;
     float stretchGrainPhase = 0.0f;
+
+    // Quantize speed to musical intervals based on current scale
+    // Speed maps to pitch: 1.0 = unison, 2.0 = octave up, 0.5 = octave down
+    float quantizeToScale(float speed) const
+    {
+        if (currentScale == Scale::FREE)
+            return speed;
+
+        // Handle negative speeds (reverse playback)
+        const bool isNegative = speed < 0.0f;
+        float absSpeed = std::abs(speed);
+
+        // Clamp to reasonable range
+        absSpeed = std::clamp(absSpeed, 0.25f, 4.0f);
+
+        // Convert speed to semitones relative to 1.0x
+        // speed = 2^(semitones/12), so semitones = 12 * log2(speed)
+        float semitones = 12.0f * std::log2(absSpeed);
+
+        // Define scale intervals in semitones relative to root
+        // Each scale spans 2 octaves down to 2 octaves up (-24 to +24 semitones)
+        std::vector<float> scaleIntervals;
+
+        switch (currentScale)
+        {
+            case Scale::CHROMATIC:
+                // All 12 semitones
+                for (int i = -24; i <= 24; ++i)
+                    scaleIntervals.push_back(static_cast<float>(i));
+                break;
+
+            case Scale::MAJOR:
+                // Major scale: 0, 2, 4, 5, 7, 9, 11 (and octaves)
+                {
+                    const int majorPattern[] = { 0, 2, 4, 5, 7, 9, 11 };
+                    for (int octave = -2; octave <= 2; ++octave)
+                    {
+                        for (int interval : majorPattern)
+                            scaleIntervals.push_back(static_cast<float>(octave * 12 + interval));
+                    }
+                }
+                break;
+
+            case Scale::MINOR:
+                // Natural minor: 0, 2, 3, 5, 7, 8, 10 (and octaves)
+                {
+                    const int minorPattern[] = { 0, 2, 3, 5, 7, 8, 10 };
+                    for (int octave = -2; octave <= 2; ++octave)
+                    {
+                        for (int interval : minorPattern)
+                            scaleIntervals.push_back(static_cast<float>(octave * 12 + interval));
+                    }
+                }
+                break;
+
+            case Scale::PENTATONIC:
+                // Major pentatonic: 0, 2, 4, 7, 9 (and octaves)
+                {
+                    const int pentaPattern[] = { 0, 2, 4, 7, 9 };
+                    for (int octave = -2; octave <= 2; ++octave)
+                    {
+                        for (int interval : pentaPattern)
+                            scaleIntervals.push_back(static_cast<float>(octave * 12 + interval));
+                    }
+                }
+                break;
+
+            case Scale::OCTAVES:
+                // Only octaves: -24, -12, 0, 12, 24
+                scaleIntervals = { -24.0f, -12.0f, 0.0f, 12.0f, 24.0f };
+                break;
+
+            default:
+                return speed;
+        }
+
+        // Find closest scale interval
+        float closestInterval = 0.0f;
+        float minDistance = 1000.0f;
+
+        for (float interval : scaleIntervals)
+        {
+            float distance = std::abs(semitones - interval);
+            if (distance < minDistance)
+            {
+                minDistance = distance;
+                closestInterval = interval;
+            }
+        }
+
+        // Convert back to speed: speed = 2^(semitones/12)
+        float quantizedSpeed = std::pow(2.0f, closestInterval / 12.0f);
+
+        // Restore sign for reverse playback
+        return isNegative ? -quantizedSpeed : quantizedSpeed;
+    }
 
     // Read from buffer with Hermite interpolation for smooth playback
     float readBufferHermite(const std::vector<float>& buffer, float pos, int loopStart, int loopLength) const

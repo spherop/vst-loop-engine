@@ -43,15 +43,14 @@ public:
         lofiBypassGain.reset(sampleRate, 0.020);
         textureBypassGain.reset(sampleRate, 0.020);
 
-        // Set initial bypass states - most off by default for clean audio
-        // EXCEPTION: filterBypassGain and HP/LP start ON because the UI expects them enabled
-        // and there's no master toggle for filter section (only individual HP/LP toggles)
-        masterBypassGain.setCurrentAndTargetValue(0.0f);
+        // Set initial bypass states
+        // Master and key sections ON by default for immediate use
+        masterBypassGain.setCurrentAndTargetValue(1.0f);  // Master ON by default
         filterBypassGain.setCurrentAndTargetValue(1.0f);  // Filter section ON by default
         hpBypassGain.setCurrentAndTargetValue(1.0f);      // HP filter ON by default
         lpBypassGain.setCurrentAndTargetValue(1.0f);      // LP filter ON by default
-        lofiBypassGain.setCurrentAndTargetValue(0.0f);
-        textureBypassGain.setCurrentAndTargetValue(0.0f);
+        lofiBypassGain.setCurrentAndTargetValue(1.0f);    // Lofi section ON by default
+        textureBypassGain.setCurrentAndTargetValue(0.0f); // Texture OFF (explicit enable needed)
 
         // Reset filter states
         resetFilters();
@@ -466,13 +465,13 @@ private:
     double currentSampleRate = 44100.0;
 
     // Master bypass
-    std::atomic<bool> masterEnabled { false };
+    std::atomic<bool> masterEnabled { true };
 
     // Section bypass states - default to OFF so audio isn't affected until user enables
     // EXCEPTION: filterEnabled defaults to ON because there's no UI toggle for filter section
     // (HP and LP have individual toggles that control the actual filter bypass)
     std::atomic<bool> filterEnabled { true };
-    std::atomic<bool> lofiEnabled { false };
+    std::atomic<bool> lofiEnabled { true };
     std::atomic<bool> textureEnabled { false };
 
     // Individual filter bypass states

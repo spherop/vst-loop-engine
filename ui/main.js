@@ -756,10 +756,16 @@ class LooperController {
         this.busMuteBtn = document.getElementById('mute-bus');
         this.busClearBtn = document.getElementById('clear-bus');
 
-        // BUS indicator button - click to toggle mute
+        // BUS indicator button - click to toggle mute, shift+click to clear
         if (this.busBtn) {
-            this.busBtn.addEventListener('click', async () => {
-                await this.toggleMixBusMute();
+            this.busBtn.addEventListener('click', async (e) => {
+                if (e.shiftKey) {
+                    // Shift+click clears MixBus content (like shift+click on layer buttons)
+                    await this.clearMixBus();
+                    console.log('[LOOPER] BUS shift+click - cleared MixBus');
+                } else {
+                    await this.toggleMixBusMute();
+                }
             });
         }
 
@@ -916,6 +922,27 @@ class LooperController {
         this.barsSelect = document.getElementById('bars-select');
         this.beatsSelect = document.getElementById('beats-select');
 
+        // Restore saved loop length settings from localStorage
+        const savedBars = localStorage.getItem('loopEngine.loopLengthBars');
+        const savedBeats = localStorage.getItem('loopEngine.loopLengthBeats');
+
+        if (savedBars !== null && this.barsSelect) {
+            const bars = parseInt(savedBars);
+            this.barsSelect.value = bars;
+            this.loopLengthBars = bars;
+            // Apply to backend after a short delay to ensure JUCE is ready
+            setTimeout(() => this.setLoopLengthBars(bars), 100);
+            console.log(`[LOOPER] Restored loop length bars: ${bars}`);
+        }
+
+        if (savedBeats !== null && this.beatsSelect) {
+            const beats = parseInt(savedBeats);
+            this.beatsSelect.value = beats;
+            this.loopLengthBeats = beats;
+            setTimeout(() => this.setLoopLengthBeats(beats), 150);
+            console.log(`[LOOPER] Restored loop length beats: ${beats}`);
+        }
+
         if (this.barsSelect) {
             this.barsSelect.addEventListener('change', () => {
                 const bars = parseInt(this.barsSelect.value);
@@ -936,6 +963,9 @@ class LooperController {
         const totalBeats = (bars * 4) + this.loopLengthBeats;
         console.log(`[LOOPER] Setting loop length: ${bars} bars + ${this.loopLengthBeats} beats = ${totalBeats} total beats`);
 
+        // Persist to localStorage
+        localStorage.setItem('loopEngine.loopLengthBars', bars.toString());
+
         try {
             await this.setLoopLengthBarsFn(bars);
         } catch (e) {
@@ -947,6 +977,9 @@ class LooperController {
         this.loopLengthBeats = beats;
         const totalBeats = (this.loopLengthBars * 4) + beats;
         console.log(`[LOOPER] Setting loop length: ${this.loopLengthBars} bars + ${beats} beats = ${totalBeats} total beats`);
+
+        // Persist to localStorage
+        localStorage.setItem('loopEngine.loopLengthBeats', beats.toString());
 
         try {
             await this.setLoopLengthBeatsFn(beats);
@@ -1833,6 +1866,14 @@ class LooperController {
             }
             await this.stopFn();
             this.updateTransportUI('idle');
+
+            // Stop micro looper when main looper stops
+            // This syncs the micro looper state with the main transport
+            const microLooperStopFn = getNativeFunction('microLooperStop');
+            if (microLooperStopFn) {
+                await microLooperStopFn();
+                console.log('[LOOPER] Stopped micro looper with main transport');
+            }
         } catch (e) {
             console.error('Error stopping:', e);
         }
@@ -2410,6 +2451,10 @@ class MicroLooperController {
         this.playPosition = 0;
         this.bufferFillAmount = 0;
 
+        // Scale buttons
+        this.scaleButtons = document.querySelectorAll('.micro-scale-btn');
+        this.currentScale = 0; // 0=FREE, 1=CHROMATIC, 2=MAJOR, 3=MINOR, 4=PENTATONIC, 5=OCTAVES
+
         // Native functions
         this.playFn = getNativeFunction('microLooperPlay');
         this.overdubFn = getNativeFunction('microLooperOverdub');
@@ -2419,6 +2464,7 @@ class MicroLooperController {
         this.setReverseFn = getNativeFunction('setMicroLooperReverse');
         this.getStateFn = getNativeFunction('getMicroLooperState');
         this.getWaveformFn = getNativeFunction('getMicroLooperWaveform');
+        this.setScaleFn = getNativeFunction('setMicroLooperScale');
 
         // Setup canvas
         this.setupCanvas();
@@ -2481,6 +2527,32 @@ class MicroLooperController {
         if (this.modeStretchBtn) {
             this.modeStretchBtn.addEventListener('click', () => this.setMode(2));
         }
+
+        // Scale buttons
+        this.scaleButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const scale = parseInt(btn.dataset.scale, 10);
+                this.setScale(scale);
+            });
+        });
+    }
+
+    async setScale(scaleIndex) {
+        try {
+            await this.setScaleFn(scaleIndex);
+            this.currentScale = scaleIndex;
+            this.updateScaleUI();
+            console.log(`[MICROLOOP] Scale set to ${scaleIndex}`);
+        } catch (e) {
+            console.error('Error setting scale:', e);
+        }
+    }
+
+    updateScaleUI() {
+        this.scaleButtons.forEach(btn => {
+            const scale = parseInt(btn.dataset.scale, 10);
+            btn.classList.toggle('active', scale === this.currentScale);
+        });
     }
 
     async fetchInitialState() {
@@ -2490,6 +2562,10 @@ class MicroLooperController {
                 this.isPlaying = state.isPlaying || false;
                 this.isOverdubbing = state.isOverdubbing || false;
                 this.isFrozen = state.isFrozen || false;
+                if (state.scale !== undefined) {
+                    this.currentScale = state.scale;
+                    this.updateScaleUI();
+                }
                 this.updateUI();
             }
         } catch (e) {
@@ -2510,6 +2586,10 @@ class MicroLooperController {
                     this.bufferFillAmount = state.bufferFill || 0;
                     if (state.mode !== undefined && state.mode !== this.currentMode) {
                         this.currentMode = state.mode;
+                    }
+                    if (state.scale !== undefined && state.scale !== this.currentScale) {
+                        this.currentScale = state.scale;
+                        this.updateScaleUI();
                     }
                     this.updateUI();
                 }
@@ -2630,34 +2710,86 @@ class MicroLooperController {
         const centerY = height / 2;
 
         // Clear canvas
-        ctx.fillStyle = '#080808';
+        ctx.fillStyle = 'rgba(5, 5, 5, 1)';
         ctx.fillRect(0, 0, width, height);
 
-        // Draw center line
-        ctx.strokeStyle = '#1a1a1a';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, centerY);
-        ctx.lineTo(width, centerY);
-        ctx.stroke();
+        // Draw waveform if we have data and buffer has content
+        if (this.waveformData && this.waveformData.length > 0 && this.bufferFillAmount > 0) {
+            const numPoints = this.waveformData.length;
+            const fillRatio = this.bufferFillAmount;
 
-        // Draw waveform if we have data
-        if (this.waveformData && this.waveformData.length > 0) {
-            const data = this.waveformData;
-            const stepWidth = width / data.length;
-
-            // Draw waveform bars
-            ctx.fillStyle = this.isPlaying ? '#66bb6a' : '#3d5c3e';
-
-            for (let i = 0; i < data.length; i++) {
-                const amplitude = Math.abs(data[i]);
-                const barHeight = amplitude * (height - 4);
-                const x = i * stepWidth;
-                const y = centerY - barHeight / 2;
-
-                ctx.fillRect(x, y, Math.max(1, stepWidth - 1), barHeight);
+            // Waveform color based on state (matches card visualization)
+            let waveColor;
+            if (this.isFrozen) {
+                waveColor = 'rgba(96, 165, 250, 0.7)';  // Blue for frozen
+            } else if (this.isOverdubbing) {
+                waveColor = 'rgba(236, 72, 153, 0.8)';  // Pink for overdub
+            } else if (this.isPlaying) {
+                waveColor = 'rgba(74, 222, 128, 0.7)';  // Green for playing
+            } else {
+                waveColor = 'rgba(168, 85, 247, 0.6)';  // Purple (granular accent) default
             }
+
+            // Draw filled waveform (mirrored, like card)
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+
+            for (let i = 0; i < numPoints; i++) {
+                const x = (i / numPoints) * width * fillRatio;
+                const amplitude = this.waveformData[i] * (height * 0.8);
+                ctx.lineTo(x, centerY - amplitude / 2);
+            }
+
+            // Mirror bottom half
+            for (let i = numPoints - 1; i >= 0; i--) {
+                const x = (i / numPoints) * width * fillRatio;
+                const amplitude = this.waveformData[i] * (height * 0.8);
+                ctx.lineTo(x, centerY + amplitude / 2);
+            }
+
+            ctx.closePath();
+            ctx.fillStyle = waveColor;
+            ctx.fill();
+
+            // Draw center line
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, centerY);
+            ctx.lineTo(width * fillRatio, centerY);
+            ctx.stroke();
+
+            // Draw playhead position
+            const playX = this.playPosition * width * fillRatio;
+
+            // Playhead glow
+            const gradient = ctx.createLinearGradient(playX - 4, 0, playX + 4, 0);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.8)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(playX - 4, 0, 8, height);
+
+            // Playhead line
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(playX, 0);
+            ctx.lineTo(playX, height);
+            ctx.stroke();
         } else {
+            // Draw subtle grid lines when no data
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 4; i++) {
+                const x = (width / 4) * i;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+
             // Draw "no data" indicator
             ctx.fillStyle = '#333';
             ctx.font = '10px JetBrains Mono';
@@ -2755,6 +2887,7 @@ class LofiController {
         this.setMasterEnabledFn = getNativeFunction('setDegradeEnabled');
         this.setLofiEnabledFn = getNativeFunction('setDegradeLofiEnabled');
         this.setMicroLoopEnabledFn = getNativeFunction('setMicroLooperEnabled');
+        this.microLooperPlayFn = getNativeFunction('microLooperPlay');  // For auto-start on enable
         this.setFilterEnabledFn = getNativeFunction('setDegradeFilterEnabled');
         this.setHPEnabledFn = getNativeFunction('setDegradeHPEnabled');
         this.setLPEnabledFn = getNativeFunction('setDegradeLPEnabled');
@@ -2788,17 +2921,18 @@ class LofiController {
     }
 
     setupEvents() {
-        // Master LED toggle
+        // Card LED toggle (lofi-master-led on the card) - toggles master enable
         if (this.masterLed) {
             this.masterLed.addEventListener('click', (e) => {
                 e.stopPropagation();
                 this.toggleMaster();
             });
         }
+        // Panel LO-FI section LED toggle - ALSO toggles master enable (same as card)
         if (this.lofiLed) {
             this.lofiLed.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.toggleLofi();
+                this.toggleMaster();  // Same action as card LED for consistency
             });
         }
         if (this.microLoopLed) {
@@ -2930,6 +3064,12 @@ class LofiController {
         try {
             await this.setMicroLoopEnabledFn(this.microLoopEnabled);
             console.log(`[LOFI] MicroLoop ${this.microLoopEnabled ? 'enabled' : 'disabled'}`);
+
+            // When enabling, also start playback so sonic transformation begins immediately
+            if (this.microLoopEnabled) {
+                await this.microLooperPlayFn();
+                console.log('[LOFI] MicroLoop auto-started playback');
+            }
         } catch (e) {
             console.error('Error toggling micro loop:', e);
             this.microLoopEnabled = !this.microLoopEnabled;
@@ -2938,14 +3078,14 @@ class LofiController {
     }
 
     updateUI() {
-        // Update Master LED
+        // Update Card LED (lofi-master-led) - reflects master enable state
         if (this.masterLed) {
             this.masterLed.classList.toggle('active', this.masterEnabled);
         }
 
-        // Update section LEDs
+        // Update panel LO-FI LED - SAME state as card (both show master enable)
         if (this.lofiLed) {
-            this.lofiLed.classList.toggle('active', this.lofiEnabled);
+            this.lofiLed.classList.toggle('active', this.masterEnabled);
         }
         if (this.microLoopLed) {
             this.microLoopLed.classList.toggle('active', this.microLoopEnabled);
@@ -3864,6 +4004,22 @@ class EffectsRackController {
             });
         });
 
+        // Also make pedal names clickable to enter detail view
+        const pedalCards = document.querySelectorAll('.pedal-card');
+        pedalCards.forEach(card => {
+            const nameEl = card.querySelector('.pedal-name');
+            if (nameEl) {
+                nameEl.style.cursor = 'pointer';
+                nameEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const effect = card.dataset.effect;
+                    if (effect) {
+                        this.showDetail(effect);
+                    }
+                });
+            }
+        });
+
         // Back button -> show overview
         if (this.backBtn) {
             this.backBtn.addEventListener('click', () => {
@@ -3953,6 +4109,13 @@ class EffectsRackController {
                 window.lofiController.setupCanvas();
             }, 10);
         }
+
+        // Reinitialize micro looper canvas when granular detail is shown
+        if (effect === 'granular' && window.microLooperController) {
+            setTimeout(() => {
+                window.microLooperController.setupCanvas();
+            }, 10);
+        }
     }
 
     showOverview() {
@@ -4033,17 +4196,36 @@ class GranularController {
         this.cardLed = document.getElementById('granular-led');
         this.detailLed = document.getElementById('granular-detail-led');
 
+        // Visualization elements
+        this.canvas = document.getElementById('granular-card-canvas');
+        this.statusEl = document.getElementById('granular-status');
+        this.ctx = this.canvas ? this.canvas.getContext('2d') : null;
+
         // State
         this.enabled = false;
+        this.isPlaying = false;
+        this.isOverdubbing = false;
+        this.isFrozen = false;
+        this.playheadPos = 0;
+        this.recordPos = 0;
+        this.bufferFill = 0;
+        this.waveformData = [];
 
         // Native functions (micro looper)
         this.setMicroLooperEnabledFn = getNativeFunction('setMicroLooperEnabled');
         this.getMicroLooperStateFn = getNativeFunction('getMicroLooperState');
+        this.getMicroLooperWaveformFn = getNativeFunction('getMicroLooperWaveform');
+        this.microLooperPlayFn = getNativeFunction('microLooperPlay');
+
+        // Visualization polling
+        this.vizInterval = null;
+        this.lastWaveformFetch = 0;
 
         this.setupEvents();
         this.fetchInitialState();
+        this.startVisualization();
 
-        console.log('[GRANULAR/MICRO] Controller initialized');
+        console.log('[GRANULAR/MICRO] Controller initialized with visualization');
     }
 
     setupEvents() {
@@ -4062,10 +4244,212 @@ class GranularController {
             const state = await this.getMicroLooperStateFn();
             if (state) {
                 this.enabled = state.enabled === true;
+                this.isPlaying = state.isPlaying === true;
+                this.isOverdubbing = state.isOverdubbing === true;
+                this.isFrozen = state.isFrozen === true;
+                this.playheadPos = state.playheadPos || 0;
+                this.recordPos = state.recordPos || 0;
+                this.bufferFill = state.bufferFill || 0;
                 this.updateUI();
             }
         } catch (e) {
             console.log('Could not fetch initial micro looper state');
+        }
+    }
+
+    startVisualization() {
+        // Poll state and waveform periodically
+        this.vizInterval = setInterval(() => this.updateVisualization(), 50);
+    }
+
+    async updateVisualization() {
+        if (!this.enabled) {
+            this.renderEmpty();
+            return;
+        }
+
+        try {
+            // Fetch state every frame
+            const state = await this.getMicroLooperStateFn();
+            if (state) {
+                this.isPlaying = state.isPlaying === true;
+                this.isOverdubbing = state.isOverdubbing === true;
+                this.isFrozen = state.isFrozen === true;
+                this.playheadPos = state.playheadPos || 0;
+                this.recordPos = state.recordPos || 0;
+                this.bufferFill = state.bufferFill || 0;
+            }
+
+            // Fetch waveform less frequently (every 200ms)
+            const now = Date.now();
+            if (now - this.lastWaveformFetch > 200) {
+                const waveform = await this.getMicroLooperWaveformFn(48);
+                if (waveform && waveform.length > 0) {
+                    this.waveformData = waveform;
+                }
+                this.lastWaveformFetch = now;
+            }
+
+            this.renderVisualization();
+            this.updateStatusText();
+        } catch (e) {
+            // Silently handle errors during visualization updates
+        }
+    }
+
+    renderEmpty() {
+        if (!this.ctx || !this.canvas) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const rect = this.canvas.getBoundingClientRect();
+        this.canvas.width = rect.width * dpr;
+        this.canvas.height = rect.height * dpr;
+        this.ctx.scale(dpr, dpr);
+
+        const w = rect.width;
+        const h = rect.height;
+
+        // Clear with dark background
+        this.ctx.fillStyle = 'rgba(5, 5, 5, 1)';
+        this.ctx.fillRect(0, 0, w, h);
+
+        // Draw subtle grid lines
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        this.ctx.lineWidth = 1;
+        for (let i = 0; i < 4; i++) {
+            const x = (w / 4) * i;
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, h);
+            this.ctx.stroke();
+        }
+    }
+
+    renderVisualization() {
+        if (!this.ctx || !this.canvas) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const rect = this.canvas.getBoundingClientRect();
+        this.canvas.width = rect.width * dpr;
+        this.canvas.height = rect.height * dpr;
+        this.ctx.scale(dpr, dpr);
+
+        const w = rect.width;
+        const h = rect.height;
+        const centerY = h / 2;
+
+        // Clear
+        this.ctx.fillStyle = 'rgba(5, 5, 5, 1)';
+        this.ctx.fillRect(0, 0, w, h);
+
+        // Draw waveform if we have data and buffer has content
+        if (this.waveformData.length > 0 && this.bufferFill > 0) {
+            const numPoints = this.waveformData.length;
+            const fillRatio = this.bufferFill;
+
+            // Waveform gradient based on state
+            let waveColor;
+            if (this.isFrozen) {
+                waveColor = 'rgba(96, 165, 250, 0.7)';  // Blue for frozen
+            } else if (this.isOverdubbing) {
+                waveColor = 'rgba(236, 72, 153, 0.8)';  // Pink for overdub
+            } else if (this.isPlaying) {
+                waveColor = 'rgba(74, 222, 128, 0.7)';  // Green for playing
+            } else {
+                waveColor = 'rgba(168, 85, 247, 0.6)';  // Purple (granular accent) default
+            }
+
+            // Draw filled waveform
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, centerY);
+
+            for (let i = 0; i < numPoints; i++) {
+                const x = (i / numPoints) * w * fillRatio;
+                const amplitude = this.waveformData[i] * (h * 0.8);
+                this.ctx.lineTo(x, centerY - amplitude / 2);
+            }
+
+            // Mirror bottom half
+            for (let i = numPoints - 1; i >= 0; i--) {
+                const x = (i / numPoints) * w * fillRatio;
+                const amplitude = this.waveformData[i] * (h * 0.8);
+                this.ctx.lineTo(x, centerY + amplitude / 2);
+            }
+
+            this.ctx.closePath();
+            this.ctx.fillStyle = waveColor;
+            this.ctx.fill();
+
+            // Draw center line
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, centerY);
+            this.ctx.lineTo(w * fillRatio, centerY);
+            this.ctx.stroke();
+        }
+
+        // Draw playhead position
+        if (this.bufferFill > 0) {
+            const playX = this.playheadPos * w * this.bufferFill;
+
+            // Playhead glow
+            const gradient = this.ctx.createLinearGradient(playX - 4, 0, playX + 4, 0);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.8)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+            this.ctx.fillStyle = gradient;
+            this.ctx.fillRect(playX - 4, 0, 8, h);
+
+            // Playhead line
+            this.ctx.strokeStyle = '#ffffff';
+            this.ctx.lineWidth = 2;
+            this.ctx.beginPath();
+            this.ctx.moveTo(playX, 0);
+            this.ctx.lineTo(playX, h);
+            this.ctx.stroke();
+        }
+
+        // Draw record position if overdubbing
+        if (this.isOverdubbing && this.bufferFill > 0) {
+            const recX = this.recordPos * w * this.bufferFill;
+
+            this.ctx.strokeStyle = 'rgba(236, 72, 153, 0.9)';
+            this.ctx.lineWidth = 2;
+            this.ctx.setLineDash([2, 2]);
+            this.ctx.beginPath();
+            this.ctx.moveTo(recX, 0);
+            this.ctx.lineTo(recX, h);
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+        }
+    }
+
+    updateStatusText() {
+        if (!this.statusEl) return;
+
+        // Clear all state classes
+        this.statusEl.classList.remove('recording', 'playing', 'frozen');
+
+        if (!this.enabled) {
+            this.statusEl.textContent = 'OFF';
+            return;
+        }
+
+        if (this.isFrozen) {
+            this.statusEl.textContent = 'FROZEN';
+            this.statusEl.classList.add('frozen');
+        } else if (this.isOverdubbing) {
+            this.statusEl.textContent = 'OVERDUB';
+            this.statusEl.classList.add('recording');
+        } else if (this.isPlaying) {
+            this.statusEl.textContent = 'PLAY';
+            this.statusEl.classList.add('playing');
+        } else if (this.bufferFill > 0) {
+            this.statusEl.textContent = 'READY';
+        } else {
+            this.statusEl.textContent = 'EMPTY';
         }
     }
 
@@ -4075,6 +4459,12 @@ class GranularController {
         try {
             await this.setMicroLooperEnabledFn(this.enabled);
             console.log(`[GRANULAR/MICRO] ${this.enabled ? 'enabled' : 'disabled'}`);
+
+            // When enabling via card LED, also start playback/recording immediately
+            if (this.enabled) {
+                await this.microLooperPlayFn();
+                console.log('[GRANULAR/MICRO] Auto-started recording');
+            }
         } catch (e) {
             console.error('Error toggling micro looper:', e);
             this.enabled = !this.enabled;
@@ -4086,6 +4476,19 @@ class GranularController {
         // Update LEDs
         if (this.cardLed) this.cardLed.classList.toggle('active', this.enabled);
         if (this.detailLed) this.detailLed.classList.toggle('active', this.enabled);
+
+        // Update status when toggled off
+        if (!this.enabled) {
+            this.updateStatusText();
+            this.renderEmpty();
+        }
+    }
+
+    destroy() {
+        if (this.vizInterval) {
+            clearInterval(this.vizInterval);
+            this.vizInterval = null;
+        }
     }
 }
 
@@ -5396,6 +5799,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // High-pass frequency: 20Hz - 2000Hz (logarithmic)
     new KnobController('lofiHP-knob', 'degradeHP', {
+        valueElementId: 'lofiHP-value',
         formatValue: (v) => {
             const hz = 20 + Math.pow(v, 0.3) * 1980;
             return hz < 1000 ? `${Math.round(hz)}Hz` : `${(hz/1000).toFixed(1)}kHz`;
@@ -5404,11 +5808,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // High-pass Q: 0.5 - 10
     new KnobController('lofiHPQ-knob', 'degradeHPQ', {
+        valueElementId: 'lofiHPQ-value',
         formatValue: (v) => (0.5 + v * 9.5).toFixed(1)
     });
 
     // Low-pass frequency: 200Hz - 20kHz (logarithmic)
     new KnobController('lofiLP-knob', 'degradeLP', {
+        valueElementId: 'lofiLP-value',
         formatValue: (v) => {
             const hz = 200 + Math.pow(v, 0.3) * 19800;
             return hz < 1000 ? `${Math.round(hz)}Hz` : `${(hz/1000).toFixed(1)}kHz`;
@@ -5417,29 +5823,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Low-pass Q: 0.5 - 10
     new KnobController('lofiLPQ-knob', 'degradeLPQ', {
+        valueElementId: 'lofiLPQ-value',
         formatValue: (v) => (0.5 + v * 9.5).toFixed(1)
     });
 
     // Bit depth: 1 - 16 bits
     new KnobController('lofiBit-knob', 'degradeBit', {
-        formatValue: (v) => `${Math.round(1 + v * 15)}-bit`
+        valueElementId: 'lofiBit-value',
+        formatValue: (v) => `${Math.round(1 + v * 15)}`
     });
 
     // Sample rate: 1kHz - 48kHz (logarithmic)
     new KnobController('lofiSR-knob', 'degradeSR', {
+        valueElementId: 'lofiSR-value',
         formatValue: (v) => {
             const khz = 1 + Math.pow(v, 0.4) * 47;
-            return `${khz.toFixed(1)}kHz`;
+            return khz < 10 ? `${khz.toFixed(1)}k` : `${Math.round(khz)}k`;
         }
     });
 
     // Wobble: 0% - 100%
     new KnobController('lofiWobble-knob', 'degradeWobble', {
+        valueElementId: 'lofiWobble-value',
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
     // Vinyl: 0% - 100% (hiss + crackle)
     new KnobController('lofiVinyl-knob', 'degradeVinyl', {
+        valueElementId: 'lofiVinyl-value',
         formatValue: (v) => `${Math.round(v * 100)}%`
     });
 
@@ -5495,7 +5906,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Micro Looper controller (handles transport buttons, modes, etc.)
-    new MicroLooperController();
+    // Stored globally so EffectsRack can reinitialize canvas when panel opens
+    window.microLooperController = new MicroLooperController();
 
     // Lofi mix: 0% - 100%
     new KnobController('lofiMix-knob', 'degradeMix', {
@@ -5511,7 +5923,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Card knobs for micro looper
     new KnobController('microMix-card-knob', 'microMix', {
-        formatValue: (v) => `${Math.round(v * 100)}%`
+        formatValue: (v) => `${Math.round(v * 100)}%`,
+        valueElementId: 'microMix-card-value'
     });
     new KnobController('microSpeed-card-knob', 'microSpeed', {
         formatValue: (v) => {

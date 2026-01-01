@@ -516,6 +516,11 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       processorRef.getMicroLooper().togglePlay();
                       complete({});
                   })
+                  .withNativeFunction("microLooperStop", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      processorRef.getMicroLooper().stop();
+                      complete({});
+                  })
                   .withNativeFunction("microLooperOverdub", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       processorRef.getMicroLooper().toggleOverdub();
@@ -543,6 +548,12 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           processorRef.getMicroLooper().setReverse(static_cast<bool>(args[0]));
                       complete({});
                   })
+                  .withNativeFunction("setMicroLooperScale", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                          processorRef.getMicroLooper().setScale(static_cast<int>(args[0]));
+                      complete({});
+                  })
                   .withNativeFunction("getMicroLooperState", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       auto& micro = processorRef.getMicroLooper();
@@ -555,6 +566,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("recordPos", micro.getRecordPosition());
                       result->setProperty("bufferFill", micro.getBufferFill());
                       result->setProperty("mode", micro.getCurrentMode());
+                      result->setProperty("scale", micro.getScaleIndex());
                       complete(juce::var(result.get()));
                   })
                   .withNativeFunction("getMicroLooperWaveform", [this](const juce::Array<juce::var>& args, auto complete)

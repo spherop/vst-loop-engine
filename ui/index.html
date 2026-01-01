@@ -613,7 +613,7 @@
                                 </div>
                                 <!-- MixBus Channel -->
                                 <div class="mixer-channel mixer-channel-bus" data-layer="bus">
-                                    <div class="channel-label">BUS</div>
+                                    <div class="channel-label">MIX</div>
                                     <div class="channel-vu">
                                         <div class="vu-meter">
                                             <div class="vu-needle" id="vu-needle-bus"></div>
@@ -672,7 +672,7 @@
                                     <button class="layer-btn layer-btn-large" data-layer="8">8</button>
                                 </div>
                                 <button class="bus-btn" id="bus-btn" title="MixBus - click to mute/unmute">
-                                    <span class="bus-label">BUS</span>
+                                    <span class="bus-label">MIX</span>
                                 </button>
                                 <button class="flatten-btn" id="flatten-btn" title="Flatten all unmuted layers into layer 1">
                                     <span class="flatten-icon">⊞</span>
@@ -700,7 +700,7 @@
                                         <path d="M7 16l4-8 4 6 4-10"/>
                                     </svg>
                                 </button>
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v8.8.0</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v9.7.0</span>
                             </div>
 
                             <!-- Controls (center) -->
@@ -862,6 +862,11 @@
                                         </div>
                                         <span class="font-mono text-[8px] text-white w-[28px] text-right" id="microMix-card-value">50%</span>
                                     </div>
+                                </div>
+                                <!-- Mini waveform visualization -->
+                                <div class="granular-viz-container">
+                                    <canvas id="granular-card-canvas" class="granular-card-canvas"></canvas>
+                                    <div class="granular-status" id="granular-status">IDLE</div>
                                 </div>
                                 <div class="pedal-params">
                                     <div class="pedal-param">
@@ -1245,6 +1250,16 @@
                                         <button class="micro-mode-btn" id="micro-mode-env" data-mode="0" title="Envelope mode">ENV</button>
                                         <button class="micro-mode-btn active" id="micro-mode-tape" data-mode="1" title="Tape mode">TAPE</button>
                                         <button class="micro-mode-btn" id="micro-mode-stretch" data-mode="2" title="Stretch mode">STR</button>
+                                    </div>
+
+                                    <!-- Scale selector for pitch quantization -->
+                                    <div class="flex justify-center gap-1 mb-2">
+                                        <button class="micro-scale-btn active" id="micro-scale-free" data-scale="0" title="Free - no quantization">FREE</button>
+                                        <button class="micro-scale-btn" id="micro-scale-chrom" data-scale="1" title="Chromatic - all semitones">CHROM</button>
+                                        <button class="micro-scale-btn" id="micro-scale-major" data-scale="2" title="Major scale">MAJ</button>
+                                        <button class="micro-scale-btn" id="micro-scale-minor" data-scale="3" title="Minor scale">MIN</button>
+                                        <button class="micro-scale-btn" id="micro-scale-penta" data-scale="4" title="Pentatonic">PENTA</button>
+                                        <button class="micro-scale-btn" id="micro-scale-oct" data-scale="5" title="Octaves only">OCT</button>
                                     </div>
 
                                     <div class="text-center mb-2">
