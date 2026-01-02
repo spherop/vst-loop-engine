@@ -127,61 +127,22 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       // Returns true when actually capturing (mode ON + overdubbing)
                       complete(processorRef.getLoopEngine().isAdditiveRecordingActive());
                   })
-                  // ============================================================
-                  // MIX BUS CONTROLS
-                  // ============================================================
-                  .withNativeFunction("toggleMixBusRecording", [this](const juce::Array<juce::var>&, auto complete)
+                  .withNativeFunction("setLayerMode", [this](const juce::Array<juce::var>& args, auto complete)
                   {
-                      processorRef.getLoopEngine().toggleMixBusRecording();
-                      complete({});
-                  })
-                  .withNativeFunction("startMixBusRecording", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      processorRef.getLoopEngine().startMixBusRecording();
-                      complete({});
-                  })
-                  .withNativeFunction("stopMixBusRecording", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      processorRef.getLoopEngine().stopMixBusRecording();
-                      complete({});
-                  })
-                  .withNativeFunction("isMixBusRecording", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      complete(processorRef.getLoopEngine().isMixBusRecording());
-                  })
-                  .withNativeFunction("clearMixBus", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      processorRef.getLoopEngine().clearMixBus();
-                      complete({});
-                  })
-                  .withNativeFunction("setMixBusMuted", [this](const juce::Array<juce::var>& args, auto complete)
-                  {
+                      // Toggle Layer mode on/off (false = Track mode, true = Layer mode)
                       if (args.size() > 0)
-                          processorRef.getLoopEngine().setMixBusMuted(static_cast<bool>(args[0]));
+                      {
+                          bool enabled = static_cast<bool>(args[0]);
+                          processorRef.getLoopEngine().setLayerModeEnabled(enabled);
+                          // Sync to APVTS for persistence
+                          if (auto* param = processorRef.getAPVTS().getParameter("layerMode"))
+                              param->setValueNotifyingHost(enabled ? 1.0f : 0.0f);
+                      }
                       complete({});
                   })
-                  .withNativeFunction("isMixBusMuted", [this](const juce::Array<juce::var>&, auto complete)
+                  .withNativeFunction("isLayerMode", [this](const juce::Array<juce::var>&, auto complete)
                   {
-                      complete(processorRef.getLoopEngine().isMixBusMuted());
-                  })
-                  .withNativeFunction("mixBusHasContent", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      complete(processorRef.getLoopEngine().mixBusHasAnyContent());
-                  })
-                  .withNativeFunction("setMixBusCompoundMode", [this](const juce::Array<juce::var>& args, auto complete)
-                  {
-                      if (args.size() > 0)
-                          processorRef.getLoopEngine().setMixBusCompoundMode(static_cast<bool>(args[0]));
-                      complete({});
-                  })
-                  .withNativeFunction("toggleMixBusCompoundMode", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      processorRef.getLoopEngine().toggleMixBusCompoundMode();
-                      complete({});
-                  })
-                  .withNativeFunction("isMixBusCompoundMode", [this](const juce::Array<juce::var>&, auto complete)
-                  {
-                      complete(processorRef.getLoopEngine().isMixBusCompoundMode());
+                      complete(processorRef.getLoopEngine().isLayerModeEnabled());
                   })
                   .withNativeFunction("loopClear", [this](const juce::Array<juce::var>&, auto complete)
                   {
@@ -256,6 +217,114 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       else
                       {
                           complete(0.0f);
+                      }
+                  })
+                  // Per-layer EQ controls
+                  .withNativeFunction("setLayerEQLow", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          float gainDB = static_cast<float>(args[1]);
+                          processorRef.getLoopEngine().setLayerEQLow(layer, gainDB);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("setLayerEQMid", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          float gainDB = static_cast<float>(args[1]);
+                          processorRef.getLoopEngine().setLayerEQMid(layer, gainDB);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("setLayerEQHigh", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          float gainDB = static_cast<float>(args[1]);
+                          processorRef.getLoopEngine().setLayerEQHigh(layer, gainDB);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerEQ", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          auto& engine = processorRef.getLoopEngine();
+                          juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                          result->setProperty("low", engine.getLayerEQLowDB(layer));
+                          result->setProperty("mid", engine.getLayerEQMidDB(layer));
+                          result->setProperty("high", engine.getLayerEQHighDB(layer));
+                          complete(juce::var(result.get()));
+                      }
+                      else
+                      {
+                          complete(juce::var());
+                      }
+                  })
+                  // Per-layer loop boundaries
+                  .withNativeFunction("setLayerLoopStart", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          float pos = static_cast<float>(args[1]);
+                          processorRef.getLoopEngine().setLayerLoopStart(layer, pos);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("setLayerLoopEnd", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          float pos = static_cast<float>(args[1]);
+                          processorRef.getLoopEngine().setLayerLoopEnd(layer, pos);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerLoopBounds", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          auto& engine = processorRef.getLoopEngine();
+                          juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                          result->setProperty("start", engine.getLayerLoopStart(layer));
+                          result->setProperty("end", engine.getLayerLoopEnd(layer));
+                          complete(juce::var(result.get()));
+                      }
+                      else
+                      {
+                          complete(juce::var());
+                      }
+                  })
+                  // Per-layer reverse
+                  .withNativeFunction("setLayerReverse", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          bool reversed = static_cast<bool>(args[1]);
+                          processorRef.getLoopEngine().setLayerReverse(layer, reversed);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerReverse", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          complete(processorRef.getLoopEngine().getLayerReverse(layer));
+                      }
+                      else
+                      {
+                          complete(false);
                       }
                   })
                   .withNativeFunction("getLayerLevels", [this](const juce::Array<juce::var>&, auto complete)
@@ -411,33 +480,38 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           overrideArray.add(loopEngine.isLayerOverride(i));
                       result->setProperty("layerOverrides", overrideArray);
 
+                      // Per-layer EQ, loop bounds, and reverse for all 8 layers
+                      juce::Array<juce::var> layerEQArray;
+                      juce::Array<juce::var> layerBoundsArray;
+                      juce::Array<juce::var> layerReverseArray;
+                      for (int i = 1; i <= 8; ++i)
+                      {
+                          // EQ settings
+                          juce::DynamicObject::Ptr eq = new juce::DynamicObject();
+                          eq->setProperty("low", loopEngine.getLayerEQLowDB(i));
+                          eq->setProperty("mid", loopEngine.getLayerEQMidDB(i));
+                          eq->setProperty("high", loopEngine.getLayerEQHighDB(i));
+                          layerEQArray.add(juce::var(eq.get()));
+
+                          // Loop bounds
+                          juce::DynamicObject::Ptr bounds = new juce::DynamicObject();
+                          bounds->setProperty("start", loopEngine.getLayerLoopStart(i));
+                          bounds->setProperty("end", loopEngine.getLayerLoopEnd(i));
+                          layerBoundsArray.add(juce::var(bounds.get()));
+
+                          // Reverse
+                          layerReverseArray.add(loopEngine.getLayerReverse(i));
+                      }
+                      result->setProperty("layerEQ", layerEQArray);
+                      result->setProperty("layerBounds", layerBoundsArray);
+                      result->setProperty("layerReverse", layerReverseArray);
+
                       // ADD+ mode state
                       result->setProperty("additiveModeEnabled", loopEngine.isAdditiveModeEnabled());
                       result->setProperty("additiveRecordingActive", loopEngine.isAdditiveRecordingActive());
 
-                      // MIX BUS state
-                      result->setProperty("mixBusRecording", loopEngine.isMixBusRecording());
-                      result->setProperty("mixBusHasContent", loopEngine.mixBusHasAnyContent());
-                      result->setProperty("mixBusMuted", loopEngine.isMixBusMuted());
-                      result->setProperty("mixBusPeakLevel", loopEngine.getMixBusPeakLevel());
-                      result->setProperty("mixBusCompoundMode", loopEngine.isMixBusCompoundMode());
-
-                      // MixBus waveform data for visualization
-                      if (loopEngine.mixBusHasAnyContent())
-                      {
-                          auto mixBusWaveform = loopEngine.getMixBusWaveformData(100);
-                          juce::Array<juce::var> mixBusWfArray;
-                          for (float val : mixBusWaveform)
-                              mixBusWfArray.add(val);
-                          result->setProperty("mixBusWaveform", mixBusWfArray);
-
-                          // Content mask for showing where MixBus overrides layers
-                          auto mixBusMask = loopEngine.getMixBusContentMaskDownsampled(100);
-                          juce::Array<juce::var> maskArray;
-                          for (bool hasContent : mixBusMask)
-                              maskArray.add(hasContent);
-                          result->setProperty("mixBusContentMask", maskArray);
-                      }
+                      // Layer mode state (Track/Layer)
+                      result->setProperty("layerModeEnabled", loopEngine.isLayerModeEnabled());
 
                       // Input monitoring data
                       result->setProperty("inputLevelL", loopEngine.getInputLevelL());

@@ -156,9 +156,9 @@
                                     <span class="transport-icon">&#9679;</span>
                                     <span class="transport-label">REC</span>
                                 </button>
-                                <button id="mix-btn" class="transport-btn mix" title="MixBus Recording - punch in/out to capture effected output">
-                                    <span class="transport-icon">&#9699;</span>
-                                    <span class="transport-label">MIX</span>
+                                <button id="mode-toggle-btn" class="transport-btn mode-btn" title="Toggle Track/Layer Mode - Track: layers sum together | Layer: higher layers override">
+                                    <span class="transport-icon" id="mode-icon">T</span>
+                                    <span class="transport-label" id="mode-label">TRACK</span>
                                 </button>
                                 <button id="loop-play-btn" class="transport-btn play">
                                     <span class="transport-icon">&#9658;</span>
@@ -652,6 +652,7 @@
                                     </div>
                                 </div>
                             </div>
+
                         </div>
                     </section>
 
@@ -671,9 +672,7 @@
                                     <button class="layer-btn layer-btn-large" data-layer="7">7</button>
                                     <button class="layer-btn layer-btn-large" data-layer="8">8</button>
                                 </div>
-                                <button class="bus-btn" id="bus-btn" title="MixBus - click to mute/unmute">
-                                    <span class="bus-label">MIX</span>
-                                </button>
+                                <span class="master-level-indicator" id="master-level-indicator" title="Master output level"></span>
                                 <button class="flatten-btn" id="flatten-btn" title="Flatten all unmuted layers into layer 1">
                                     <span class="flatten-icon">⊞</span>
                                 </button>
@@ -689,6 +688,76 @@
                         </div>
                     </section>
 
+                    <!-- Per-Layer Control Panel (slides down when layer selected) -->
+                    <div class="layer-control-panel hidden" id="layer-control-panel">
+                        <div class="layer-panel-header">
+                            <span class="layer-panel-title">LAYER <span id="layer-panel-num">1</span></span>
+                            <button class="layer-panel-close" id="layer-panel-close" title="Close">&times;</button>
+                        </div>
+                        <div class="layer-panel-content">
+                            <!-- Controls Row -->
+                            <div class="layer-controls-row">
+                                <!-- Mute/Solo/Pan Section -->
+                                <div class="layer-channel-section">
+                                    <div class="layer-channel-buttons">
+                                        <button class="layer-mute-btn" id="layer-mute-btn" title="Mute layer">M</button>
+                                        <button class="layer-solo-btn" id="layer-solo-btn" title="Solo layer">S</button>
+                                    </div>
+                                    <div class="layer-pan-group">
+                                        <span class="layer-knob-label">PAN</span>
+                                        <div class="layer-pan-knob" id="layer-pan-knob">
+                                            <div class="layer-pan-indicator"></div>
+                                        </div>
+                                        <span class="layer-pan-value" id="layer-pan-value">C</span>
+                                    </div>
+                                </div>
+
+                                <!-- 3-Band EQ -->
+                                <div class="layer-eq-section">
+                                    <span class="layer-section-label">EQ</span>
+                                    <div class="layer-eq-knobs">
+                                        <div class="layer-knob-group">
+                                            <div class="layer-knob" id="layer-eq-low" data-band="low">
+                                                <div class="layer-knob-indicator"></div>
+                                            </div>
+                                            <span class="layer-knob-label">LOW</span>
+                                            <span class="layer-knob-value" id="layer-eq-low-value">0dB</span>
+                                        </div>
+                                        <div class="layer-knob-group">
+                                            <div class="layer-knob" id="layer-eq-mid" data-band="mid">
+                                                <div class="layer-knob-indicator"></div>
+                                            </div>
+                                            <span class="layer-knob-label">MID</span>
+                                            <span class="layer-knob-value" id="layer-eq-mid-value">0dB</span>
+                                        </div>
+                                        <div class="layer-knob-group">
+                                            <div class="layer-knob" id="layer-eq-high" data-band="high">
+                                                <div class="layer-knob-indicator"></div>
+                                            </div>
+                                            <span class="layer-knob-label">HIGH</span>
+                                            <span class="layer-knob-value" id="layer-eq-high-value">0dB</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Reverse Toggle -->
+                                <div class="layer-reverse-section">
+                                    <button class="layer-reverse-btn" id="layer-reverse-btn">
+                                        <span class="reverse-icon">&#x21BA;</span>
+                                        REV
+                                    </button>
+                                </div>
+
+                                <!-- Delete Button -->
+                                <div class="layer-delete-section">
+                                    <button class="layer-delete-btn" id="layer-delete-btn" title="Clear layer">
+                                        <span class="delete-icon">&#x1F5D1;</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Loop Controls (fixed at bottom) -->
                     <section class="section-card bg-fd-card rounded-lg border border-fd-border p-4 flex-shrink-0">
                         <div class="flex justify-between items-center">
@@ -700,7 +769,7 @@
                                         <path d="M7 16l4-8 4 6 4-10"/>
                                     </svg>
                                 </button>
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v9.7.0</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v10.7.0</span>
                             </div>
 
                             <!-- Controls (center) -->

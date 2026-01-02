@@ -43,14 +43,15 @@ public:
         lofiBypassGain.reset(sampleRate, 0.020);
         textureBypassGain.reset(sampleRate, 0.020);
 
-        // Set initial bypass states
-        // Master and key sections ON by default for immediate use
-        masterBypassGain.setCurrentAndTargetValue(1.0f);  // Master ON by default
-        filterBypassGain.setCurrentAndTargetValue(1.0f);  // Filter section ON by default
-        hpBypassGain.setCurrentAndTargetValue(1.0f);      // HP filter ON by default
-        lpBypassGain.setCurrentAndTargetValue(1.0f);      // LP filter ON by default
-        lofiBypassGain.setCurrentAndTargetValue(1.0f);    // Lofi section ON by default
-        textureBypassGain.setCurrentAndTargetValue(0.0f); // Texture OFF (explicit enable needed)
+        // Set initial bypass states based on the atomic enabled flags
+        // These will be overwritten by prepareToPlay syncing from APVTS
+        // But setting them correctly here ensures no mismatch if prepare is called again
+        masterBypassGain.setCurrentAndTargetValue(masterEnabled.load() ? 1.0f : 0.0f);
+        filterBypassGain.setCurrentAndTargetValue(filterEnabled.load() ? 1.0f : 0.0f);
+        hpBypassGain.setCurrentAndTargetValue(hpEnabled.load() ? 1.0f : 0.0f);
+        lpBypassGain.setCurrentAndTargetValue(lpEnabled.load() ? 1.0f : 0.0f);
+        lofiBypassGain.setCurrentAndTargetValue(lofiEnabled.load() ? 1.0f : 0.0f);
+        textureBypassGain.setCurrentAndTargetValue(textureEnabled.load() ? 1.0f : 0.0f);
 
         // Reset filter states
         resetFilters();
@@ -465,13 +466,15 @@ private:
     double currentSampleRate = 44100.0;
 
     // Master bypass
-    std::atomic<bool> masterEnabled { true };
+    std::atomic<bool> masterEnabled { false };
 
-    // Section bypass states - default to OFF so audio isn't affected until user enables
-    // EXCEPTION: filterEnabled defaults to ON because there's no UI toggle for filter section
-    // (HP and LP have individual toggles that control the actual filter bypass)
-    std::atomic<bool> filterEnabled { true };
-    std::atomic<bool> lofiEnabled { true };
+    // Section bypass states
+    // filterEnabled - controlled by UI toggle on FILTER section
+    // lofiEnabled - defaults to TRUE since there's no separate UI toggle for it
+    //               (LOFI controls are always active when master is enabled)
+    // textureEnabled - controlled by texture section toggle
+    std::atomic<bool> filterEnabled { false };
+    std::atomic<bool> lofiEnabled { true };   // Default ON - no separate UI toggle exists
     std::atomic<bool> textureEnabled { false };
 
     // Individual filter bypass states

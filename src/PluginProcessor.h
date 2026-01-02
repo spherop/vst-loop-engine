@@ -188,6 +188,18 @@ private:
     std::atomic<float>* reverbModRateParam = nullptr;
     std::atomic<float>* reverbModDepthParam = nullptr;
 
+    // Effect bypass parameters (for persistence)
+    std::atomic<float>* degradeMasterBypassParam = nullptr;
+    std::atomic<float>* degradeLofiBypassParam = nullptr;
+    std::atomic<float>* saturationBypassParam = nullptr;
+    std::atomic<float>* reverbBypassParam = nullptr;
+    std::atomic<float>* delayBypassParam = nullptr;
+    std::atomic<float>* microLooperBypassParam = nullptr;
+    std::atomic<float>* subBassBypassParam = nullptr;
+
+    // Layer mode parameter (for persistence)
+    std::atomic<float>* layerModeParam = nullptr;
+
     // Tempo sync state
     std::atomic<bool> tempoSyncEnabled { false };
     std::atomic<int> tempoNoteValue { 1 };  // 0=1/4, 1=1/8, 2=1/8T, 3=1/16, 4=1/16T, 5=1/32

@@ -53,20 +53,10 @@ public:
         smearCaptureLength = 0;
         smearActive = false;
 
-        // Initialize MixBus buffer (will be resized when loop length is known)
-        mixBusBuffer.setSize(2, samplesPerBlock);
-        mixBusBuffer.clear();
-
         // Reset state
         currentLayer = 0;
         highestLayer = 0;
         masterLoopLength = 0;
-
-        // Reset MixBus state
-        mixBusHasContent = false;
-        mixBusMuted = false;
-        mixBusRecording = false;
-        mixBusCompoundMode = false;
     }
 
     // Transport controls - Blooper-style workflow:
@@ -202,15 +192,6 @@ public:
             stopAdditiveCapture();
         }
 
-        // Stop MixBus recording if active
-        if (mixBusRecording.load())
-        {
-            stopMixBusRecording();
-        }
-
-        // Disable compound mode on play
-        mixBusCompoundMode.store(false);
-
         // If currently overdubbing, just stop the overdub (smooth transition)
         // Don't restart playback - keep position and continue playing
         if (currentState == LoopBuffer::State::Overdubbing)
@@ -238,22 +219,13 @@ public:
             layers[i].stop();
         }
 
-        // Stop MixBus recording if active
-        if (mixBusRecording.load())
-        {
-            stopMixBusRecording();
-        }
-
         // Stop additive recording if active
         if (additiveRecordingActive.load())
         {
             stopAdditiveCapture();
         }
 
-        // Disable compound mode on stop
-        mixBusCompoundMode.store(false);
-
-        DBG("LoopEngine::stop() - All layers stopped, MixBus/additive recording stopped");
+        DBG("LoopEngine::stop() - All layers stopped, additive recording stopped");
     }
 
     // Clear a specific layer (1-indexed for UI)
@@ -463,9 +435,20 @@ public:
         }
         else if (currentState == LoopBuffer::State::Overdubbing)
         {
-            // Blooper-style: pressing DUB while overdubbing creates a NEW layer
+            // LAYER MODE: DUB while recording just stops recording (like PLAY)
+            // User must press DUB again while playing to create a new layer
+            // This prevents accidental layer creation and matches Blooper behavior
+            if (layerModeEnabled.load())
+            {
+                DBG("LAYER MODE: Stopping overdub on layer " + juce::String(currentLayer) + " (DUB = stop, not new layer)");
+                layers[currentLayer].stopOverdub();
+                // Don't create new layer - just continue playback
+                return;
+            }
+
+            // TRACK MODE: pressing DUB while overdubbing creates a NEW layer immediately
             // Stop current layer's overdub immediately (no fade needed - new layer takes over)
-            DBG("Stopping overdub on layer " + juce::String(currentLayer) + " to create new layer");
+            DBG("TRACK MODE: Stopping overdub on layer " + juce::String(currentLayer) + " to create new layer");
             layers[currentLayer].stopOverdubImmediate();
 
             // Create new layer and start overdubbing
@@ -511,16 +494,22 @@ public:
 
     void undo()
     {
-        // If MixBus has content, first undo clears it
-        if (mixBusHasContent)
-        {
-            clearMixBus();
-            DBG("undo() - cleared MixBus");
-            return;
-        }
-
         if (currentLayer > 0)
         {
+            // If current layer is actively recording/overdubbing, stop it first
+            // This is critical for proper undo behavior - we can't just mute while recording
+            LoopBuffer::State layerState = layers[currentLayer].getState();
+            if (layerState == LoopBuffer::State::Overdubbing)
+            {
+                DBG("undo() - stopping overdub on layer " + juce::String(currentLayer) + " before undo");
+                layers[currentLayer].stopOverdub();
+            }
+            else if (layerState == LoopBuffer::State::Recording)
+            {
+                DBG("undo() - stopping recording on layer " + juce::String(currentLayer) + " before undo");
+                layers[currentLayer].stopRecording(false);
+            }
+
             // Mute the current layer instead of stopping it completely
             // This keeps the layer content but makes it silent and visually "undone"
             layers[currentLayer].setMuted(true);
@@ -584,11 +573,6 @@ public:
         currentLayer = 0;
         highestLayer = 0;
 
-        // Always clear MixBus on CLR
-        clearMixBus();
-        // Also disable compound mode
-        mixBusCompoundMode.store(false);
-
         // If we were actively playing/recording, preserve the length and start overdubbing
         if (wasActive && preservedLength > 0)
         {
@@ -597,13 +581,13 @@ public:
             // startOverdubOnNewLayer sets up buffer and puts layer in Overdubbing state
             layers[0].startOverdubOnNewLayer(masterLoopLength);
             DBG("clear() - Active state: preserved loop length " + juce::String(masterLoopLength) +
-                " and started DUB on layer 0, MixBus cleared");
+                " and started DUB on layer 0");
         }
         else
         {
             // Stopped/idle: full reset including loop length so user can create fresh loop
             masterLoopLength = 0;
-            DBG("clear() - Idle state: full reset, loop length cleared, MixBus cleared");
+            DBG("clear() - Idle state: full reset, loop length cleared");
         }
     }
 
@@ -675,6 +659,133 @@ public:
             return layers[idx].getPan();
         }
         return 0.0f;
+    }
+
+    // ============================================
+    // PER-LAYER EQ (1-indexed for UI)
+    // ============================================
+
+    void setLayerEQLow(int layer, float gainDB)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setEQLow(gainDB);
+        }
+    }
+
+    void setLayerEQMid(int layer, float gainDB)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setEQMid(gainDB);
+        }
+    }
+
+    void setLayerEQHigh(int layer, float gainDB)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setEQHigh(gainDB);
+        }
+    }
+
+    float getLayerEQLowDB(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getEQLowDB();
+        }
+        return 0.0f;
+    }
+
+    float getLayerEQMidDB(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getEQMidDB();
+        }
+        return 0.0f;
+    }
+
+    float getLayerEQHighDB(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getEQHighDB();
+        }
+        return 0.0f;
+    }
+
+    // ============================================
+    // PER-LAYER LOOP BOUNDARIES (1-indexed for UI)
+    // ============================================
+
+    void setLayerLoopStart(int layer, float normalizedPos)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setLoopStart(normalizedPos);
+        }
+    }
+
+    void setLayerLoopEnd(int layer, float normalizedPos)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setLoopEnd(normalizedPos);
+        }
+    }
+
+    float getLayerLoopStart(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getLoopStartNormalized();
+        }
+        return 0.0f;
+    }
+
+    float getLayerLoopEnd(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getLoopEndNormalized();
+        }
+        return 1.0f;
+    }
+
+    // ============================================
+    // PER-LAYER REVERSE (1-indexed for UI)
+    // ============================================
+
+    void setLayerReverse(int layer, bool reversed)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setReverse(reversed);
+            DBG("Layer " + juce::String(layer) + " reverse: " + juce::String(reversed ? "true" : "false"));
+        }
+    }
+
+    bool getLayerReverse(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getIsReversed();
+        }
+        return false;
     }
 
     // Parameters (apply to all layers)
@@ -819,6 +930,114 @@ public:
             }
         }
 
+        // Layer mode with recording: accumulate playback from all layers below the recording layer
+        // This buffer will contain the "bounce" audio (all previous layers mixed)
+        // IMPORTANT: Only bounce for exactly ONE LOOP PASS to prevent volume buildup
+        const bool layerMode = layerModeEnabled.load();
+        juce::AudioBuffer<float> bounceBuffer;
+        int recordingLayerIndex = -1;
+        bool shouldBounce = false;  // Whether to add bounce audio this block
+
+        if (layerMode)
+        {
+            // Find recording layer
+            for (int i = 0; i <= highestLayer; ++i)
+            {
+                if (layers[i].getState() == LoopBuffer::State::Recording ||
+                    layers[i].getState() == LoopBuffer::State::Overdubbing)
+                {
+                    recordingLayerIndex = i;
+                    break;
+                }
+            }
+
+            // If recording in Layer mode on layer > 0, manage bounce state
+            if (recordingLayerIndex > 0)
+            {
+                // Check if this is a NEW recording session (different layer or wasn't recording before)
+                if (layerModeBounceLayer != recordingLayerIndex)
+                {
+                    // New recording session - initialize bounce tracking
+                    layerModeBounceLayer = recordingLayerIndex;
+                    layerModeBounceStartSample = static_cast<int>(layers[0].getRawPlayhead());
+                    layerModeBounceProgress = 0;
+                    layerModeBounceComplete = false;
+                    DBG("Layer mode bounce START: layer=" + juce::String(recordingLayerIndex) +
+                        " startSample=" + juce::String(layerModeBounceStartSample) +
+                        " loopLength=" + juce::String(masterLoopLength));
+                }
+
+                // Check if we've completed one full loop pass
+                if (!layerModeBounceComplete && masterLoopLength > 0)
+                {
+                    layerModeBounceProgress += numSamples;
+
+                    if (layerModeBounceProgress >= masterLoopLength)
+                    {
+                        // One full loop complete - stop bouncing
+                        layerModeBounceComplete = true;
+                        DBG("Layer mode bounce COMPLETE: recorded " + juce::String(layerModeBounceProgress) +
+                            " samples, bounce now OFF");
+                    }
+                }
+
+                // Only bounce if we haven't completed one full loop pass
+                shouldBounce = !layerModeBounceComplete;
+
+                if (shouldBounce)
+                {
+                    bounceBuffer.setSize(numChannels, numSamples, false, false, true);
+                    bounceBuffer.clear();
+
+                    // Accumulate playback from all layers below the recording layer
+                    for (int i = 0; i < recordingLayerIndex; ++i)
+                    {
+                        if (!layers[i].hasContent() || layers[i].getMuted())
+                            continue;
+
+                        // Skip if below an override layer
+                        if (highestOverride >= 0 && i < highestOverride && !layers[i].isOverrideLayer())
+                            continue;
+
+                        // Get this layer's playback without advancing its state
+                        // We'll use a temp buffer and just peek at what it would output
+                        juce::AudioBuffer<float> tempLayer(numChannels, numSamples);
+                        tempLayer.clear();
+
+                        // Read the layer's current content at its playhead position
+                        layers[i].peekPlayback(tempLayer);
+
+                        // Add to bounce buffer
+                        for (int ch = 0; ch < numChannels; ++ch)
+                            bounceBuffer.addFrom(ch, 0, tempLayer, ch, 0, numSamples);
+                    }
+                }
+            }
+            else if (recordingLayerIndex < 0)
+            {
+                // No recording happening - reset bounce state
+                if (layerModeBounceLayer >= 0)
+                {
+                    DBG("Layer mode bounce RESET: recording stopped");
+                    layerModeBounceLayer = -1;
+                    layerModeBounceStartSample = -1;
+                    layerModeBounceProgress = 0;
+                    layerModeBounceComplete = false;
+                }
+            }
+        }
+        else
+        {
+            // Layer mode disabled - reset bounce state
+            if (layerModeBounceLayer >= 0)
+            {
+                layerModeBounceLayer = -1;
+                layerModeBounceStartSample = -1;
+                layerModeBounceProgress = 0;
+                layerModeBounceComplete = false;
+            }
+        }
+
         for (int i = 0; i <= highestLayer; ++i)
         {
             bool hasContent = layers[i].hasContent();
@@ -851,13 +1070,37 @@ public:
                 continue;
             }
 
+            // LAYER MODE BOUNCE: Prior layers being bounced should NOT be added to output
+            // individually - they'll be heard via the bounce buffer added to the output once.
+            // This prevents volume doubling where prior audio is heard twice.
+            bool skipOutputMixing = false;
+            if (layerMode && shouldBounce && recordingLayerIndex > 0 && i < recordingLayerIndex)
+            {
+                // This layer is being bounced - skip individual output mixing
+                // The bounce buffer will be added to output once after all layers are processed
+                skipOutputMixing = true;
+            }
+
             // Only pass input to recording/overdubbing layers
             // Playback layers should only output their loop content (no input passthrough)
             if (isRecording || isOverdubbing)
             {
-                // Recording/overdubbing layer gets the input - copy to layer buffer
+                // Recording/overdubbing layer gets the input
+                // In Layer mode: also include bounced audio from all previous layers (for first loop pass only)
                 for (int ch = 0; ch < numChannels; ++ch)
                     layerBuffer.copyFrom(ch, 0, inputBuffer, ch, 0, numSamples);
+
+                // Layer mode bounce: add previous layers' playback to what we're recording
+                // ONLY for the first loop pass - after that, just record input to prevent volume buildup
+                // NOTE: The bounce is recorded INTO the layer, but for MONITORING during recording
+                // we need to hear it. Since the recording layer's processBlock only outputs what
+                // it has recorded so far (which starts empty), we add bounceBuffer to OUTPUT below.
+                if (layerMode && shouldBounce && recordingLayerIndex > 0 && i == recordingLayerIndex)
+                {
+                    for (int ch = 0; ch < numChannels; ++ch)
+                        layerBuffer.addFrom(ch, 0, bounceBuffer, ch, 0, numSamples);
+                }
+
                 inputAddedToOutput = true;  // processBlock will add input to output for monitoring
             }
             else
@@ -899,42 +1142,95 @@ public:
             }
 
             // Mix into main output (loop + input combined)
-            for (int ch = 0; ch < numChannels; ++ch)
+            // Track mode: sum all layers (additive mixing)
+            // Layer mode: higher layers completely override lower layers DURING PLAYBACK
+            //
+            // SKIP OUTPUT MIXING for layers being bounced - they're already included
+            // in the recording layer's output via the bounce buffer
+            if (!skipOutputMixing)
             {
-                buffer.addFrom(ch, 0, layerBuffer, ch, 0, numSamples);
+                for (int ch = 0; ch < numChannels; ++ch)
+                {
+                    if (!layerMode)
+                    {
+                        // Track mode: simple additive mixing
+                        buffer.addFrom(ch, 0, layerBuffer, ch, 0, numSamples);
+                    }
+                    else
+                    {
+                        // Layer mode: ALL layers use copyFrom to override prior layers
+                        // This includes recording/overdubbing layers - they contain the full mix
+                        // (bounce + input + existing content) and should completely replace
+                        // any prior layer content in the output buffer.
+                        //
+                        // During bounce: prior layers are skipped via skipOutputMixing
+                        // After bounce complete: recording layer has the bounced content baked in,
+                        // so it should override (not add to) prior layers' output.
+                        buffer.copyFrom(ch, 0, layerBuffer, ch, 0, numSamples);
+                    }
+                }
             }
 
             // Also accumulate JUST the loop playback portion (without input) for separate processing
             // This allows effects like degrade to only affect loop playback, not input
-            if (!isRecording && !isOverdubbing)
+            // Also skip for bounced layers to prevent double-counting in effects
+            if (!skipOutputMixing)
             {
-                // Pure playback layer - add to loop-only buffer
-                for (int ch = 0; ch < numChannels; ++ch)
+                if (!isRecording && !isOverdubbing)
                 {
-                    loopOnlyBuffer.addFrom(ch, 0, layerBuffer, ch, 0, numSamples);
-                }
-            }
-            else
-            {
-                // Recording/overdubbing: the layer buffer contains input + loop playback mixed
-                // We need to subtract input to get just the loop portion for degrading
-                // Actually, during recording the loop portion IS the input being written
-                // During overdubbing, the layer outputs existing loop + input
-                // For Blooper-style: we want to degrade existing loop content, not new input
-                // So we read the existing content BEFORE it's mixed with input
-
-                // For overdubbing, processBlock already outputs existingLoop + input
-                // We need the existing loop part only. Let's get it by subtracting input.
-                // Note: This is approximate since layerBuffer = existingLoop + input
-                for (int ch = 0; ch < numChannels; ++ch)
-                {
-                    const float* layerData = layerBuffer.getReadPointer(ch);
-                    const float* inputData = inputBuffer.getReadPointer(ch);
-                    float* loopOnlyData = loopOnlyBuffer.getWritePointer(ch);
-                    for (int s = 0; s < numSamples; ++s)
+                    // Pure playback layer - apply same mixing logic as main buffer
+                    for (int ch = 0; ch < numChannels; ++ch)
                     {
-                        // Subtract input to get just the loop portion
-                        loopOnlyData[s] += layerData[s] - inputData[s];
+                        if (!layerMode)
+                        {
+                            loopOnlyBuffer.addFrom(ch, 0, layerBuffer, ch, 0, numSamples);
+                        }
+                        else
+                        {
+                            // Layer mode PLAYBACK: complete override
+                            loopOnlyBuffer.copyFrom(ch, 0, layerBuffer, ch, 0, numSamples);
+                        }
+                    }
+                }
+                else
+                {
+                    // Recording/overdubbing: the layer buffer contains input + loop playback mixed
+                    // We need to subtract input to get just the loop portion for degrading
+                    // Actually, during recording the loop portion IS the input being written
+                    // During overdubbing, the layer outputs existing loop + input
+                    // For Blooper-style: we want to degrade existing loop content, not new input
+                    // So we read the existing content BEFORE it's mixed with input
+
+                    // For overdubbing, processBlock already outputs existingLoop + input
+                    // We need the existing loop part only. Let's get it by subtracting input.
+                    //
+                    // IMPORTANT for Layer mode bounce: layerBuffer = existingLoop + (input + bounce)
+                    // We must subtract BOTH input AND bounce to get just existing loop content
+                    // Otherwise the bounce audio (prior layers) leaks into loopOnlyBuffer and gets
+                    // re-added in PluginProcessor, causing volume doubling at recording start
+                    for (int ch = 0; ch < numChannels; ++ch)
+                    {
+                        const float* layerData = layerBuffer.getReadPointer(ch);
+                        const float* inputData = inputBuffer.getReadPointer(ch);
+                        float* loopOnlyData = loopOnlyBuffer.getWritePointer(ch);
+                        for (int s = 0; s < numSamples; ++s)
+                        {
+                            float loopPortion = layerData[s] - inputData[s];
+
+                            // In Layer mode with bounce, also subtract the bounce audio
+                            // to prevent it from appearing in loopOnlyBuffer
+                            if (layerMode && shouldBounce && i == recordingLayerIndex && bounceBuffer.getNumSamples() > 0)
+                            {
+                                loopPortion -= bounceBuffer.getSample(ch, s);
+                            }
+
+                            // Layer mode: override (recording layer has full content baked in)
+                            // Track mode: additive (sum all layers)
+                            if (layerMode)
+                                loopOnlyData[s] = loopPortion;
+                            else
+                                loopOnlyData[s] += loopPortion;
+                        }
                     }
                 }
             }
@@ -942,6 +1238,19 @@ public:
             if (layers[i].getState() != LoopBuffer::State::Idle)
             {
                 anyPlaying = true;
+            }
+        }
+
+        // LAYER MODE BOUNCE: Add bounce to loopOnlyBuffer for effects processing only
+        // The main buffer already has bounce via the recording layer's output (input+bounce),
+        // so we do NOT add bounceBuffer to buffer again - that would cause double summing.
+        // We only need bounce in loopOnlyBuffer so effects (degrade, reverb) apply to prior layers' audio.
+        if (layerMode && shouldBounce && bounceBuffer.getNumSamples() > 0)
+        {
+            // Only add to loopOnlyBuffer for effects processing
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                loopOnlyBuffer.addFrom(ch, 0, bounceBuffer, ch, 0, numSamples);
             }
         }
 
@@ -960,9 +1269,6 @@ public:
                 buffer.addFrom(ch, 0, inputBuffer, ch, 0, numSamples);
             }
         }
-
-        // NOTE: MixBus stencil logic is handled in PluginProcessor.cpp AFTER effects
-        // This ensures MixBus audio (which was captured post-effects) plays back correctly
 
         // Measure pre-clip peak levels and count clip events for diagnostics
         float peakPreClipL = 0.0f;
@@ -1585,6 +1891,19 @@ public:
         return additiveModeEnabled.load();
     }
 
+    // Layer mode: Track (false) = sum all layers, Layer (true) = punch-through
+    // In Layer mode, higher layers override lower layers where they have content
+    void setLayerModeEnabled(bool enabled)
+    {
+        layerModeEnabled.store(enabled);
+        DBG("LAYER MODE: " + juce::String(enabled ? "LAYER (punch-through)" : "TRACK (sum)"));
+    }
+
+    bool isLayerModeEnabled() const
+    {
+        return layerModeEnabled.load();
+    }
+
     // Start additive capture (called when DUB is pressed while ADD+ mode is ON)
     // If already capturing, this creates a NEW override layer on top
     void startAdditiveCapture()
@@ -1744,418 +2063,31 @@ public:
         additiveCaptureWritePos += numSamples;
     }
 
-    // ============================================================
-    // MIX BUS CONTROLS
-    // ============================================================
-
-    // Start recording to MixBus (punch in)
-    void startMixBusRecording()
-    {
-        if (masterLoopLength <= 0 || !hasContent())
-        {
-            DBG("MIXBUS: Cannot record - no loop content, masterLoopLength=" + juce::String(masterLoopLength));
-            return;
-        }
-
-        // Ensure MixBus buffer is properly sized
-        if (mixBusBuffer.getNumSamples() < masterLoopLength)
-        {
-            DBG("MIXBUS: Resizing buffer from " + juce::String(mixBusBuffer.getNumSamples()) +
-                " to " + juce::String(masterLoopLength));
-            mixBusBuffer.setSize(2, masterLoopLength);
-        }
-
-        // Ensure content mask is properly sized
-        if (mixBusContentMask.size() < static_cast<size_t>(masterLoopLength))
-        {
-            DBG("MIXBUS: Resizing content mask to " + juce::String(masterLoopLength));
-            mixBusContentMask.resize(static_cast<size_t>(masterLoopLength), false);
-        }
-
-        mixBusRecording.store(true);
-        DBG("MIXBUS: Recording started (punch in), bufferSize=" + juce::String(mixBusBuffer.getNumSamples()) +
-            ", maskSize=" + juce::String(static_cast<int>(mixBusContentMask.size())));
-    }
-
-    // Stop recording to MixBus (punch out)
-    void stopMixBusRecording()
-    {
-        if (!mixBusRecording.load())
-            return;
-
-        mixBusRecording.store(false);
-
-        // Check if we actually have content now
-        updateMixBusHasContent();
-
-        DBG("MIXBUS: Recording stopped (punch out), hasContent=" +
-            juce::String(mixBusHasContent ? "true" : "false"));
-    }
-
-    // Toggle MixBus recording (punch in/out)
-    void toggleMixBusRecording()
-    {
-        if (mixBusRecording.load())
-            stopMixBusRecording();
-        else
-            startMixBusRecording();
-    }
-
-    bool isMixBusRecording() const
-    {
-        return mixBusRecording.load();
-    }
-
-    // Called from PluginProcessor to capture effected audio to MixBus
-    void captureForMixBus(const juce::AudioBuffer<float>& buffer, int numSamples)
-    {
-        if (!mixBusRecording.load() || masterLoopLength <= 0)
-            return;
-
-        // Ensure buffer is allocated
-        if (mixBusBuffer.getNumSamples() < masterLoopLength)
-        {
-            DBG("MIXBUS CAPTURE: Buffer too small! " + juce::String(mixBusBuffer.getNumSamples()) +
-                " < " + juce::String(masterLoopLength));
-            return;
-        }
-
-        // Ensure mask is allocated
-        if (mixBusContentMask.size() < static_cast<size_t>(masterLoopLength))
-        {
-            DBG("MIXBUS CAPTURE: Mask too small! " + juce::String(static_cast<int>(mixBusContentMask.size())) +
-                " < " + juce::String(masterLoopLength));
-            return;
-        }
-
-        const int numChannels = std::min(buffer.getNumChannels(), 2);
-
-        // Get playhead position synced with layer 0
-        int playheadSamples = static_cast<int>(layers[0].getRawPlayhead());
-        if (playheadSamples < 0) playheadSamples = 0;
-        if (playheadSamples >= masterLoopLength) playheadSamples = playheadSamples % masterLoopLength;
-
-        // Track peak for debugging
-        float peakLevel = 0.0f;
-
-        // In compound mode, fill entire loop with content on first capture
-        const bool compoundMode = mixBusCompoundMode.load();
-        if (compoundMode && !mixBusHasContent)
-        {
-            // Initialize entire mask to true for compound mode
-            std::fill(mixBusContentMask.begin(), mixBusContentMask.end(), true);
-            DBG("MIXBUS: Compound mode - marking entire loop as content");
-        }
-
-        // Write to MixBus buffer and mark content mask
-        for (int i = 0; i < numSamples; ++i)
-        {
-            int writePos = (playheadSamples + i) % masterLoopLength;
-            for (int ch = 0; ch < numChannels; ++ch)
-            {
-                float sample = buffer.getSample(ch, i);
-
-                // Apply safety processing (NaN/Inf check + soft clip)
-                sample = safeSample(sample);
-
-                mixBusBuffer.setSample(ch, writePos, sample);
-                if (std::abs(sample) > peakLevel) peakLevel = std::abs(sample);
-            }
-            // Mark this position as having content
-            mixBusContentMask[static_cast<size_t>(writePos)] = true;
-        }
-
-        // Update peak level for VU meter
-        float curPeak = mixBusPeakLevel.load();
-        mixBusPeakLevel.store(peakLevel > curPeak ? peakLevel : curPeak * 0.95f);
-
-        mixBusHasContent = true;
-    }
-
-    // Get MixBus audio for playback at current position
-    // Returns true if MixBus has content at this position (layers should be muted)
-    bool getMixBusAudioAtPosition(int samplePos, float& outL, float& outR) const
-    {
-        if (!mixBusHasContent || mixBusMuted || masterLoopLength <= 0)
-        {
-            outL = 0.0f;
-            outR = 0.0f;
-            return false;
-        }
-
-        if (samplePos < 0 || samplePos >= masterLoopLength)
-            samplePos = samplePos % masterLoopLength;
-
-        // Check if this position has content
-        if (static_cast<size_t>(samplePos) < mixBusContentMask.size() &&
-            mixBusContentMask[static_cast<size_t>(samplePos)])
-        {
-            outL = mixBusBuffer.getSample(0, samplePos);
-            outR = mixBusBuffer.getNumChannels() > 1 ? mixBusBuffer.getSample(1, samplePos) : outL;
-            return true;  // MixBus has content here - mute layers
-        }
-
-        outL = 0.0f;
-        outR = 0.0f;
-        return false;  // No content - layers should play through
-    }
-
-    // Check if MixBus has content at a specific sample position
-    bool mixBusHasContentAtPosition(int samplePos) const
-    {
-        if (!mixBusHasContent || mixBusMuted || masterLoopLength <= 0)
-            return false;
-
-        if (samplePos < 0) samplePos = 0;
-        if (samplePos >= masterLoopLength) samplePos = samplePos % masterLoopLength;
-
-        return static_cast<size_t>(samplePos) < mixBusContentMask.size() &&
-               mixBusContentMask[static_cast<size_t>(samplePos)];
-    }
-
-    // Inject MixBus content into loopPlaybackBuffer BEFORE effects
-    // This ensures MixBus audio goes through Sat → Degrade → Reverb
-    // Where MixBus has content, it replaces layer audio; where empty, layers "poke through"
-    // Helper to read from MixBus buffer with linear interpolation
-    float readMixBusWithInterpolation(int channel, float position) const
-    {
-        if (masterLoopLength <= 0 || channel >= mixBusBuffer.getNumChannels())
-            return 0.0f;
-
-        // Wrap position
-        while (position < 0) position += masterLoopLength;
-        while (position >= masterLoopLength) position -= masterLoopLength;
-
-        const int idx0 = static_cast<int>(position) % masterLoopLength;
-        const int idx1 = (idx0 + 1) % masterLoopLength;
-        const float frac = position - std::floor(position);
-
-        const float s0 = mixBusBuffer.getSample(channel, idx0);
-        const float s1 = mixBusBuffer.getSample(channel, idx1);
-
-        return safeSample(s0 * (1.0f - frac) + s1 * frac);
-    }
-
-    void injectMixBusToPlayback(juce::AudioBuffer<float>& loopPlaybackBuffer, int numSamples)
-    {
-        if (!mixBusHasContent || mixBusMuted || masterLoopLength <= 0)
-            return;
-
-        const int numChannels = std::min(loopPlaybackBuffer.getNumChannels(), 2);
-
-        // Get current playhead position (synced with layer 0) - this includes speed/pitch adjustments
-        float playheadPos = layers[0].getRawPlayhead();
-        if (playheadPos < 0) playheadPos = 0;
-
-        // Get playback rate from layer 0 to advance MixBus at same rate
-        const float playbackRate = layers[0].getPlaybackRate();
-        const bool reversed = layers[0].getReversed();
-
-        float mixBusPeak = 0.0f;
-
-        for (int s = 0; s < numSamples; ++s)
-        {
-            // Calculate position with wrapping
-            float samplePos = playheadPos;
-            while (samplePos < 0) samplePos += masterLoopLength;
-            while (samplePos >= masterLoopLength) samplePos -= masterLoopLength;
-
-            int intPos = static_cast<int>(samplePos);
-
-            // Check if MixBus has content at this position
-            if (mixBusHasContentAtPosition(intPos))
-            {
-                // MixBus has content - replace layer playback with MixBus audio
-                // Use interpolation for smooth playback at variable speeds
-                float mixL = readMixBusWithInterpolation(0, samplePos);
-                float mixR = mixBusBuffer.getNumChannels() > 1 ?
-                             readMixBusWithInterpolation(1, samplePos) : mixL;
-
-                // Replace loop playback content (this will go through effects next)
-                loopPlaybackBuffer.setSample(0, s, mixL);
-                if (numChannels > 1)
-                    loopPlaybackBuffer.setSample(1, s, mixR);
-
-                // Track peak for VU meter
-                float absL = std::abs(mixL);
-                float absR = std::abs(mixR);
-                if (absL > mixBusPeak) mixBusPeak = absL;
-                if (absR > mixBusPeak) mixBusPeak = absR;
-            }
-            // else: layer playback stays in buffer (poke through)
-
-            // Advance position at same rate as layer 0
-            if (reversed)
-                playheadPos -= playbackRate;
-            else
-                playheadPos += playbackRate;
-        }
-
-        // Update MixBus peak level
-        float curPeak = mixBusPeakLevel.load();
-        mixBusPeakLevel.store(mixBusPeak > curPeak ? mixBusPeak : curPeak * 0.92f);
-    }
-
-    // Clear MixBus content
-    void clearMixBus()
-    {
-        mixBusBuffer.clear();
-        std::fill(mixBusContentMask.begin(), mixBusContentMask.end(), false);
-        mixBusHasContent = false;
-        mixBusRecording.store(false);
-        DBG("MIXBUS: Cleared");
-    }
-
-    // Mute/unmute MixBus
-    void setMixBusMuted(bool muted)
-    {
-        mixBusMuted = muted;
-        DBG("MIXBUS: " + juce::String(muted ? "Muted" : "Unmuted"));
-    }
-
-    bool isMixBusMuted() const { return mixBusMuted; }
-    bool mixBusHasAnyContent() const { return mixBusHasContent; }
-    float getMixBusPeakLevel() const { return mixBusPeakLevel.load(); }
-
-    // Compound mode: when enabled, MixBus re-captures each cycle creating feedback effects
-    void setMixBusCompoundMode(bool enabled)
-    {
-        mixBusCompoundMode.store(enabled);
-        DBG("MIXBUS: Compound mode " + juce::String(enabled ? "ENABLED" : "DISABLED"));
-    }
-
-    bool isMixBusCompoundMode() const { return mixBusCompoundMode.load(); }
-
-    void toggleMixBusCompoundMode()
-    {
-        bool newState = !mixBusCompoundMode.load();
-        mixBusCompoundMode.store(newState);
-        DBG("MIXBUS: Compound mode toggled to " + juce::String(newState ? "ON" : "OFF"));
-    }
-
-    // Get MixBus waveform data for UI visualization
-    // Returns per-sample content mask (true = has content) along with waveform amplitude
-    std::vector<float> getMixBusWaveformData(int numPoints) const
-    {
-        std::vector<float> waveform(numPoints, 0.0f);
-
-        if (!mixBusHasContent || masterLoopLength <= 0 || mixBusBuffer.getNumSamples() < masterLoopLength)
-            return waveform;
-
-        const int samplesPerPoint = masterLoopLength / numPoints;
-        if (samplesPerPoint <= 0)
-            return waveform;
-
-        for (int i = 0; i < numPoints; ++i)
-        {
-            int startSample = i * samplesPerPoint;
-            int endSample = std::min(startSample + samplesPerPoint, masterLoopLength);
-
-            float maxVal = 0.0f;
-            bool hasContent = false;
-
-            for (int s = startSample; s < endSample; ++s)
-            {
-                // Check if this sample position has content
-                if (static_cast<size_t>(s) < mixBusContentMask.size() && mixBusContentMask[static_cast<size_t>(s)])
-                {
-                    hasContent = true;
-                    float valL = std::abs(mixBusBuffer.getSample(0, s));
-                    float valR = mixBusBuffer.getNumChannels() > 1 ? std::abs(mixBusBuffer.getSample(1, s)) : valL;
-                    float val = std::max(valL, valR);
-                    if (val > maxVal) maxVal = val;
-                }
-            }
-
-            // Only set waveform value if this region has content
-            waveform[i] = hasContent ? maxVal : 0.0f;
-        }
-
-        // Normalize
-        float maxWaveform = 0.0f;
-        for (float v : waveform)
-            if (v > maxWaveform) maxWaveform = v;
-
-        if (maxWaveform > 0.0f)
-        {
-            for (float& v : waveform)
-                v /= maxWaveform;
-        }
-
-        return waveform;
-    }
-
-    // Get MixBus content mask for UI (which regions have content)
-    std::vector<bool> getMixBusContentMaskDownsampled(int numPoints) const
-    {
-        std::vector<bool> mask(numPoints, false);
-
-        if (!mixBusHasContent || masterLoopLength <= 0)
-            return mask;
-
-        const int samplesPerPoint = masterLoopLength / numPoints;
-        if (samplesPerPoint <= 0)
-            return mask;
-
-        for (int i = 0; i < numPoints; ++i)
-        {
-            int startSample = i * samplesPerPoint;
-            int endSample = std::min(startSample + samplesPerPoint, masterLoopLength);
-
-            // Check if ANY sample in this region has content
-            for (int s = startSample; s < endSample; ++s)
-            {
-                if (static_cast<size_t>(s) < mixBusContentMask.size() && mixBusContentMask[static_cast<size_t>(s)])
-                {
-                    mask[i] = true;
-                    break;
-                }
-            }
-        }
-
-        return mask;
-    }
-
-private:
-    // Update mixBusHasContent flag by scanning the mask
-    void updateMixBusHasContent()
-    {
-        mixBusHasContent = std::any_of(mixBusContentMask.begin(), mixBusContentMask.end(),
-                                        [](bool b) { return b; });
-    }
-
-public:
-    // Flatten all non-muted layers into layer 1, with MixBus as stencil overlay
-    // Where MixBus has content, it replaces the layer sum; where empty, layers poke through
-    // This sums all active layer buffers into layer 1 and clears the others + MixBus
+    // Flatten all non-muted layers into layer 0
+    // Sums all active layer buffers into layer 0 and clears the others
     // SEAMLESS: preserves playhead position and continues playback without interruption
     void flattenLayers()
     {
         // Check if we have anything to flatten
         bool hasLayers = (masterLoopLength > 0 && layers[0].hasContent());
-        bool hasMixBus = (mixBusHasContent && !mixBusMuted);
 
-        if (!hasLayers && !hasMixBus)
+        if (!hasLayers)
         {
             DBG("flattenLayers() - Nothing to flatten");
             return;
         }
 
-        // Allow flatten even with single layer if MixBus has content
-        if (highestLayer == 0 && !hasMixBus)
+        if (highestLayer == 0)
         {
-            DBG("flattenLayers() - Only one layer and no MixBus, nothing to flatten");
+            DBG("flattenLayers() - Only one layer, nothing to flatten");
             return;
         }
 
-        DBG("flattenLayers() - Flattening " + juce::String(highestLayer + 1) + " layers" +
-            (hasMixBus ? " + MixBus stencil" : "") + " into layer 1 (seamless)");
+        DBG("flattenLayers() - Flattening " + juce::String(highestLayer + 1) + " layers into layer 0 (seamless)");
 
         // Capture current playback state BEFORE modifying anything
         const float savedPlayhead = layers[0].getRawPlayhead();
         const LoopBuffer::State savedState = layers[0].getState();
-        const bool wasPlaying = (savedState == LoopBuffer::State::Playing ||
-                                  savedState == LoopBuffer::State::Overdubbing);
 
         DBG("  Saved playhead: " + juce::String(savedPlayhead) + " state: " + juce::String(static_cast<int>(savedState)));
 
@@ -2173,33 +2105,6 @@ public:
                 layers[i].addToBuffer(flattenedBuffer);
                 DBG("  Added layer " + juce::String(i + 1));
             }
-        }
-
-        // Apply MixBus as stencil overlay if it has content
-        // Where MixBus has content, replace the layer sum; where empty, keep layers
-        if (hasMixBus && mixBusBuffer.getNumSamples() >= masterLoopLength)
-        {
-            DBG("  Applying MixBus stencil overlay");
-            int mixBusSamples = 0;
-
-            for (int s = 0; s < masterLoopLength; ++s)
-            {
-                if (mixBusHasContentAtPosition(s))
-                {
-                    // MixBus has content at this position - replace layer sum with MixBus
-                    float mixL = safeSample(mixBusBuffer.getSample(0, s));
-                    float mixR = mixBusBuffer.getNumChannels() > 1 ?
-                                 safeSample(mixBusBuffer.getSample(1, s)) : mixL;
-
-                    flattenedBuffer.setSample(0, s, mixL);
-                    if (numChannels > 1)
-                        flattenedBuffer.setSample(1, s, mixR);
-
-                    mixBusSamples++;
-                }
-                // else: layer sum stays at this position (poke through)
-            }
-            DBG("  MixBus stencil applied to " + juce::String(mixBusSamples) + " samples");
         }
 
         // Soft clip the summed buffer to prevent clipping
@@ -2229,20 +2134,12 @@ public:
             layers[i].setMuted(false);  // Unmute
         }
 
-        // Clear MixBus after consolidation (it's now baked into layer 0)
-        if (hasMixBus)
-        {
-            clearMixBus();
-            DBG("  MixBus cleared after consolidation");
-        }
-
         // Reset state
         currentLayer = 0;
         highestLayer = 0;
 
-        DBG("flattenLayers() - Complete, layer 1 now contains flattened audio" +
-            juce::String(hasMixBus ? " with MixBus overlay" : "") +
-            ", playback continues at " + juce::String(savedPlayhead));
+        DBG("flattenLayers() - Complete, layer 0 now contains flattened audio" +
+            juce::String(", playback continues at ") + juce::String(savedPlayhead));
     }
 
     // Get target loop length in samples (0 = unlimited)
@@ -2326,6 +2223,16 @@ private:
     int smearPlaybackStart = 0;      // Write position snapshot at boundary crossing
     bool smearActive = false;        // True when playing back smear buffer
 
+    // Layer mode: Track (false) = sum all layers, Layer (true) = punch-through (higher layers override)
+    std::atomic<bool> layerModeEnabled { false };         // false = Track mode, true = Layer mode
+
+    // Layer mode bounce tracking - only bounce for exactly one loop pass
+    // After one full loop, stop adding bounce audio to prevent volume buildup
+    int layerModeBounceLayer = -1;           // Which layer is being bounced to (-1 = none)
+    int layerModeBounceStartSample = -1;     // Playhead position when bounce started
+    int layerModeBounceProgress = 0;         // Samples recorded since bounce started
+    bool layerModeBounceComplete = false;    // True after one full loop pass - stop bouncing
+
     // Additive mode state (Blooper-style effect compounding)
     // additiveModeEnabled = toggle state (UI button)
     // additiveRecordingActive = actually capturing (mode ON + DUB pressed)
@@ -2336,32 +2243,6 @@ private:
     int additiveCaptureWritePos = 0;              // Tracks total samples captured
     int additiveTargetLayer = -1;                 // Which override layer we're updating (-1 = none)
     bool additiveCreateNewLayer = false;          // If true, next boundary creates NEW override layer
-
-    // ============================================================
-    // MIX BUS - Single stereo mixdown layer with stencil behavior
-    // ============================================================
-    //
-    // The MixBus is a special layer that:
-    //   - Captures effected output (layers + input + effects) when recording
-    //   - Acts as a "stencil" during playback - where it has audio, it plays and mutes layers
-    //   - Where the MixBus is silent/empty, regular layers "poke through"
-    //   - Can be muted (then all regular layers play normally)
-    //   - Can be cleared via UNDO or dedicated clear
-    //
-    // Recording flow:
-    //   1. Press MIX button to punch in
-    //   2. Effected output writes to MixBus buffer at playhead position
-    //   3. Press MIX again (or PLAY) to punch out
-    //   4. MixBus now has content at recorded positions
-    //
-    juce::AudioBuffer<float> mixBusBuffer;        // The MixBus audio buffer (same length as loop)
-    std::vector<bool> mixBusContentMask;          // Per-sample mask: true = has content, false = empty
-    std::atomic<bool> mixBusRecording { false };  // Currently recording to MixBus
-    bool mixBusHasContent = false;                // Does MixBus have any content?
-    bool mixBusMuted = false;                     // Is MixBus muted?
-    float mixBusPlayhead = 0.0f;                  // MixBus playhead position (synced with layer 0)
-    std::atomic<float> mixBusPeakLevel { 0.0f };  // Peak level for VU meter
-    std::atomic<bool> mixBusCompoundMode { false }; // Compound mode: re-captures each cycle for feedback effects
 
     // Debug counter (member variable to avoid static issues)
     int xfadeDebugCounter = 0;

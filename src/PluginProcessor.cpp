@@ -73,6 +73,18 @@ LoopEngineProcessor::LoopEngineProcessor()
     reverbPreDelayParam = apvts.getRawParameterValue("reverbPreDelay");
     reverbModRateParam = apvts.getRawParameterValue("reverbModRate");
     reverbModDepthParam = apvts.getRawParameterValue("reverbModDepth");
+
+    // Effect bypass parameters (for persistence)
+    degradeMasterBypassParam = apvts.getRawParameterValue("degradeMasterBypass");
+    degradeLofiBypassParam = apvts.getRawParameterValue("degradeLofiBypass");
+    saturationBypassParam = apvts.getRawParameterValue("saturationBypass");
+    reverbBypassParam = apvts.getRawParameterValue("reverbBypass");
+    delayBypassParam = apvts.getRawParameterValue("delayBypass");
+    microLooperBypassParam = apvts.getRawParameterValue("microLooperBypass");
+    subBassBypassParam = apvts.getRawParameterValue("subBassBypass");
+
+    // Layer mode parameter
+    layerModeParam = apvts.getRawParameterValue("layerMode");
 }
 
 LoopEngineProcessor::~LoopEngineProcessor()
@@ -500,6 +512,50 @@ juce::AudioProcessorValueTreeState::ParameterLayout LoopEngineProcessor::createP
         20.0f,
         juce::AudioParameterFloatAttributes().withLabel("%")));
 
+    // =========== EFFECT BYPASS PARAMETERS ===========
+    // These persist effect on/off states across sessions
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"degradeMasterBypass", 1},
+        "Degrade Master Bypass",
+        true));  // true = bypassed (effect OFF) by default
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"degradeLofiBypass", 1},
+        "Degrade LoFi Bypass",
+        false));  // false = not bypassed (effect ON) - LOFI has no separate UI toggle
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"saturationBypass", 1},
+        "Saturation Bypass",
+        true));  // true = bypassed (effect OFF) by default
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"reverbBypass", 1},
+        "Reverb Bypass",
+        true));  // true = bypassed (effect OFF) by default
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"delayBypass", 1},
+        "Delay Bypass",
+        true));  // true = bypassed (effect OFF) by default
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"microLooperBypass", 1},
+        "Micro Looper Bypass",
+        true));  // true = bypassed (effect OFF) by default
+
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"subBassBypass", 1},
+        "Sub Bass Bypass",
+        true));  // true = bypassed (effect OFF) by default
+
+    // Layer mode: false = Track mode (sum), true = Layer mode (punch-through)
+    params.push_back(std::make_unique<juce::AudioParameterBool>(
+        juce::ParameterID{"layerMode", 1},
+        "Layer Mode",
+        false));  // Default to Track mode
+
     return { params.begin(), params.end() };
 }
 
@@ -577,6 +633,28 @@ void LoopEngineProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     // Prepare micro looper
     microLooper.prepare(sampleRate, samplesPerBlock);
+
+    // Sync persisted bypass states from APVTS to processors
+    // This runs once at startup to restore saved effect states
+    // Note: bypass params are inverted (true = bypassed = effect OFF)
+    if (degradeMasterBypassParam)
+        degradeProcessor.setEnabled(degradeMasterBypassParam->load() < 0.5f);
+    if (degradeLofiBypassParam)
+        degradeProcessor.setLofiEnabled(degradeLofiBypassParam->load() < 0.5f);
+    if (saturationBypassParam)
+        saturationProcessor.setEnabled(saturationBypassParam->load() < 0.5f);
+    if (reverbBypassParam)
+        reverbProcessor.setEnabled(reverbBypassParam->load() < 0.5f);
+    if (delayBypassParam)
+        delayEnabled.store(delayBypassParam->load() < 0.5f);
+    if (microLooperBypassParam)
+        microLooper.setEnabled(microLooperBypassParam->load() < 0.5f);
+    if (subBassBypassParam)
+        subBassProcessor.setEnabled(subBassBypassParam->load() < 0.5f);
+
+    // Sync layer mode from APVTS
+    if (layerModeParam)
+        loopEngine.setLayerModeEnabled(layerModeParam->load() > 0.5f);
 }
 
 void LoopEngineProcessor::releaseResources()
@@ -650,6 +728,10 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     for (auto i = totalNumInputChannels; i < totalNumOutputChannels; ++i)
         buffer.clear(i, 0, numSamples);
 
+    // NOTE: Bypass states are now synced in prepareToPlay and via direct UI calls
+    // The UI updates APVTS for persistence, and calls setXxxEnabled directly for immediate effect
+    // We no longer sync from APVTS on every processBlock to avoid race conditions with UI updates
+
     // Update loop engine parameters
     if (auto* loopStartParam = apvts.getRawParameterValue("loopStart"))
         loopEngine.setLoopStart(loopStartParam->load());
@@ -709,12 +791,7 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     saturationProcessor.setFuzzOctave(satFuzzOctaveParam->load() / 100.0f);
     saturationProcessor.setFuzzTone(satFuzzToneParam->load() / 100.0f);
 
-    // Signal flow: Loop/MixBus -> Saturation -> Degrade -> Reverb -> Delay
-
-    // Inject MixBus content into loopPlaybackBuffer BEFORE effects
-    // This ensures MixBus audio goes through the full effects chain (Sat, Degrade, Reverb)
-    // Where MixBus has content, it replaces layers; where empty, layers "poke through"
-    loopEngine.injectMixBusToPlayback(loopPlaybackBuffer, numSamples);
+    // Signal flow: Loop -> Saturation -> Degrade -> Reverb -> Delay
 
     // Apply saturation ONLY to the loop playback buffer (before degrade)
     if (saturationProcessor.isEnabled())
@@ -789,23 +866,12 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         }
     }
 
-    // NOTE: MixBus injection now happens BEFORE effects (see line ~717)
-    // so MixBus audio goes through Saturation -> Degrade -> Reverb
-    // This enables compound mode to accumulate effects each cycle
-
     // Capture for additive recording if active
     // This captures AFTER effects (sat, degrade, reverb) but BEFORE delay
     // "What you hear is what you get" - effected loop + input combined
     if (loopEngine.isAdditiveRecordingActive())
     {
         loopEngine.captureForAdditive(buffer, numSamples);
-    }
-
-    // Capture for MixBus recording if active
-    // Same capture point as additive - after effects, before delay
-    if (loopEngine.isMixBusRecording())
-    {
-        loopEngine.captureForMixBus(buffer, numSamples);
     }
 
     // Apply sub bass processing (octave-down generator) to the COMBINED output
@@ -957,6 +1023,9 @@ float LoopEngineProcessor::calculateSyncedDelayTime() const
 void LoopEngineProcessor::setDelayEnabled(bool enabled)
 {
     delayEnabled.store(enabled);
+    // Sync to APVTS for persistence (inverted: true = bypassed)
+    if (auto* param = apvts.getParameter("delayBypass"))
+        param->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
 }
 
 bool LoopEngineProcessor::getDelayEnabled() const
@@ -967,6 +1036,9 @@ bool LoopEngineProcessor::getDelayEnabled() const
 void LoopEngineProcessor::setDegradeEnabled(bool enabled)
 {
     degradeProcessor.setEnabled(enabled);
+    // Sync to APVTS for persistence (inverted: true = bypassed)
+    if (auto* param = apvts.getParameter("degradeMasterBypass"))
+        param->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
 }
 
 bool LoopEngineProcessor::getDegradeEnabled() const
@@ -982,11 +1054,17 @@ void LoopEngineProcessor::setDegradeFilterEnabled(bool enabled)
 void LoopEngineProcessor::setDegradeLofiEnabled(bool enabled)
 {
     degradeProcessor.setLofiEnabled(enabled);
+    // Sync to APVTS for persistence (inverted: true = bypassed)
+    if (auto* param = apvts.getParameter("degradeLofiBypass"))
+        param->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
 }
 
 void LoopEngineProcessor::setMicroLooperEnabled(bool enabled)
 {
     microLooper.setEnabled(enabled);
+    // Sync to APVTS for persistence (inverted: true = bypassed)
+    if (auto* param = apvts.getParameter("microLooperBypass"))
+        param->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
 }
 
 bool LoopEngineProcessor::getDegradeFilterEnabled() const
@@ -1027,6 +1105,9 @@ bool LoopEngineProcessor::getDegradeLPEnabled() const
 void LoopEngineProcessor::setSaturationEnabled(bool enabled)
 {
     saturationProcessor.setEnabled(enabled);
+    // Sync to APVTS for persistence (inverted: true = bypassed)
+    if (auto* param = apvts.getParameter("saturationBypass"))
+        param->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
 }
 
 bool LoopEngineProcessor::getSaturationEnabled() const
@@ -1047,6 +1128,9 @@ int LoopEngineProcessor::getSaturationType() const
 void LoopEngineProcessor::setSubBassEnabled(bool enabled)
 {
     subBassProcessor.setEnabled(enabled);
+    // Sync to APVTS for persistence (inverted: true = bypassed)
+    if (auto* param = apvts.getParameter("subBassBypass"))
+        param->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
 }
 
 bool LoopEngineProcessor::getSubBassEnabled() const
@@ -1057,6 +1141,9 @@ bool LoopEngineProcessor::getSubBassEnabled() const
 void LoopEngineProcessor::setReverbEnabled(bool enabled)
 {
     reverbProcessor.setEnabled(enabled);
+    // Sync to APVTS for persistence (inverted: true = bypassed)
+    if (auto* param = apvts.getParameter("reverbBypass"))
+        param->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
 }
 
 bool LoopEngineProcessor::getReverbEnabled() const

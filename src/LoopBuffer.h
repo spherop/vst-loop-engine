@@ -117,6 +117,9 @@ public:
         prevOutputR = 0.0f;
         prevInputL = 0.0f;
         prevInputR = 0.0f;
+
+        // Reset EQ state (keeps gain settings, just clears filter history)
+        resetEQState();
     }
 
     // Copy content from another LoopBuffer (for layer shuffling)
@@ -744,6 +747,15 @@ public:
             std::copy(pitchInputR.begin(), pitchInputR.begin() + numSamples, pitchOutputR.begin());
         }
 
+        // Phase 2.5: Apply per-layer 3-band EQ (if active)
+        if (isEQActive())
+        {
+            for (int i = 0; i < numSamples; ++i)
+            {
+                processEQ(pitchOutputL[i], pitchOutputR[i]);
+            }
+        }
+
         // Phase 3: Apply volume and pan, then mix with input and write to output buffer
         const float vol = volume.load();
         const float panVal = pan.load();
@@ -799,11 +811,91 @@ public:
 
     int getLoopLengthSamples() const { return loopLength; }
 
+    // Get loop boundaries as normalized positions (0-1)
+    float getLoopStartNormalized() const
+    {
+        if (loopLength <= 0) return 0.0f;
+        return static_cast<float>(loopStart) / static_cast<float>(loopLength);
+    }
+
+    float getLoopEndNormalized() const
+    {
+        if (loopLength <= 0) return 1.0f;
+        int end = (loopEnd > 0) ? loopEnd : loopLength;
+        return static_cast<float>(end) / static_cast<float>(loopLength);
+    }
+
     // Get raw playhead position for syncing
     float getRawPlayhead() const { return playHead; }
 
     // Set playhead position (for syncing with other layers)
     void setPlayhead(float position) { playHead = position; }
+
+    // Peek at playback content without advancing state (for Layer mode bounce)
+    // Reads what this layer would output at current playhead position
+    void peekPlayback(juce::AudioBuffer<float>& buffer) const
+    {
+        if (loopLength <= 0 || state.load() != State::Playing)
+        {
+            buffer.clear();
+            return;
+        }
+
+        const int numSamples = buffer.getNumSamples();
+        float* leftChannel = buffer.getWritePointer(0);
+        float* rightChannel = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
+
+        const int effectiveStart = loopStart;
+        const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
+        const int effectiveLength = effectiveEnd - effectiveStart;
+
+        if (effectiveLength <= 0)
+        {
+            buffer.clear();
+            return;
+        }
+
+        // Get playback rate and calculate sample positions
+        const float rate = playbackRateSmoothed.getTargetValue();
+        const bool reversed = isReversed.load();
+        const float fadeMultiplier = currentFadeMultiplier.load();
+        const float vol = volume.load();
+        const float panVal = pan.load();
+        const float panAngle = (panVal + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
+        const float panL = std::cos(panAngle);
+        const float panR = std::sin(panAngle);
+
+        float peekHead = playHead;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            // Read with crossfade at boundaries
+            float rawL, rawR;
+            readWithCrossfade(rawL, rawR, peekHead, effectiveStart, effectiveEnd);
+
+            // Apply fade and volume
+            float outL = rawL * fadeMultiplier * vol * panL;
+            float outR = rawR * fadeMultiplier * vol * panR;
+
+            leftChannel[i] = outL;
+            if (rightChannel)
+                rightChannel[i] = outR;
+
+            // Advance peek head (simulating playback without modifying actual state)
+            if (reversed)
+            {
+                peekHead -= rate;
+                while (peekHead < effectiveStart)
+                    peekHead += effectiveLength;
+            }
+            else
+            {
+                peekHead += rate;
+                while (peekHead >= effectiveEnd)
+                    peekHead -= effectiveLength;
+            }
+        }
+    }
 
     bool hasContent() const { return loopLength > 0; }
     bool getIsReversed() const { return isReversed.load(); }
@@ -826,6 +918,52 @@ public:
     // Per-layer pan (-1.0 = full left, 0.0 = center, 1.0 = full right)
     void setPan(float p) { pan.store(std::clamp(p, -1.0f, 1.0f)); }
     float getPan() const { return pan.load(); }
+
+    // ============================================
+    // PER-LAYER 3-BAND EQ
+    // Low shelf (200Hz), Mid peak (1kHz), High shelf (4kHz)
+    // Gain range: -12dB to +12dB (0.25 to 4.0 linear)
+    // ============================================
+
+    void setEQLow(float gainDB)
+    {
+        float clampedDB = std::clamp(gainDB, -12.0f, 12.0f);
+        float linear = std::pow(10.0f, clampedDB / 20.0f);
+        eqLowGain.store(linear);
+        eqCoeffsDirty = true;
+    }
+
+    void setEQMid(float gainDB)
+    {
+        float clampedDB = std::clamp(gainDB, -12.0f, 12.0f);
+        float linear = std::pow(10.0f, clampedDB / 20.0f);
+        eqMidGain.store(linear);
+        eqCoeffsDirty = true;
+    }
+
+    void setEQHigh(float gainDB)
+    {
+        float clampedDB = std::clamp(gainDB, -12.0f, 12.0f);
+        float linear = std::pow(10.0f, clampedDB / 20.0f);
+        eqHighGain.store(linear);
+        eqCoeffsDirty = true;
+    }
+
+    // Get EQ gains in dB for UI display
+    float getEQLowDB() const { return 20.0f * std::log10(std::max(eqLowGain.load(), 0.001f)); }
+    float getEQMidDB() const { return 20.0f * std::log10(std::max(eqMidGain.load(), 0.001f)); }
+    float getEQHighDB() const { return 20.0f * std::log10(std::max(eqHighGain.load(), 0.001f)); }
+
+    // Check if EQ is active (any band not at unity)
+    bool isEQActive() const
+    {
+        const float low = eqLowGain.load();
+        const float mid = eqMidGain.load();
+        const float high = eqHighGain.load();
+        return std::abs(low - 1.0f) > 0.01f ||
+               std::abs(mid - 1.0f) > 0.01f ||
+               std::abs(high - 1.0f) > 0.01f;
+    }
 
     // Apply soft clipping to entire buffer (for additive recording runaway prevention)
     void applyBufferSoftClip()
@@ -1025,6 +1163,34 @@ private:
     std::atomic<float> volume { 1.0f };      // Per-layer volume (0.0 to 1.0)
     std::atomic<float> pan { 0.0f };         // Per-layer pan (-1.0 to 1.0)
     std::atomic<bool> fadeActive { false };  // True when fade should apply during playback (any layer is recording)
+
+    // Per-layer 3-band EQ parameters (linear gain, 1.0 = unity)
+    std::atomic<float> eqLowGain { 1.0f };   // Low shelf at 200Hz
+    std::atomic<float> eqMidGain { 1.0f };   // Mid peak at 1kHz
+    std::atomic<float> eqHighGain { 1.0f };  // High shelf at 4kHz
+    bool eqCoeffsDirty = true;               // Flag to recalculate coefficients
+
+    // Biquad filter coefficients for 3-band EQ
+    // Low shelf (200Hz)
+    float eqLowB0 = 1.0f, eqLowB1 = 0.0f, eqLowB2 = 0.0f;
+    float eqLowA1 = 0.0f, eqLowA2 = 0.0f;
+    // Mid peak (1kHz)
+    float eqMidB0 = 1.0f, eqMidB1 = 0.0f, eqMidB2 = 0.0f;
+    float eqMidA1 = 0.0f, eqMidA2 = 0.0f;
+    // High shelf (4kHz)
+    float eqHighB0 = 1.0f, eqHighB1 = 0.0f, eqHighB2 = 0.0f;
+    float eqHighA1 = 0.0f, eqHighA2 = 0.0f;
+
+    // Biquad filter state (stereo, 3 bands)
+    // Low shelf state
+    float eqLowX1L = 0.0f, eqLowX2L = 0.0f, eqLowY1L = 0.0f, eqLowY2L = 0.0f;
+    float eqLowX1R = 0.0f, eqLowX2R = 0.0f, eqLowY1R = 0.0f, eqLowY2R = 0.0f;
+    // Mid peak state
+    float eqMidX1L = 0.0f, eqMidX2L = 0.0f, eqMidY1L = 0.0f, eqMidY2L = 0.0f;
+    float eqMidX1R = 0.0f, eqMidX2R = 0.0f, eqMidY1R = 0.0f, eqMidY2R = 0.0f;
+    // High shelf state
+    float eqHighX1L = 0.0f, eqHighX2L = 0.0f, eqHighY1L = 0.0f, eqHighY2L = 0.0f;
+    float eqHighX1R = 0.0f, eqHighX2R = 0.0f, eqHighY1R = 0.0f, eqHighY2R = 0.0f;
     std::atomic<State> state { State::Idle };
     LayerType layerType { LayerType::Regular };  // Layer type (Regular or Override/ADD+)
 
@@ -1170,6 +1336,140 @@ private:
         wasPitchShifting = false;
     }
 
+    // Reset EQ filter state (called from clear())
+    void resetEQState()
+    {
+        // Reset all biquad states to zero
+        eqLowX1L = eqLowX2L = eqLowY1L = eqLowY2L = 0.0f;
+        eqLowX1R = eqLowX2R = eqLowY1R = eqLowY2R = 0.0f;
+        eqMidX1L = eqMidX2L = eqMidY1L = eqMidY2L = 0.0f;
+        eqMidX1R = eqMidX2R = eqMidY1R = eqMidY2R = 0.0f;
+        eqHighX1L = eqHighX2L = eqHighY1L = eqHighY2L = 0.0f;
+        eqHighX1R = eqHighX2R = eqHighY1R = eqHighY2R = 0.0f;
+        eqCoeffsDirty = true;
+    }
+
+    // Calculate biquad coefficients for all 3 EQ bands
+    void updateEQCoefficients()
+    {
+        if (!eqCoeffsDirty || currentSampleRate <= 0)
+            return;
+
+        const float sampleRate = static_cast<float>(currentSampleRate);
+
+        // Low shelf at 200Hz
+        {
+            const float freq = 200.0f;
+            const float gain = eqLowGain.load();
+            const float Q = 0.707f;  // Butterworth Q for smooth shelf
+
+            const float A = std::sqrt(gain);
+            const float w0 = 2.0f * juce::MathConstants<float>::pi * freq / sampleRate;
+            const float cosW0 = std::cos(w0);
+            const float sinW0 = std::sin(w0);
+            const float alpha = sinW0 / (2.0f * Q);
+
+            const float a0 = (A + 1.0f) + (A - 1.0f) * cosW0 + 2.0f * std::sqrt(A) * alpha;
+            eqLowB0 = (A * ((A + 1.0f) - (A - 1.0f) * cosW0 + 2.0f * std::sqrt(A) * alpha)) / a0;
+            eqLowB1 = (2.0f * A * ((A - 1.0f) - (A + 1.0f) * cosW0)) / a0;
+            eqLowB2 = (A * ((A + 1.0f) - (A - 1.0f) * cosW0 - 2.0f * std::sqrt(A) * alpha)) / a0;
+            eqLowA1 = (-2.0f * ((A - 1.0f) + (A + 1.0f) * cosW0)) / a0;
+            eqLowA2 = ((A + 1.0f) + (A - 1.0f) * cosW0 - 2.0f * std::sqrt(A) * alpha) / a0;
+        }
+
+        // Mid peak at 1kHz
+        {
+            const float freq = 1000.0f;
+            const float gain = eqMidGain.load();
+            const float Q = 1.0f;  // Moderate Q for musical mid control
+
+            const float A = std::sqrt(gain);
+            const float w0 = 2.0f * juce::MathConstants<float>::pi * freq / sampleRate;
+            const float cosW0 = std::cos(w0);
+            const float sinW0 = std::sin(w0);
+            const float alpha = sinW0 / (2.0f * Q);
+
+            const float a0 = 1.0f + alpha / A;
+            eqMidB0 = (1.0f + alpha * A) / a0;
+            eqMidB1 = (-2.0f * cosW0) / a0;
+            eqMidB2 = (1.0f - alpha * A) / a0;
+            eqMidA1 = (-2.0f * cosW0) / a0;
+            eqMidA2 = (1.0f - alpha / A) / a0;
+        }
+
+        // High shelf at 4kHz
+        {
+            const float freq = 4000.0f;
+            const float gain = eqHighGain.load();
+            const float Q = 0.707f;  // Butterworth Q for smooth shelf
+
+            const float A = std::sqrt(gain);
+            const float w0 = 2.0f * juce::MathConstants<float>::pi * freq / sampleRate;
+            const float cosW0 = std::cos(w0);
+            const float sinW0 = std::sin(w0);
+            const float alpha = sinW0 / (2.0f * Q);
+
+            const float a0 = (A + 1.0f) - (A - 1.0f) * cosW0 + 2.0f * std::sqrt(A) * alpha;
+            eqHighB0 = (A * ((A + 1.0f) + (A - 1.0f) * cosW0 + 2.0f * std::sqrt(A) * alpha)) / a0;
+            eqHighB1 = (-2.0f * A * ((A - 1.0f) + (A + 1.0f) * cosW0)) / a0;
+            eqHighB2 = (A * ((A + 1.0f) + (A - 1.0f) * cosW0 - 2.0f * std::sqrt(A) * alpha)) / a0;
+            eqHighA1 = (2.0f * ((A - 1.0f) - (A + 1.0f) * cosW0)) / a0;
+            eqHighA2 = ((A + 1.0f) - (A - 1.0f) * cosW0 - 2.0f * std::sqrt(A) * alpha) / a0;
+        }
+
+        eqCoeffsDirty = false;
+    }
+
+    // Apply 3-band EQ to a stereo sample pair (inline for efficiency)
+    inline void processEQ(float& sampleL, float& sampleR)
+    {
+        // Update coefficients if needed (only when gains change)
+        if (eqCoeffsDirty)
+            updateEQCoefficients();
+
+        // Process low shelf - Left
+        float outL = eqLowB0 * sampleL + eqLowB1 * eqLowX1L + eqLowB2 * eqLowX2L
+                   - eqLowA1 * eqLowY1L - eqLowA2 * eqLowY2L;
+        eqLowX2L = eqLowX1L; eqLowX1L = sampleL;
+        eqLowY2L = eqLowY1L; eqLowY1L = outL;
+        sampleL = outL;
+
+        // Process low shelf - Right
+        float outR = eqLowB0 * sampleR + eqLowB1 * eqLowX1R + eqLowB2 * eqLowX2R
+                   - eqLowA1 * eqLowY1R - eqLowA2 * eqLowY2R;
+        eqLowX2R = eqLowX1R; eqLowX1R = sampleR;
+        eqLowY2R = eqLowY1R; eqLowY1R = outR;
+        sampleR = outR;
+
+        // Process mid peak - Left
+        outL = eqMidB0 * sampleL + eqMidB1 * eqMidX1L + eqMidB2 * eqMidX2L
+             - eqMidA1 * eqMidY1L - eqMidA2 * eqMidY2L;
+        eqMidX2L = eqMidX1L; eqMidX1L = sampleL;
+        eqMidY2L = eqMidY1L; eqMidY1L = outL;
+        sampleL = outL;
+
+        // Process mid peak - Right
+        outR = eqMidB0 * sampleR + eqMidB1 * eqMidX1R + eqMidB2 * eqMidX2R
+             - eqMidA1 * eqMidY1R - eqMidA2 * eqMidY2R;
+        eqMidX2R = eqMidX1R; eqMidX1R = sampleR;
+        eqMidY2R = eqMidY1R; eqMidY1R = outR;
+        sampleR = outR;
+
+        // Process high shelf - Left
+        outL = eqHighB0 * sampleL + eqHighB1 * eqHighX1L + eqHighB2 * eqHighX2L
+             - eqHighA1 * eqHighY1L - eqHighA2 * eqHighY2L;
+        eqHighX2L = eqHighX1L; eqHighX1L = sampleL;
+        eqHighY2L = eqHighY1L; eqHighY1L = outL;
+        sampleL = outL;
+
+        // Process high shelf - Right
+        outR = eqHighB0 * sampleR + eqHighB1 * eqHighX1R + eqHighB2 * eqHighX2R
+             - eqHighA1 * eqHighY1R - eqHighA2 * eqHighY2R;
+        eqHighX2R = eqHighX1R; eqHighX1R = sampleR;
+        eqHighY2R = eqHighY1R; eqHighY1R = outR;
+        sampleR = outR;
+    }
+
     void processRecording(float inputL, float inputR, float& outputL, float& outputR)
     {
         // Consume smoothed values to keep them in sync even during recording
@@ -1207,9 +1507,9 @@ private:
         }
         else
         {
-            // Target or max loop length reached - auto-stop recording
-            // Blooper-style: just switch to play mode, user taps REC again to overdub
-            stopRecording(false);
+            // Target loop length reached - transition to overdub mode
+            // This allows continued dubbing on layer 1 until DUB/PLAY/STOP is pressed
+            stopRecording(true);  // true = continue to overdub mode
         }
 
         // Output the input (monitoring)

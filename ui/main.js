@@ -446,9 +446,7 @@ class TabController {
                     looperController.drawWaveform(
                         looperController.lastWaveformData,
                         looperController.lastLayerWaveforms,
-                        looperController.lastLayerMutes,
-                        looperController.lastMixBusWaveform,
-                        looperController.lastMixBusContentMask
+                        looperController.lastLayerMutes
                     );
                 } else {
                     looperController.drawEmptyWaveform();
@@ -516,22 +514,9 @@ class LooperController {
         this.resetParamsFn = getNativeFunction("resetLoopParams");
         this.setInputMutedFn = getNativeFunction("setInputMuted");
 
-        // MixBus native functions
-        this.toggleMixBusRecordingFn = getNativeFunction("toggleMixBusRecording");
-        this.stopMixBusRecordingFn = getNativeFunction("stopMixBusRecording");
-        this.clearMixBusFn = getNativeFunction("clearMixBus");
-        this.setMixBusMutedFn = getNativeFunction("setMixBusMuted");
-        this.toggleMixBusCompoundModeFn = getNativeFunction("toggleMixBusCompoundMode");
-
-        // MixBus state
-        this.mixBusRecording = false;
-        this.mixBusHasContent = false;
-        this.mixBusMuted = false;
-        this.mixBusPeakLevel = 0;
-        this.mixBusCompoundMode = false;
-
-        // Double-click detection for compound mode toggle
-        this.mixBtnLastClickTime = 0;
+        // Layer mode state (Track mode = false, Layer mode = true)
+        this.layerModeEnabled = false;
+        this.setLayerModeFn = getNativeFunction("setLayerMode");
 
         // Input monitoring state
         this.inputMuted = false;
@@ -569,7 +554,7 @@ class LooperController {
         this.setupInputMonitor();
         this.setupLoopLengthSelector();
         this.setupLayers();
-        this.setupMixBus();
+        this.setupModeToggle();
         this.setupWaveform();
         this.setupZoomControls();
         this.setupRecordingOverlay();
@@ -636,7 +621,6 @@ class LooperController {
         this.redoBtn = document.getElementById('redo-btn');
         this.clearBtn = document.getElementById('clear-btn');
         this.addBtn = document.getElementById('add-btn');
-        this.mixBtn = document.getElementById('mix-btn');
         this.timeDisplay = document.getElementById('loop-time-display');
 
         if (this.recBtn) {
@@ -658,30 +642,6 @@ class LooperController {
             this.clearBtn.addEventListener('click', () => this.clear());
         }
 
-        // MIX button - single click toggles recording, double-click toggles compound mode
-        if (this.mixBtn) {
-            this.mixBtn.addEventListener('click', async () => {
-                const now = Date.now();
-                const timeSinceLastClick = now - this.mixBtnLastClickTime;
-                this.mixBtnLastClickTime = now;
-
-                // Double-click detection (within 300ms)
-                if (timeSinceLastClick < 300) {
-                    // Double-click: toggle compound mode
-                    await this.toggleMixBusCompoundMode();
-                    console.log('[LOOPER] MIX double-click - compound mode toggled');
-                } else {
-                    // Single click: toggle recording (with small delay to detect double-click)
-                    setTimeout(async () => {
-                        // Only trigger if no second click happened
-                        if (Date.now() - this.mixBtnLastClickTime >= 280) {
-                            await this.toggleMixBusRecording();
-                        }
-                    }, 300);
-                }
-            });
-        }
-
         // ADD+ button - MODE TOGGLE for additive recording (Blooper-style)
         // When ADD+ mode is ON, DUB creates override layers instead of normal layers
         // Track mode state locally
@@ -692,41 +652,6 @@ class LooperController {
             this.addBtn.addEventListener('click', async () => {
                 await this.toggleAdditiveMode();
             });
-        }
-    }
-
-    // Toggle MixBus recording on/off (punch in/out)
-    async toggleMixBusRecording() {
-        try {
-            await this.toggleMixBusRecordingFn();
-            // State will be updated via polling
-            console.log('[LOOPER] MixBus recording toggled');
-        } catch (e) {
-            console.error('Error toggling MixBus recording:', e);
-        }
-    }
-
-    // Stop MixBus recording (punch out only)
-    async stopMixBusRecording() {
-        try {
-            await this.stopMixBusRecordingFn();
-            this.mixBusRecording = false;
-            this.updateMixBusUI();
-            console.log('[LOOPER] MixBus recording stopped');
-        } catch (e) {
-            console.error('Error stopping MixBus recording:', e);
-        }
-    }
-
-    // Toggle MixBus compound mode (double-click on MIX button)
-    // In compound mode, MixBus re-captures each cycle creating feedback effects
-    async toggleMixBusCompoundMode() {
-        try {
-            await this.toggleMixBusCompoundModeFn();
-            // State will be updated via polling
-            console.log('[LOOPER] MixBus compound mode toggled');
-        } catch (e) {
-            console.error('Error toggling MixBus compound mode:', e);
         }
     }
 
@@ -749,93 +674,39 @@ class LooperController {
         }
     }
 
-    // Setup MixBus controls (BUS indicator button, mixer channel controls)
-    setupMixBus() {
-        this.busBtn = document.getElementById('bus-btn');
-        this.busMixerChannel = document.querySelector('.mixer-channel-bus');
-        this.busMuteBtn = document.getElementById('mute-bus');
-        this.busClearBtn = document.getElementById('clear-bus');
+    // Setup Track/Layer mode toggle
+    setupModeToggle() {
+        this.modeToggleBtn = document.getElementById('mode-toggle-btn');
+        this.modeIcon = document.getElementById('mode-icon');
+        this.modeLabel = document.getElementById('mode-label');
 
-        // BUS indicator button - click to toggle mute, shift+click to clear
-        if (this.busBtn) {
-            this.busBtn.addEventListener('click', async (e) => {
-                if (e.shiftKey) {
-                    // Shift+click clears MixBus content (like shift+click on layer buttons)
-                    await this.clearMixBus();
-                    console.log('[LOOPER] BUS shift+click - cleared MixBus');
-                } else {
-                    await this.toggleMixBusMute();
-                }
-            });
-        }
-
-        // Mixer channel mute button
-        if (this.busMuteBtn) {
-            this.busMuteBtn.addEventListener('click', async () => {
-                await this.toggleMixBusMute();
-            });
-        }
-
-        // Mixer channel clear button
-        if (this.busClearBtn) {
-            this.busClearBtn.addEventListener('click', async () => {
-                await this.clearMixBus();
+        if (this.modeToggleBtn) {
+            this.modeToggleBtn.addEventListener('click', async () => {
+                await this.toggleLayerMode();
             });
         }
     }
 
-    async toggleMixBusMute() {
+    async toggleLayerMode() {
         try {
-            this.mixBusMuted = !this.mixBusMuted;
-            await this.setMixBusMutedFn(this.mixBusMuted);
-            this.updateMixBusUI();
-            console.log(`[LOOPER] MixBus ${this.mixBusMuted ? 'muted' : 'unmuted'}`);
+            this.layerModeEnabled = !this.layerModeEnabled;
+            await this.setLayerModeFn(this.layerModeEnabled);
+            this.updateModeToggleUI();
+            console.log(`[LOOPER] Layer mode ${this.layerModeEnabled ? 'ENABLED (Layer)' : 'DISABLED (Track)'}`);
         } catch (e) {
-            console.error('Error toggling MixBus mute:', e);
+            console.error('Error toggling layer mode:', e);
         }
     }
 
-    async clearMixBus() {
-        try {
-            await this.clearMixBusFn();
-            console.log('[LOOPER] MixBus cleared');
-        } catch (e) {
-            console.error('Error clearing MixBus:', e);
+    updateModeToggleUI() {
+        if (this.modeIcon) {
+            this.modeIcon.textContent = this.layerModeEnabled ? 'L' : 'T';
         }
-    }
-
-    // Update MixBus UI elements based on current state
-    updateMixBusUI() {
-        // Update MIX transport button
-        // Only show active state when recording - no has-content tint
-        // (content is indicated via BUS button and mixer channel instead)
-        if (this.mixBtn) {
-            this.mixBtn.classList.toggle('active', this.mixBusRecording);
-            this.mixBtn.classList.toggle('compound', this.mixBusCompoundMode);
+        if (this.modeLabel) {
+            this.modeLabel.textContent = this.layerModeEnabled ? 'LAYER' : 'TRACK';
         }
-
-        // Update BUS indicator button
-        if (this.busBtn) {
-            this.busBtn.classList.toggle('has-content', this.mixBusHasContent);
-            this.busBtn.classList.toggle('recording', this.mixBusRecording);
-            this.busBtn.classList.toggle('muted', this.mixBusMuted);
-        }
-
-        // Update mixer channel
-        if (this.busMixerChannel) {
-            this.busMixerChannel.classList.toggle('has-content', this.mixBusHasContent);
-            this.busMixerChannel.classList.toggle('recording', this.mixBusRecording);
-            this.busMixerChannel.classList.toggle('muted', this.mixBusMuted);
-        }
-
-        // Update mute button appearance
-        if (this.busMuteBtn) {
-            this.busMuteBtn.classList.toggle('active', this.mixBusMuted);
-        }
-
-        // Disable REC/DUB button when MIX is recording
-        if (this.recBtn) {
-            this.recBtn.classList.toggle('mix-disabled', this.mixBusRecording);
+        if (this.modeToggleBtn) {
+            this.modeToggleBtn.classList.toggle('layer-mode', this.layerModeEnabled);
         }
     }
 
@@ -1329,9 +1200,7 @@ class LooperController {
                     this.drawWaveform(
                         this.lastWaveformData,
                         this.lastLayerWaveforms,
-                        this.lastLayerMutes,
-                        this.lastMixBusWaveform,
-                        this.lastMixBusContentMask
+                        this.lastLayerMutes
                     );
                 }
             });
@@ -1473,13 +1342,11 @@ class LooperController {
         this.ctx.fillText('No loop recorded', width / 2, height / 2 + 4);
     }
 
-    drawWaveform(waveformData, layerWaveforms, layerMutes, mixBusWaveform, mixBusContentMask) {
+    drawWaveform(waveformData, layerWaveforms, layerMutes) {
         // Store the last waveform data for redrawing after tab switches
         this.lastWaveformData = waveformData;
         this.lastLayerWaveforms = layerWaveforms;
         this.lastLayerMutes = layerMutes;
-        this.lastMixBusWaveform = mixBusWaveform;
-        this.lastMixBusContentMask = mixBusContentMask;
 
         if (!this.ctx) {
             return;
@@ -1488,9 +1355,8 @@ class LooperController {
         // Check if we have any content to draw
         const hasLayerData = layerWaveforms && layerWaveforms.length > 0;
         const hasBasicData = waveformData && waveformData.length > 0;
-        const hasMixBusData = mixBusWaveform && mixBusWaveform.length > 0;
 
-        if (!hasLayerData && !hasBasicData && !hasMixBusData) {
+        if (!hasLayerData && !hasBasicData) {
             this.drawEmptyWaveform();
             return;
         }
@@ -1658,54 +1524,6 @@ class LooperController {
             }
         }
 
-        // ============================================================
-        // MIXBUS WAVEFORM OVERLAY
-        // ============================================================
-        // Draw MixBus waveform on top of layers where it has content
-        // This visually shows where MixBus is "masking" the layers
-        if (hasMixBusData && mixBusContentMask) {
-            const barWidth = zoomedWidth / mixBusWaveform.length;
-            const mixBusColor = '#9c27b0';  // Purple for MixBus
-
-            // First pass: draw semi-transparent overlay where MixBus has content
-            // This dims the layer waveforms underneath
-            this.ctx.fillStyle = 'rgba(10, 10, 10, 0.5)';
-            for (let i = 0; i < mixBusContentMask.length; i++) {
-                if (mixBusContentMask[i]) {
-                    const x = (i * barWidth) - offsetX;
-                    if (x + barWidth > 0 && x < width) {
-                        this.ctx.fillRect(x, 0, Math.max(1, barWidth), height);
-                    }
-                }
-            }
-
-            // Second pass: draw MixBus waveform in purple
-            this.ctx.fillStyle = mixBusColor + 'cc';  // 80% opacity
-            for (let i = 0; i < mixBusWaveform.length; i++) {
-                if (mixBusContentMask[i] && mixBusWaveform[i] > 0) {
-                    const amplitude = mixBusWaveform[i] * (height * 0.35);
-                    const x = (i * barWidth) - offsetX;
-                    if (x + barWidth > 0 && x < width && amplitude > 0.5) {
-                        this.ctx.fillRect(x, centerY - amplitude, Math.max(1, barWidth - 1), amplitude * 2);
-                    }
-                }
-            }
-
-            // Third pass: draw thin purple line at top/bottom to show MixBus regions
-            this.ctx.fillStyle = mixBusColor + '60';  // 40% opacity
-            for (let i = 0; i < mixBusContentMask.length; i++) {
-                if (mixBusContentMask[i]) {
-                    const x = (i * barWidth) - offsetX;
-                    if (x + barWidth > 0 && x < width) {
-                        // Top indicator line
-                        this.ctx.fillRect(x, 0, Math.max(1, barWidth), 2);
-                        // Bottom indicator line
-                        this.ctx.fillRect(x, height - 2, Math.max(1, barWidth), 2);
-                    }
-                }
-            }
-        }
-
         // Draw loop region boundaries as vertical lines
         const startX = (this.loopStart * zoomedWidth) - offsetX;
         const endX = (this.loopEnd * zoomedWidth) - offsetX;
@@ -1847,10 +1665,6 @@ class LooperController {
 
     async play() {
         try {
-            // Stop MixBus recording if active
-            if (this.mixBusRecording) {
-                await this.stopMixBusRecording();
-            }
             await this.playFn();
             this.updateTransportUI('playing');
         } catch (e) {
@@ -1860,10 +1674,6 @@ class LooperController {
 
     async stop() {
         try {
-            // Stop MixBus recording if active
-            if (this.mixBusRecording) {
-                await this.stopMixBusRecording();
-            }
             await this.stopFn();
             this.updateTransportUI('idle');
 
@@ -2199,45 +2009,11 @@ class LooperController {
                         this.additiveRecordingActive = state.additiveRecordingActive;
                     }
 
-                    // Sync MixBus state from backend
-                    if (typeof state.mixBusRecording !== 'undefined' ||
-                        typeof state.mixBusHasContent !== 'undefined' ||
-                        typeof state.mixBusMuted !== 'undefined') {
-                        let needsUpdate = false;
-                        if (typeof state.mixBusRecording !== 'undefined' && state.mixBusRecording !== this.mixBusRecording) {
-                            this.mixBusRecording = state.mixBusRecording;
-                            needsUpdate = true;
-                        }
-                        if (typeof state.mixBusHasContent !== 'undefined' && state.mixBusHasContent !== this.mixBusHasContent) {
-                            this.mixBusHasContent = state.mixBusHasContent;
-                            needsUpdate = true;
-                        }
-                        if (typeof state.mixBusMuted !== 'undefined' && state.mixBusMuted !== this.mixBusMuted) {
-                            this.mixBusMuted = state.mixBusMuted;
-                            needsUpdate = true;
-                        }
-                        // Store peak level for mixer VU meter
-                        if (typeof state.mixBusPeakLevel !== 'undefined') {
-                            this.mixBusPeakLevel = state.mixBusPeakLevel;
-                        }
-                        // Sync compound mode state
-                        if (typeof state.mixBusCompoundMode !== 'undefined' && state.mixBusCompoundMode !== this.mixBusCompoundMode) {
-                            this.mixBusCompoundMode = state.mixBusCompoundMode;
-                            needsUpdate = true;
-                        }
-                        if (needsUpdate) {
-                            this.updateMixBusUI();
-                        }
+                    // Sync layer mode state from backend
+                    if (typeof state.layerModeEnabled !== 'undefined' && state.layerModeEnabled !== this.layerModeEnabled) {
+                        this.layerModeEnabled = state.layerModeEnabled;
+                        this.updateModeToggleUI();
                     }
-
-                    // DISABLED: Don't let polling overwrite reverse state
-                    // The button click is the source of truth for reverse
-                    // if (typeof state.isReversed !== 'undefined' && !this.reverseButtonPending) {
-                    //     if (state.isReversed !== this.isReversed) {
-                    //         console.log(`[REV] State poll: C++ says ${state.isReversed}, UI says ${this.isReversed} - syncing`);
-                    //         this.setReversed(state.isReversed);
-                    //     }
-                    // }
 
                     // Update waveform if provided (with per-layer colors if available)
                     if (state.layerWaveforms || state.waveform) {
@@ -2245,13 +2021,10 @@ class LooperController {
                         if (state.layerWaveforms && state.layerWaveforms.length > 1) {
                             console.log(`[WAVEFORM] ${state.layerWaveforms.length} layers, mutes:`, state.layerMutes);
                         }
-                        // Pass MixBus data if available
                         this.drawWaveform(
                             state.waveform,
                             state.layerWaveforms,
-                            state.layerMutes,
-                            state.mixBusWaveform,
-                            state.mixBusContentMask
+                            state.layerMutes
                         );
                     }
 
@@ -4979,13 +4752,37 @@ class MixerViewController {
                 soloBtn: document.getElementById(`solo-${i}`),
                 vuNeedle: document.getElementById(`vu-needle-${i}`),
                 channelEl: document.querySelector(`.mixer-channel[data-layer="${i}"]`),
+                // EQ knobs
+                eqHighKnob: document.getElementById(`eq-high-${i}`),
+                eqMidKnob: document.getElementById(`eq-mid-${i}`),
+                eqLowKnob: document.getElementById(`eq-low-${i}`),
+                eqHighIndicator: document.querySelector(`#eq-high-${i} .eq-indicator`),
+                eqMidIndicator: document.querySelector(`#eq-mid-${i} .eq-indicator`),
+                eqLowIndicator: document.querySelector(`#eq-low-${i} .eq-indicator`),
+                // Loop controls
+                loopStartSlider: document.getElementById(`loop-start-${i}`),
+                loopEndSlider: document.getElementById(`loop-end-${i}`),
+                reverseBtn: document.getElementById(`reverse-${i}`),
+                // State
                 volume: 1.0,
                 pan: 0,
                 muted: false,
                 solo: false,
                 hasContent: false,
                 panDragging: false,
-                panLastY: 0
+                panLastY: 0,
+                // EQ state (in dB, -12 to +12)
+                eqLow: 0,
+                eqMid: 0,
+                eqHigh: 0,
+                eqLowDragging: false,
+                eqMidDragging: false,
+                eqHighDragging: false,
+                eqLastY: 0,
+                // Loop state
+                loopStart: 0,
+                loopEnd: 1,
+                reversed: false
             });
         }
 
@@ -4999,6 +4796,13 @@ class MixerViewController {
         this.setLayerMutedFn = getNativeFunction('setLayerMuted');
         this.getLayerContentFn = getNativeFunction('getLayerContentStates');
         this.getLayerLevelsFn = getNativeFunction('getLayerLevels');
+        // Per-layer EQ, loop bounds, reverse
+        this.setLayerEQLowFn = getNativeFunction('setLayerEQLow');
+        this.setLayerEQMidFn = getNativeFunction('setLayerEQMid');
+        this.setLayerEQHighFn = getNativeFunction('setLayerEQHigh');
+        this.setLayerLoopStartFn = getNativeFunction('setLayerLoopStart');
+        this.setLayerLoopEndFn = getNativeFunction('setLayerLoopEnd');
+        this.setLayerReverseFn = getNativeFunction('setLayerReverse');
 
         // Soloed layer tracking
         this.soloedLayer = null;
@@ -5149,19 +4953,93 @@ class MixerViewController {
                     await this.toggleSolo(layerNum);
                 });
             }
+
+            // EQ knobs (drag up/down)
+            ['Low', 'Mid', 'High'].forEach(band => {
+                const knob = channel[`eq${band}Knob`];
+                if (knob) {
+                    knob.addEventListener('mousedown', (e) => {
+                        channel[`eq${band}Dragging`] = true;
+                        channel.eqLastY = e.clientY;
+                        e.preventDefault();
+                    });
+                    // Double-click to reset
+                    knob.addEventListener('dblclick', async () => {
+                        channel[`eq${band.toLowerCase()}`] = 0;
+                        this.updateEQKnobUI(channel, band.toLowerCase());
+                        try {
+                            await this[`setLayerEQ${band}Fn`](layerNum, 0);
+                        } catch (err) {
+                            console.error(`[Mixer] Error resetting EQ ${band}:`, err);
+                        }
+                    });
+                }
+            });
+
+            // Loop start/end sliders
+            if (channel.loopStartSlider) {
+                channel.loopStartSlider.addEventListener('input', async (e) => {
+                    const val = parseInt(e.target.value) / 100;
+                    channel.loopStart = val;
+                    try {
+                        await this.setLayerLoopStartFn(layerNum, val);
+                    } catch (err) {
+                        console.error(`[Mixer] Error setting loop start:`, err);
+                    }
+                });
+            }
+
+            if (channel.loopEndSlider) {
+                channel.loopEndSlider.addEventListener('input', async (e) => {
+                    const val = parseInt(e.target.value) / 100;
+                    channel.loopEnd = val;
+                    try {
+                        await this.setLayerLoopEndFn(layerNum, val);
+                    } catch (err) {
+                        console.error(`[Mixer] Error setting loop end:`, err);
+                    }
+                });
+            }
+
+            // Reverse button
+            if (channel.reverseBtn) {
+                channel.reverseBtn.addEventListener('click', async () => {
+                    channel.reversed = !channel.reversed;
+                    channel.reverseBtn.classList.toggle('active', channel.reversed);
+                    try {
+                        await this.setLayerReverseFn(layerNum, channel.reversed);
+                    } catch (err) {
+                        console.error(`[Mixer] Error setting reverse:`, err);
+                    }
+                });
+            }
         });
 
-        // Global mouse events for pan knobs
+        // Global mouse events for pan knobs and EQ knobs
         document.addEventListener('mousemove', (e) => {
             this.channels.forEach((channel, idx) => {
-                if (!channel.panDragging) return;
+                // Pan knob dragging
+                if (channel.panDragging) {
+                    const deltaY = channel.panLastY - e.clientY;
+                    const sensitivity = 2;
+                    channel.pan = Math.max(-100, Math.min(100, channel.pan + deltaY * sensitivity));
+                    this.updatePanKnobUI(channel);
+                    this.sendPanToBackend(idx + 1, channel.pan);
+                    channel.panLastY = e.clientY;
+                }
 
-                const deltaY = channel.panLastY - e.clientY;
-                const sensitivity = 2;
-                channel.pan = Math.max(-100, Math.min(100, channel.pan + deltaY * sensitivity));
-                this.updatePanKnobUI(channel);
-                this.sendPanToBackend(idx + 1, channel.pan);
-                channel.panLastY = e.clientY;
+                // EQ knob dragging
+                ['low', 'mid', 'high'].forEach(band => {
+                    const bandCap = band.charAt(0).toUpperCase() + band.slice(1);
+                    if (channel[`eq${bandCap}Dragging`]) {
+                        const deltaY = channel.eqLastY - e.clientY;
+                        const sensitivity = 0.2;  // dB per pixel
+                        channel[`eq${band}`] = Math.max(-12, Math.min(12, channel[`eq${band}`] + deltaY * sensitivity));
+                        this.updateEQKnobUI(channel, band);
+                        this.sendEQToBackend(idx + 1, band, channel[`eq${band}`]);
+                        channel.eqLastY = e.clientY;
+                    }
+                });
             });
         });
 
@@ -5171,6 +5049,10 @@ class MixerViewController {
                     channel.panDragging = false;
                     if (channel.panKnob) channel.panKnob.classList.remove('active');
                 }
+                // Reset EQ dragging
+                channel.eqLowDragging = false;
+                channel.eqMidDragging = false;
+                channel.eqHighDragging = false;
             });
         });
     }
@@ -5188,6 +5070,25 @@ class MixerViewController {
             await this.setLayerPanFn(layerNum, panNorm);
         } catch (err) {
             console.error(`[Mixer] Error setting layer ${layerNum} pan:`, err);
+        }
+    }
+
+    updateEQKnobUI(channel, band) {
+        const indicator = channel[`eq${band.charAt(0).toUpperCase() + band.slice(1)}Indicator`];
+        if (!indicator) return;
+        // EQ goes from -12 to +12 dB, map to -135 to +135 degrees
+        const angle = (channel[`eq${band}`] / 12) * 135;
+        indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+    }
+
+    async sendEQToBackend(layerNum, band, valueDB) {
+        const bandCap = band.charAt(0).toUpperCase() + band.slice(1);
+        const fn = this[`setLayerEQ${bandCap}Fn`];
+        if (!fn) return;
+        try {
+            await fn(layerNum, valueDB);
+        } catch (err) {
+            console.error(`[Mixer] Error setting layer ${layerNum} EQ ${band}:`, err);
         }
     }
 
@@ -5293,10 +5194,6 @@ class MixerViewController {
                     }
                 }
 
-                // Update BUS channel meter from looperController state
-                if (looperController && looperController.mixBusPeakLevel !== undefined) {
-                    this.updateBusVUMeter(looperController.mixBusPeakLevel);
-                }
             } catch (e) {
                 // Silently ignore polling errors
             }
@@ -5384,54 +5281,6 @@ class MixerViewController {
         }
     }
 
-    // Update BUS channel VU meter (similar to updateVUMeter but for the MixBus)
-    updateBusVUMeter(level) {
-        if (!this.busVuNeedle) return;
-
-        // Convert linear level to dB
-        const minDb = -48;
-        const maxDb = 6;
-        let db = minDb;
-        if (level > 0.00001) {
-            db = 20 * Math.log10(level);
-            db = Math.max(minDb, Math.min(maxDb, db));
-        }
-
-        // Map dB to angle (same as updateVUMeter)
-        let angle;
-        if (db <= -48) {
-            angle = -45;
-        } else if (db <= -20) {
-            angle = -45 + (db + 48) * (20 / 28);
-        } else if (db <= -3) {
-            angle = -25 + (db + 20) * (25 / 17);
-        } else if (db <= 0) {
-            angle = (db + 3) * (8 / 3);
-        } else {
-            angle = 8 + db * (17 / 6);
-        }
-
-        this.busVuNeedle.style.transform = `translateX(-50%) rotate(${angle}deg)`;
-
-        // Update BUS fader meter bar
-        if (this.busFaderMeter) {
-            let meterHeight;
-            if (level <= 0.00001) {
-                meterHeight = 0;
-            } else {
-                const dbLevel = 20 * Math.log10(level);
-                if (dbLevel <= -48) {
-                    meterHeight = 0;
-                } else if (dbLevel <= 0) {
-                    meterHeight = ((dbLevel + 48) / 48) * 79;
-                } else {
-                    meterHeight = 79 + Math.min(dbLevel / 6, 1) * 21;
-                }
-            }
-            this.busFaderMeter.style.height = `${meterHeight}%`;
-            this.busFaderMeter.classList.toggle('clipping', level > 1.0);
-        }
-    }
 
     // Convert fader position (0-127) to linear volume
     // 0 = -inf (0.0), 100 = 0dB (1.0), 127 = +3dB (~1.41)
@@ -5470,6 +5319,425 @@ class MixerViewController {
             // Above unity: linear mapping
             const boost = (volume - 1.0) / (maxBoost - 1.0);
             return Math.round(100 + boost * 27);
+        }
+    }
+}
+
+// ============================================
+// LayerPanelController - Per-layer control panel
+// ============================================
+
+class LayerPanelController {
+    constructor() {
+        this.panel = document.getElementById('layer-control-panel');
+        this.layerNumEl = document.getElementById('layer-panel-num');
+        this.closeBtn = document.getElementById('layer-panel-close');
+
+        // Channel controls
+        this.muteBtn = document.getElementById('layer-mute-btn');
+        this.soloBtn = document.getElementById('layer-solo-btn');
+        this.panKnob = document.getElementById('layer-pan-knob');
+        this.panValueEl = document.getElementById('layer-pan-value');
+        this.deleteBtn = document.getElementById('layer-delete-btn');
+
+        // EQ knobs
+        this.eqLowKnob = document.getElementById('layer-eq-low');
+        this.eqMidKnob = document.getElementById('layer-eq-mid');
+        this.eqHighKnob = document.getElementById('layer-eq-high');
+        this.eqLowValue = document.getElementById('layer-eq-low-value');
+        this.eqMidValue = document.getElementById('layer-eq-mid-value');
+        this.eqHighValue = document.getElementById('layer-eq-high-value');
+
+        // Reverse button
+        this.reverseBtn = document.getElementById('layer-reverse-btn');
+
+        // State
+        this.selectedLayer = 0;  // 1-indexed
+        this.muted = false;
+        this.soloed = false;
+        this.pan = 0;  // -1 to +1
+        this.eqLow = 0;  // dB (-12 to +12)
+        this.eqMid = 0;
+        this.eqHigh = 0;
+        this.reversed = false;
+
+        // Drag state
+        this.draggingKnob = null;
+        this.dragStartY = 0;
+        this.dragStartValue = 0;
+
+        // Native functions - use correct names from C++ backend
+        this.setLayerMutedFn = getNativeFunction('setLayerMuted');
+        this.getLayerMutedFn = getNativeFunction('getLayerMuted');
+        this.setLayerSoloFn = getNativeFunction('setLayerSolo');
+        this.getLayerSoloFn = getNativeFunction('getLayerSolo');
+        this.setLayerPanFn = getNativeFunction('setLayerPan');
+        this.getLayerPanFn = getNativeFunction('getLayerPan');
+        this.clearLayerFn = getNativeFunction('clearLayer');
+        this.setLayerEQLowFn = getNativeFunction('setLayerEQLow');
+        this.setLayerEQMidFn = getNativeFunction('setLayerEQMid');
+        this.setLayerEQHighFn = getNativeFunction('setLayerEQHigh');
+        this.getLayerEQFn = getNativeFunction('getLayerEQ');
+        this.setLayerReverseFn = getNativeFunction('setLayerReverse');
+        this.getLayerReverseFn = getNativeFunction('getLayerReverse');
+
+        // Layer colors
+        this.layerColors = [
+            '#4fc3f7', '#ff7043', '#66bb6a', '#ab47bc',
+            '#ffa726', '#26c6da', '#ec407a', '#9ccc65'
+        ];
+
+        this.setupEventListeners();
+        console.log('[LayerPanel] Controller initialized');
+    }
+
+    setupEventListeners() {
+        // Close button
+        if (this.closeBtn) {
+            this.closeBtn.addEventListener('click', () => this.hidePanel());
+        }
+
+        // Layer indicator button clicks to open panel
+        document.querySelectorAll('.layer-indicators .layer-btn').forEach(btn => {
+            const layer = parseInt(btn.dataset.layer);
+            if (layer >= 1 && layer <= 8) {
+                btn.addEventListener('click', () => {
+                    console.log('[LayerPanel] Layer button clicked:', layer);
+                    this.showPanel(layer);
+                });
+            }
+        });
+
+        // Mute button - use mixer's infrastructure
+        if (this.muteBtn) {
+            this.muteBtn.addEventListener('click', async () => {
+                if (!this.selectedLayer || !window.mixerController) return;
+                const mixer = window.mixerController;
+                const channel = mixer.channels[this.selectedLayer - 1];
+                if (channel) {
+                    channel.muted = !channel.muted;
+                    this.muted = channel.muted;
+                    this.updateMuteUI();
+                    channel.muteBtn?.classList.toggle('active', channel.muted);
+                    channel.channelEl?.classList.toggle('muted', channel.muted);
+                    try {
+                        await mixer.setLayerMutedFn(this.selectedLayer, channel.muted);
+                        mixer.syncMuteToLayerButton(this.selectedLayer, channel.muted);
+                    } catch (e) { console.error('[LayerPanel] Mute error:', e); }
+                }
+            });
+        }
+
+        // Solo button - use mixer's toggleSolo
+        if (this.soloBtn) {
+            this.soloBtn.addEventListener('click', async () => {
+                if (!this.selectedLayer || !window.mixerController) return;
+                await window.mixerController.toggleSolo(this.selectedLayer);
+                // Update our UI to reflect solo state
+                const mixer = window.mixerController;
+                this.soloed = mixer.soloedLayer === this.selectedLayer;
+                this.muted = mixer.channels[this.selectedLayer - 1]?.muted || false;
+                this.updateSoloUI();
+                this.updateMuteUI();
+            });
+        }
+
+        // Pan knob - use mixer's pan infrastructure
+        if (this.panKnob) {
+            this.panKnob.addEventListener('mousedown', (e) => {
+                this.draggingKnob = 'pan';
+                this.dragStartY = e.clientY;
+                this.dragStartValue = this.pan;
+                e.preventDefault();
+            });
+            this.panKnob.addEventListener('dblclick', async () => {
+                this.pan = 0;
+                this.updatePanUI();
+                await this.sendPan();
+            });
+        }
+
+        // Delete button
+        if (this.deleteBtn) {
+            this.deleteBtn.addEventListener('click', async () => {
+                if (this.selectedLayer && this.clearLayerFn) {
+                    await this.clearLayerFn(this.selectedLayer);
+                    console.log('[LayerPanel] Cleared layer:', this.selectedLayer);
+                }
+            });
+        }
+
+        // EQ knob dragging - use mousedown on each knob
+        [this.eqLowKnob, this.eqMidKnob, this.eqHighKnob].forEach(knob => {
+            if (knob) {
+                knob.addEventListener('mousedown', (e) => {
+                    const band = knob.dataset.band;
+                    this.draggingKnob = band;
+                    this.dragStartY = e.clientY;
+                    this.dragStartValue = this[`eq${band.charAt(0).toUpperCase() + band.slice(1)}`];
+                    e.preventDefault();
+                });
+
+                // Double-click to reset
+                knob.addEventListener('dblclick', () => {
+                    const band = knob.dataset.band;
+                    const propName = `eq${band.charAt(0).toUpperCase() + band.slice(1)}`;
+                    this[propName] = 0;
+                    this.updateEQUI();
+                    this.sendEQ(band, 0);
+                });
+            }
+        });
+
+        // Reverse button
+        if (this.reverseBtn) {
+            this.reverseBtn.addEventListener('click', () => {
+                this.reversed = !this.reversed;
+                this.updateReverseUI();
+                this.sendReverse();
+                console.log('[LayerPanel] Reverse toggled:', this.reversed);
+            });
+        }
+
+        // Global mouse events for dragging
+        document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        document.addEventListener('mouseup', () => this.handleMouseUp());
+    }
+
+    handleMouseMove(e) {
+        if (!this.draggingKnob) return;
+
+        const deltaY = this.dragStartY - e.clientY;
+
+        if (this.draggingKnob === 'pan') {
+            // Pan: -1 to +1
+            const sensitivity = 0.01;
+            this.pan = Math.max(-1, Math.min(1, this.dragStartValue + deltaY * sensitivity));
+            this.updatePanUI();
+            this.sendPan();
+        } else {
+            // EQ bands
+            const sensitivity = 0.2;  // dB per pixel
+            const band = this.draggingKnob;
+            const propName = `eq${band.charAt(0).toUpperCase() + band.slice(1)}`;
+            const newValue = Math.max(-12, Math.min(12, this.dragStartValue + deltaY * sensitivity));
+            this[propName] = newValue;
+            this.updateEQUI();
+            this.sendEQ(band, newValue);
+        }
+    }
+
+    handleMouseUp() {
+        this.draggingKnob = null;
+    }
+
+    showPanel(layer) {
+        this.selectedLayer = layer;
+        if (this.layerNumEl) {
+            this.layerNumEl.textContent = layer;
+            this.layerNumEl.style.color = this.layerColors[layer - 1];
+        }
+
+        // Load layer state from engine
+        this.loadLayerState(layer);
+
+        if (this.panel) {
+            this.panel.classList.remove('hidden');
+        }
+
+        console.log('[LayerPanel] Showing panel for layer:', layer);
+    }
+
+    hidePanel() {
+        if (this.panel) {
+            this.panel.classList.add('hidden');
+        }
+        this.selectedLayer = 0;
+    }
+
+    async loadLayerState(layer) {
+        // Get mute/solo/pan from mixer controller if available
+        if (window.mixerController) {
+            const mixer = window.mixerController;
+            const channel = mixer.channels[layer - 1];
+            if (channel) {
+                this.muted = channel.muted || false;
+                this.soloed = mixer.soloedLayer === layer;
+                this.pan = channel.pan || 0;
+            }
+        } else {
+            // Fallback to native functions
+            if (this.getLayerMutedFn) {
+                try { this.muted = await this.getLayerMutedFn(layer) || false; } catch (e) { }
+            }
+            if (this.getLayerPanFn) {
+                try { this.pan = await this.getLayerPanFn(layer) || 0; } catch (e) { }
+            }
+        }
+
+        // Get EQ state
+        if (this.getLayerEQFn) {
+            try {
+                const eq = await this.getLayerEQFn(layer);
+                if (eq) {
+                    this.eqLow = eq.low || 0;
+                    this.eqMid = eq.mid || 0;
+                    this.eqHigh = eq.high || 0;
+                }
+            } catch (e) {
+                console.error('[LayerPanel] Error loading EQ:', e);
+            }
+        }
+
+        // Get reverse state
+        if (this.getLayerReverseFn) {
+            try {
+                const rev = await this.getLayerReverseFn(layer);
+                this.reversed = rev || false;
+            } catch (e) {
+                console.error('[LayerPanel] Error loading reverse:', e);
+            }
+        }
+
+        this.updateMuteUI();
+        this.updateSoloUI();
+        this.updatePanUI();
+        this.updateEQUI();
+        this.updateReverseUI();
+    }
+
+    updateMuteUI() {
+        if (this.muteBtn) {
+            this.muteBtn.classList.toggle('active', this.muted);
+        }
+    }
+
+    updateSoloUI() {
+        if (this.soloBtn) {
+            this.soloBtn.classList.toggle('active', this.soloed);
+        }
+    }
+
+    updatePanUI() {
+        if (this.panKnob) {
+            const indicator = this.panKnob.querySelector('.layer-pan-indicator');
+            if (indicator) {
+                // Map -1 to +1 to -135 to +135 degrees
+                const angle = this.pan * 135;
+                indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+            }
+        }
+        if (this.panValueEl) {
+            if (Math.abs(this.pan) < 0.05) {
+                this.panValueEl.textContent = 'C';
+            } else if (this.pan < 0) {
+                this.panValueEl.textContent = `L${Math.round(Math.abs(this.pan) * 100)}`;
+            } else {
+                this.panValueEl.textContent = `R${Math.round(this.pan * 100)}`;
+            }
+        }
+    }
+
+    updateEQUI() {
+        const bands = [
+            { name: 'low', knob: this.eqLowKnob, valueEl: this.eqLowValue, value: this.eqLow },
+            { name: 'mid', knob: this.eqMidKnob, valueEl: this.eqMidValue, value: this.eqMid },
+            { name: 'high', knob: this.eqHighKnob, valueEl: this.eqHighValue, value: this.eqHigh }
+        ];
+
+        bands.forEach(({ knob, valueEl, value }) => {
+            if (knob) {
+                const indicator = knob.querySelector('.layer-knob-indicator');
+                if (indicator) {
+                    // Map -12 to +12 dB to -135 to +135 degrees
+                    const angle = (value / 12) * 135;
+                    indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+                }
+            }
+            if (valueEl) {
+                const sign = value >= 0 ? '+' : '';
+                valueEl.textContent = `${sign}${value.toFixed(1)}dB`;
+            }
+        });
+    }
+
+    updateReverseUI() {
+        if (this.reverseBtn) {
+            this.reverseBtn.classList.toggle('active', this.reversed);
+        }
+    }
+
+    async sendMute() {
+        if (!this.selectedLayer || !this.setLayerMutedFn) return;
+        try {
+            await this.setLayerMutedFn(this.selectedLayer, this.muted);
+        } catch (e) {
+            console.error('[LayerPanel] Error setting mute:', e);
+        }
+    }
+
+    async sendSolo() {
+        if (!this.selectedLayer || !this.setLayerSoloFn) return;
+        try {
+            await this.setLayerSoloFn(this.selectedLayer, this.soloed);
+        } catch (e) {
+            console.error('[LayerPanel] Error setting solo:', e);
+        }
+    }
+
+    async sendPan() {
+        if (!this.selectedLayer) return;
+        // Sync with mixer
+        if (window.mixerController) {
+            const mixer = window.mixerController;
+            const channel = mixer.channels[this.selectedLayer - 1];
+            if (channel) {
+                channel.pan = this.pan;
+                mixer.updatePanKnobUI(channel);
+            }
+        }
+        // Send to backend
+        if (this.setLayerPanFn) {
+            try {
+                await this.setLayerPanFn(this.selectedLayer, this.pan);
+            } catch (e) {
+                console.error('[LayerPanel] Error setting pan:', e);
+            }
+        }
+    }
+
+    async clearLayer() {
+        if (!this.selectedLayer || !this.clearLayerFn) return;
+        try {
+            await this.clearLayerFn(this.selectedLayer);
+            console.log('[LayerPanel] Cleared layer:', this.selectedLayer);
+        } catch (e) {
+            console.error('[LayerPanel] Error clearing layer:', e);
+        }
+    }
+
+    async sendEQ(band, value) {
+        if (!this.selectedLayer) return;
+
+        const fnName = `setLayerEQ${band.charAt(0).toUpperCase() + band.slice(1)}Fn`;
+        const fn = this[fnName];
+
+        if (fn) {
+            try {
+                await fn(this.selectedLayer, value);
+            } catch (e) {
+                console.error(`[LayerPanel] Error setting EQ ${band}:`, e);
+            }
+        }
+    }
+
+    async sendReverse() {
+        if (!this.selectedLayer || !this.setLayerReverseFn) return;
+        try {
+            await this.setLayerReverseFn(this.selectedLayer, this.reversed);
+            console.log('[LayerPanel] Sent reverse:', this.reversed, 'to layer', this.selectedLayer);
+        } catch (e) {
+            console.error('[LayerPanel] Error setting reverse:', e);
         }
     }
 }
@@ -5981,7 +6249,10 @@ document.addEventListener('DOMContentLoaded', () => {
     new SaturationController();
 
     // Mixer view controller
-    new MixerViewController();
+    window.mixerController = new MixerViewController();
+
+    // Layer panel controller (per-layer EQ, loop bounds, reverse)
+    new LayerPanelController();
 
     // Reverse toggle - setup handled in LooperController
     looperController.setupReverseButton();

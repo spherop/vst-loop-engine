@@ -29,11 +29,9 @@
     --reverb-accent-dim: #00acc1;
     --reverb-accent-glow: rgba(38, 198, 218, 0.4);
 
-    /* MixBus colors (hot pink/magenta - distinct from layer purple) */
-    --bus-accent: #e91e63;
-    --bus-accent-dim: #c2185b;
-    --bus-accent-glow: rgba(233, 30, 99, 0.4);
-    --bus-accent-light: #f48fb1;
+    /* Mode toggle colors (cyan for layer mode) */
+    --mode-layer-accent: #00bcd4;
+    --mode-layer-glow: rgba(0, 188, 212, 0.4);
 }
 
 * {
@@ -572,35 +570,41 @@ html, body {
     justify-content: center;
     width: 58px;
     height: 58px;
-    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
-    border: 1px solid #333;
-    border-radius: 8px;
+    background: linear-gradient(180deg, #252525 0%, #151515 100%);
+    border: 2px solid #444;
+    border-radius: 10px;
     cursor: pointer;
-    transition: all 0.12s ease;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .loop-control-icon-large {
-    font-size: 26px;
-    color: #555;
-    transition: all 0.12s ease;
+    font-size: 28px;
+    color: #888;
+    transition: all 0.15s ease;
+    font-weight: bold;
 }
 
 .loop-control-btn-large:hover {
     border-color: var(--looper-accent);
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5), 0 0 20px rgba(var(--looper-accent-rgb, 74, 222, 128), 0.1);
 }
 
 .loop-control-btn-large:hover .loop-control-icon-large {
     color: var(--looper-accent);
+    text-shadow: 0 0 6px var(--looper-accent-glow);
 }
 
 .loop-control-btn-large.active {
-    background: linear-gradient(180deg, #1a2a1a 0%, #0f1a0f 100%);
+    background: linear-gradient(180deg, #1a3a1a 0%, #0f2a0f 100%);
     border-color: var(--looper-accent);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5), 0 0 25px rgba(var(--looper-accent-rgb, 74, 222, 128), 0.3);
 }
 
 .loop-control-btn-large.active .loop-control-icon-large {
     color: var(--looper-accent);
-    text-shadow: 0 0 8px var(--looper-accent-glow);
+    text-shadow: 0 0 12px var(--looper-accent-glow), 0 0 20px var(--looper-accent-glow);
 }
 
 /* Diagnostics toggle button */
@@ -733,22 +737,6 @@ html, body {
     color: #ef5350 !important;
 }
 
-/* REC button disabled when MIX is active */
-.transport-btn.rec.mix-disabled {
-    opacity: 0.4;
-    pointer-events: none;
-    cursor: not-allowed;
-}
-
-.transport-btn.rec.mix-disabled .transport-icon {
-    color: #444;
-    animation: none;
-}
-
-.transport-btn.rec.mix-disabled .transport-label {
-    color: #444;
-}
-
 /* Play Button */
 .transport-btn.play:hover {
     border-color: #4caf50;
@@ -857,95 +845,35 @@ html, body {
     100% { border-color: var(--fd-border); box-shadow: none; }
 }
 
-/* MIX Button - MixBus punch-in/out recording */
-/* Default inactive state - matches other transport buttons */
-.transport-btn.mix .transport-icon {
-    color: #555;
+/* Mode toggle button (Track/Layer) */
+.transport-btn.mode-btn {
+    min-width: 52px;
 }
 
-.transport-btn.mix .transport-label {
-    color: #444;
+.transport-btn.mode-btn:hover {
+    border-color: var(--mode-layer-accent);
 }
 
-.transport-btn.mix:hover {
-    border-color: var(--bus-accent);
+.transport-btn.mode-btn:hover .transport-icon {
+    color: var(--mode-layer-accent);
 }
 
-.transport-btn.mix:hover .transport-icon {
-    color: var(--bus-accent);
+/* Layer mode active state */
+.transport-btn.mode-btn.layer-mode {
+    background: linear-gradient(180deg, #1a3a4a 0%, #0a2a3a 100%);
+    border-color: var(--mode-layer-accent);
+    box-shadow: 0 0 16px var(--mode-layer-glow), inset 0 0 8px rgba(0, 188, 212, 0.2);
 }
 
-.transport-btn.mix.active {
-    background: linear-gradient(180deg, #4a1a2a 0%, #2a0a1a 100%);
-    border-color: var(--bus-accent);
-    box-shadow: 0 0 24px var(--bus-accent-glow), inset 0 0 12px rgba(233, 30, 99, 0.3);
+.transport-btn.mode-btn.layer-mode .transport-icon {
+    color: var(--mode-layer-accent);
+    text-shadow: 0 0 6px var(--mode-layer-glow);
 }
 
-.transport-btn.mix.active .transport-icon {
-    color: var(--bus-accent-light);
-    text-shadow: 0 0 8px rgba(233, 30, 99, 0.8);
-    animation: pulse-mix 0.8s ease-in-out infinite;
-}
-
-.transport-btn.mix.active .transport-label {
-    color: var(--bus-accent);
-    font-weight: 800;
-    text-shadow: 0 0 6px var(--bus-accent-glow);
-}
-
-@keyframes pulse-mix {
-    0%, 100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.7;
-        transform: scale(1.1);
-    }
-}
-
-/* MIX Compound Mode - feedback loop indicator */
-.transport-btn.mix.compound {
-    border-color: #ff9800;
-    box-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
-}
-
-.transport-btn.mix.compound .transport-icon {
-    color: #ff9800;
-}
-
-.transport-btn.mix.compound .transport-label {
-    color: #ff9800;
-}
-
-/* Compound + Active (recording with feedback) */
-.transport-btn.mix.compound.active {
-    background: linear-gradient(180deg, #4a2a1a 0%, #2a1a0a 100%);
-    border-color: #ffb74d;
-    box-shadow: 0 0 24px rgba(255, 152, 0, 0.7), inset 0 0 12px rgba(255, 152, 0, 0.3);
-}
-
-.transport-btn.mix.compound.active .transport-icon {
-    color: #ffe0b2;
-    text-shadow: 0 0 8px rgba(255, 152, 0, 0.8);
-    animation: pulse-compound 0.6s ease-in-out infinite;
-}
-
-.transport-btn.mix.compound.active .transport-label {
-    color: #ffb74d;
-    font-weight: 800;
-    text-shadow: 0 0 6px rgba(255, 152, 0, 0.6);
-}
-
-@keyframes pulse-compound {
-    0%, 100% {
-        opacity: 1;
-        transform: scale(1);
-    }
-    50% {
-        opacity: 0.8;
-        transform: scale(1.15);
-    }
+.transport-btn.mode-btn.layer-mode .transport-label {
+    color: var(--mode-layer-accent);
+    font-weight: 700;
+    text-shadow: 0 0 4px var(--mode-layer-glow);
 }
 
 /* Reverse Button */
@@ -1362,14 +1290,14 @@ html, body {
    ============================================ */
 
 .flatten-btn {
-    width: 22px;
-    height: 22px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: transparent;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
     border: 1px solid #3a3a3a;
-    border-radius: 3px;
+    border-radius: 6px;
     color: #666666;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -1388,91 +1316,8 @@ html, body {
 }
 
 .flatten-icon {
-    font-size: 12px;
+    font-size: 16px;
     font-weight: bold;
-}
-
-/* ============================================
-   BUS INDICATOR BUTTON
-   ============================================ */
-
-.bus-btn {
-    position: relative;
-    width: 36px;
-    height: 36px;
-    border-radius: 6px;
-    border: 1px solid #2a2a2a;
-    background: linear-gradient(180deg, #151515 0%, #0a0a0a 100%);
-    color: #444;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.12s ease;
-    overflow: visible;
-    margin-left: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.bus-label {
-    letter-spacing: 0.5px;
-}
-
-.bus-btn:hover {
-    border-color: var(--bus-accent);
-    color: var(--bus-accent-light);
-}
-
-/* BUS button when MixBus has content */
-.bus-btn.has-content {
-    background: var(--bus-accent);
-    border-color: var(--bus-accent);
-    color: #0a0a0a;
-    font-weight: 800;
-}
-
-.bus-btn.has-content:hover {
-    background: var(--bus-accent-dim);
-    border-color: var(--bus-accent-light);
-    color: #0a0a0a;
-}
-
-/* BUS button when recording to MixBus */
-.bus-btn.recording {
-    background: linear-gradient(180deg, #2a1520 0%, #1a0810 100%);
-    border-color: var(--bus-accent);
-    color: var(--bus-accent-light);
-    box-shadow: 0 0 12px var(--bus-accent-glow);
-    animation: pulse-bus 1s ease-in-out infinite;
-}
-
-@keyframes pulse-bus {
-    0%, 100% { box-shadow: 0 0 12px var(--bus-accent-glow); }
-    50% { box-shadow: 0 0 20px rgba(233, 30, 99, 0.8); }
-}
-
-/* BUS button when muted */
-.bus-btn.muted {
-    background: linear-gradient(180deg, #1a1010 0%, #0f0808 100%);
-    border-color: #553333;
-    color: #664444;
-    opacity: 0.7;
-}
-
-.bus-btn.muted::after {
-    content: 'M';
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    font-size: 7px;
-    color: #ff4444;
-    background: #1a0a0a;
-    border: 1px solid #553333;
-    border-radius: 2px;
-    padding: 0 2px;
-    line-height: 1;
 }
 
 /* ============================================
@@ -4624,27 +4469,7 @@ html, body {
 .mixer-channel[data-layer="8"].has-content { border-color: #9ccc65; }
 .mixer-channel[data-layer="8"] .vu-meter { border-color: #9ccc65; }
 
-/* MixBus Channel: Purple */
-.mixer-channel[data-layer="bus"] .channel-label { color: var(--bus-accent); text-shadow: 0 0 6px var(--bus-accent-glow); }
-.mixer-channel[data-layer="bus"].has-content { border-color: var(--bus-accent); }
-.mixer-channel[data-layer="bus"] .vu-meter { border-color: var(--bus-accent); }
-
-/* MixBus channel special styling */
-.mixer-channel-bus {
-    border-left: 2px solid var(--bus-accent);
-    margin-left: 8px;
-}
-
-.mixer-channel-bus.recording {
-    border-color: var(--bus-accent);
-    box-shadow: 0 0 12px var(--bus-accent-glow);
-}
-
-.mixer-channel-bus .channel-label {
-    font-weight: 800;
-}
-
-/* Clear button for MixBus (replaces solo button) */
+/* Clear button */
 .channel-clear {
     width: 20px;
     height: 20px;
@@ -4667,12 +4492,6 @@ html, body {
 
 .channel-clear:active {
     transform: scale(0.95);
-}
-
-/* Disabled pan knob for bus */
-.pan-knob-disabled {
-    opacity: 0.3;
-    pointer-events: none;
 }
 
 /* ============================================
@@ -4774,4 +4593,557 @@ html, body {
     border-color: #ffcc00;
     color: #ffcc00;
     box-shadow: 0 0 6px rgba(255, 204, 0, 0.3);
+}
+
+/* ============================================
+   PER-LAYER EQ KNOBS
+   ============================================ */
+
+.channel-eq {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 4px 0;
+    border-top: 1px solid #2a2a2a;
+    border-bottom: 1px solid #2a2a2a;
+    margin: 4px 0;
+}
+
+.eq-knob {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+    border: 1px solid #3a3a3a;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.eq-knob:hover {
+    border-color: #4fc3f7;
+}
+
+.eq-indicator {
+    position: absolute;
+    width: 2px;
+    height: 6px;
+    background: #888;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%) rotate(0deg);
+    transform-origin: center 8px;
+    border-radius: 1px;
+    transition: transform 0.05s ease;
+}
+
+.eq-knob:hover .eq-indicator {
+    background: #4fc3f7;
+}
+
+.eq-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 6px;
+    font-weight: 700;
+    color: #666;
+    pointer-events: none;
+}
+
+.eq-high .eq-label { color: #ff9999; }
+.eq-mid .eq-label { color: #99ff99; }
+.eq-low .eq-label { color: #9999ff; }
+
+/* ============================================
+   PER-LAYER LOOP CONTROLS (START/END/REVERSE)
+   ============================================ */
+
+.channel-loop-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 4px 0;
+    border-top: 1px solid #2a2a2a;
+    margin-top: 4px;
+}
+
+.loop-range {
+    position: relative;
+    width: 40px;
+    height: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.loop-range input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 10px;
+    background: transparent;
+    cursor: pointer;
+}
+
+.loop-range input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, #1a1a1a 0%, #2a2a2a 100%);
+    border-radius: 2px;
+    border: 1px solid #3a3a3a;
+}
+
+.loop-range input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 8px;
+    height: 10px;
+    background: linear-gradient(180deg, #4a4a4a 0%, #2a2a2a 100%);
+    border: 1px solid #5a5a5a;
+    border-radius: 2px;
+    margin-top: -4px;
+    cursor: pointer;
+}
+
+.loop-start::-webkit-slider-thumb {
+    background: linear-gradient(180deg, #4fc3f7 0%, #2196f3 100%);
+    border-color: #4fc3f7;
+}
+
+.loop-end::-webkit-slider-thumb {
+    background: linear-gradient(180deg, #ff7043 0%, #e64a19 100%);
+    border-color: #ff7043;
+}
+
+.channel-reverse {
+    width: 28px;
+    height: 16px;
+    font-size: 10px;
+    font-weight: 700;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 2px;
+    color: #666;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.channel-reverse:hover {
+    border-color: #9c27b0;
+    color: #9c27b0;
+}
+
+.channel-reverse.active {
+    background: linear-gradient(180deg, #4a1a5c 0%, #2a0a3c 100%);
+    border-color: #9c27b0;
+    color: #ce93d8;
+    box-shadow: 0 0 6px rgba(156, 39, 176, 0.3);
+}
+
+/* ============================================
+   PER-LAYER CONTROL PANEL
+   Slides down from mixer when layer is selected
+   ============================================ */
+
+.layer-control-panel {
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 1px solid #333;
+    border-radius: 6px;
+    margin-top: 8px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.layer-control-panel.hidden {
+    display: none;
+}
+
+.layer-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 12px;
+    background: linear-gradient(180deg, #252525 0%, #1a1a1a 100%);
+    border-bottom: 1px solid #333;
+}
+
+.layer-panel-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    color: #888;
+    letter-spacing: 2px;
+}
+
+.layer-panel-title span {
+    color: #4fc3f7;
+}
+
+.layer-panel-close {
+    background: none;
+    border: none;
+    color: #666;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0 4px;
+    transition: color 0.15s ease;
+}
+
+.layer-panel-close:hover {
+    color: #ff4444;
+}
+
+.layer-panel-content {
+    padding: 12px;
+}
+
+/* Waveform Container */
+.layer-waveform-container {
+    position: relative;
+    height: 80px;
+    background: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    overflow: hidden;
+}
+
+#layer-waveform-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+/* Loop Handles */
+.layer-loop-handles {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.loop-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    pointer-events: auto;
+    z-index: 10;
+}
+
+.loop-handle-start {
+    left: 0;
+    background: linear-gradient(90deg, rgba(79, 195, 247, 0.8) 0%, transparent 100%);
+    border-left: 2px solid #4fc3f7;
+}
+
+.loop-handle-end {
+    right: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(255, 112, 67, 0.8) 100%);
+    border-right: 2px solid #ff7043;
+}
+
+.loop-region {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(79, 195, 247, 0.1);
+    border-top: 1px solid rgba(79, 195, 247, 0.3);
+    border-bottom: 1px solid rgba(79, 195, 247, 0.3);
+    pointer-events: none;
+}
+
+.layer-playhead {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #fff;
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* Controls Row */
+.layer-controls-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.layer-section-label {
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    color: #666;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+
+/* EQ Section */
+.layer-eq-section {
+    flex: 1;
+}
+
+.layer-eq-knobs {
+    display: flex;
+    gap: 16px;
+}
+
+.layer-knob-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.layer-knob {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+    border: 2px solid #3a3a3a;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.layer-knob:hover {
+    border-color: #4fc3f7;
+}
+
+.layer-knob-indicator {
+    position: absolute;
+    width: 3px;
+    height: 10px;
+    background: #888;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%) rotate(0deg);
+    transform-origin: center 14px;
+    border-radius: 2px;
+    transition: transform 0.05s ease;
+}
+
+.layer-knob:hover .layer-knob-indicator {
+    background: #4fc3f7;
+}
+
+.layer-knob-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    color: #666;
+}
+
+.layer-knob-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #888;
+}
+
+/* Channel Section (Mute/Solo/Pan) */
+.layer-channel-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+}
+
+.layer-channel-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.layer-mute-btn,
+.layer-solo-btn {
+    width: 28px;
+    height: 28px;
+    border: 2px solid #333;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    color: #666;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.layer-mute-btn:hover {
+    border-color: #ff5252;
+    color: #ff5252;
+}
+
+.layer-mute-btn.active {
+    background: linear-gradient(180deg, #5c1a1a 0%, #3c0a0a 100%);
+    border-color: #ff5252;
+    color: #ff8a80;
+    box-shadow: 0 0 6px rgba(255, 82, 82, 0.4);
+}
+
+.layer-solo-btn:hover {
+    border-color: #ffab40;
+    color: #ffab40;
+}
+
+.layer-solo-btn.active {
+    background: linear-gradient(180deg, #5c4a1a 0%, #3c2a0a 100%);
+    border-color: #ffab40;
+    color: #ffd180;
+    box-shadow: 0 0 6px rgba(255, 171, 64, 0.4);
+}
+
+.layer-pan-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.layer-pan-knob {
+    position: relative;
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+    border: 2px solid #3a3a3a;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+.layer-pan-knob:hover {
+    border-color: #4fc3f7;
+}
+
+.layer-pan-indicator {
+    position: absolute;
+    width: 2px;
+    height: 8px;
+    background: #888;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%) rotate(0deg);
+    transform-origin: center 12px;
+    border-radius: 1px;
+    transition: transform 0.05s ease;
+}
+
+.layer-pan-knob:hover .layer-pan-indicator {
+    background: #4fc3f7;
+}
+
+.layer-pan-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: #888;
+    min-width: 24px;
+    text-align: center;
+}
+
+/* Delete Section */
+.layer-delete-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.layer-delete-btn {
+    width: 36px;
+    height: 36px;
+    border: 2px solid #333;
+    border-radius: 6px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    color: #666;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.layer-delete-btn:hover {
+    border-color: #ff5252;
+    color: #ff5252;
+    background: linear-gradient(180deg, #3c1a1a 0%, #2c0a0a 100%);
+}
+
+.layer-delete-btn .delete-icon {
+    font-size: 16px;
+}
+
+/* Reverse Section */
+.layer-reverse-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.layer-reverse-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 16px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 2px solid #333;
+    border-radius: 6px;
+    color: #666;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.layer-reverse-btn .reverse-icon {
+    font-size: 18px;
+}
+
+.layer-reverse-btn:hover {
+    border-color: #9c27b0;
+    color: #9c27b0;
+}
+
+.layer-reverse-btn.active {
+    background: linear-gradient(180deg, #4a1a5c 0%, #2a0a3c 100%);
+    border-color: #9c27b0;
+    color: #ce93d8;
+    box-shadow: 0 0 8px rgba(156, 39, 176, 0.4);
+}
+
+/* Loop Bounds Section */
+.layer-bounds-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.layer-bounds-display {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.bounds-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    color: #666;
+}
+
+.bounds-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: #4fc3f7;
+    min-width: 40px;
 }
