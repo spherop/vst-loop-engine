@@ -1574,9 +1574,18 @@ class LooperController {
             // Count active (non-empty) layers for spread calculation
             const activeLayers = displayWaveforms.filter(d => d && d.length > 0).length;
 
+            // When a layer is selected for handle editing, only show that layer's waveform
+            // This makes it easier to see individual layer loop bounds
+            const selectedLayer = this.selectedLayerForHandles;  // 0 = global/all, 1-8 = specific layer
+
             for (let layerIdx = 0; layerIdx < displayWaveforms.length; layerIdx++) {
                 const layerData = displayWaveforms[layerIdx];
                 if (!layerData || layerData.length === 0) continue;
+
+                // If a layer is selected, only draw that layer (skip others)
+                if (selectedLayer > 0 && (layerIdx + 1) !== selectedLayer) {
+                    continue;
+                }
 
                 // Check if this layer is muted (undone) - draw as outline if so
                 const isMuted = layerMutes && layerMutes[layerIdx];
