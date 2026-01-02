@@ -788,21 +788,39 @@ public:
         return false;
     }
 
-    // Parameters (apply to all layers)
+    // Parameters (apply to all layers when global value changes)
+    // These are called every processBlock from APVTS parameters, so we must
+    // guard against overwriting per-layer settings by only applying when changed
     void setLoopStart(float normalizedPos)
     {
-        for (int i = 0; i <= highestLayer; ++i)
+        // Only apply if the global loop start actually changed
+        // This prevents overwriting per-layer settings every block
+        if (std::abs(globalLoopStart - normalizedPos) < 0.0001f)
+            return;
+
+        globalLoopStart = normalizedPos;
+
+        for (int i = 0; i < NUM_LAYERS; ++i)
         {
             layers[i].setLoopStart(normalizedPos);
         }
+        DBG("Global loop start changed to: " + juce::String(normalizedPos, 3));
     }
 
     void setLoopEnd(float normalizedPos)
     {
-        for (int i = 0; i <= highestLayer; ++i)
+        // Only apply if the global loop end actually changed
+        // This prevents overwriting per-layer settings every block
+        if (std::abs(globalLoopEnd - normalizedPos) < 0.0001f)
+            return;
+
+        globalLoopEnd = normalizedPos;
+
+        for (int i = 0; i < NUM_LAYERS; ++i)
         {
             layers[i].setLoopEnd(normalizedPos);
         }
+        DBG("Global loop end changed to: " + juce::String(normalizedPos, 3));
     }
 
     void setSpeed(float rate)
@@ -2178,6 +2196,8 @@ private:
     int masterLoopLength = 0;
     double currentSampleRate = 44100.0;
     bool isReversed = false;  // Master reverse state
+    float globalLoopStart = 0.0f;  // Master loop start (for change detection)
+    float globalLoopEnd = 1.0f;    // Master loop end (for change detection)
     std::atomic<int> presetLengthBars { 0 };  // 0 = free, 1-16 = bars
     std::atomic<int> presetLengthBeats { 0 }; // 0-7 additional beats
     std::atomic<float> hostBpm { 120.0f };
