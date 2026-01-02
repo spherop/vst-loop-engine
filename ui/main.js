@@ -607,6 +607,10 @@ class LooperController {
                 loopFadeKnob.resetToDefault();
                 console.log('[SYNC] Reset loopFade knob to default');
             }
+            if (window.layerDepthKnob) {
+                window.layerDepthKnob.reset();
+                console.log('[SYNC] Reset layerDepth knob to default');
+            }
 
             // Reset reverse button state via native function
             console.log('[SYNC] Resetting reverse state...');
@@ -6315,6 +6319,141 @@ document.addEventListener('DOMContentLoaded', () => {
         pitchSelect.addEventListener('blur', () => {
             setTimeout(() => hideChromaticMenu(pitchSelect), 150);
         });
+    }
+
+    // LAYERS knob: Controls how many layers are audible (undo/redo navigation)
+    // All the way right = all layers, turning left progressively mutes from top down
+    const layerDepthValueEl = document.getElementById('layerDepth-value');
+
+    // Function to apply layer depth muting
+    const applyLayerDepth = async (normalizedValue) => {
+        // Get the highest layer with content
+        const highestLayer = window.looperController?.highestLayer || 1;
+
+        if (highestLayer <= 1) {
+            // Only one layer - always show ALL
+            if (layerDepthValueEl) layerDepthValueEl.textContent = 'ALL';
+            return;
+        }
+
+        // Calculate how many layers should be audible based on knob position
+        // 1.0 = all layers, 0.0 = only layer 1
+        // Divide the range into (highestLayer) segments
+        const layersToPlay = Math.max(1, Math.round(normalizedValue * highestLayer));
+
+        // Update display
+        if (layerDepthValueEl) {
+            if (layersToPlay >= highestLayer) {
+                layerDepthValueEl.textContent = 'ALL';
+            } else {
+                layerDepthValueEl.textContent = `1-${layersToPlay}`;
+            }
+        }
+
+        // Mute layers above the threshold, unmute layers at or below
+        if (window.mixerController) {
+            for (let i = 0; i < 8; i++) {
+                const layerNum = i + 1;  // 1-indexed
+                const shouldBeMuted = layerNum > layersToPlay;
+                const channel = window.mixerController.channels[i];
+
+                if (channel && channel.muted !== shouldBeMuted) {
+                    // Toggle mute state
+                    channel.muted = shouldBeMuted;
+
+                    // Update backend
+                    if (window.__JUCE__?.backend?.getNativeFunction) {
+                        const setLayerMuteFn = window.__JUCE__.backend.getNativeFunction('setLayerMute');
+                        if (setLayerMuteFn) {
+                            await setLayerMuteFn(layerNum, shouldBeMuted);
+                        }
+                    }
+
+                    // Update visual state
+                    const muteBtn = channel.element?.querySelector('.mixer-mute-btn');
+                    if (muteBtn) {
+                        muteBtn.classList.toggle('active', shouldBeMuted);
+                    }
+                }
+            }
+        }
+
+        // Trigger UI update
+        if (window.looperController) {
+            window.looperController.updateLayerUI(
+                window.looperController.currentLayer,
+                window.looperController.highestLayer
+            );
+        }
+    };
+
+    // Create a custom knob that doesn't bind to APVTS
+    const layerDepthKnobEl = document.getElementById('layerDepth-knob');
+    if (layerDepthKnobEl) {
+        let isDragging = false;
+        let startY = 0;
+        let startValue = 1.0;
+        let currentValue = 1.0;
+
+        const updateKnobVisual = (value) => {
+            const dot = layerDepthKnobEl.querySelector('.knob-dot');
+            if (dot) {
+                // Map 0-1 to rotation angle (-135 to 135 degrees)
+                const angle = -135 + (value * 270);
+                layerDepthKnobEl.style.transform = `rotate(${angle}deg)`;
+            }
+        };
+
+        // Initialize at max (all layers)
+        updateKnobVisual(1.0);
+
+        layerDepthKnobEl.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startY = e.clientY;
+            startValue = currentValue;
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const deltaY = startY - e.clientY;
+            const sensitivity = 0.005;
+            let newValue = startValue + (deltaY * sensitivity);
+            newValue = Math.max(0, Math.min(1, newValue));
+
+            if (Math.abs(newValue - currentValue) > 0.01) {
+                currentValue = newValue;
+                updateKnobVisual(currentValue);
+                applyLayerDepth(currentValue);
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        // Double-click to reset to ALL
+        layerDepthKnobEl.addEventListener('dblclick', () => {
+            currentValue = 1.0;
+            updateKnobVisual(1.0);
+            applyLayerDepth(1.0);
+        });
+
+        // Store reference for external access
+        window.layerDepthKnob = {
+            getValue: () => currentValue,
+            setValue: (v) => {
+                currentValue = v;
+                updateKnobVisual(v);
+                applyLayerDepth(v);
+            },
+            reset: () => {
+                currentValue = 1.0;
+                updateKnobVisual(1.0);
+                applyLayerDepth(1.0);
+            }
+        };
     }
 
     // Loop Fade: 0% (play once) to 100% (infinite loop)
