@@ -1717,10 +1717,30 @@ class LooperController {
 
     updatePlayhead(position) {
         if (this.playhead && this.waveformCanvas) {
-            // Position is 0-1 within the loop region (between start and end)
-            // Convert to actual canvas position
-            const loopRegionWidth = this.loopEnd - this.loopStart;
-            const absolutePosition = this.loopStart + (position * loopRegionWidth);
+            // Get the appropriate loop bounds based on whether a layer is selected
+            const targetLayer = this.selectedLayerForHandles;
+            let loopStart, loopEnd;
+
+            if (targetLayer === 0) {
+                // Global mode - use global bounds
+                loopStart = this.loopStart;
+                loopEnd = this.loopEnd;
+            } else {
+                // Per-layer mode - use that layer's bounds
+                const bounds = this.layerLoopBounds[targetLayer - 1];
+                loopStart = bounds.start;
+                loopEnd = bounds.end;
+            }
+
+            // Position is 0-1 within the layer's effective loop region
+            // The backend already calculates this relative to the layer's loopStart/loopEnd
+            // So position 0 = at layer's loop start, position 1 = at layer's loop end
+            //
+            // We need to map this to the visual position:
+            // - The visual loop region goes from loopStart to loopEnd (in normalized 0-1 space)
+            // - So absolutePosition = loopStart + position * (loopEnd - loopStart)
+            const loopRegionWidth = loopEnd - loopStart;
+            const absolutePosition = loopStart + (position * loopRegionWidth);
 
             // Apply zoom
             const zoomedWidth = this.waveformCanvas.width * this.zoomLevel;
@@ -2137,9 +2157,22 @@ class LooperController {
             try {
                 const state = await this.getStateFn();
                 if (state) {
-                    // Update playhead position
+                    // Store layer playhead positions for per-layer display
+                    if (state.layerPlayheads) {
+                        this.layerPlayheads = state.layerPlayheads;
+                    }
+
+                    // Update playhead position - use layer-specific if a layer is selected
                     if (typeof state.playhead !== 'undefined') {
-                        this.updatePlayhead(state.playhead);
+                        let playheadPos = state.playhead;
+
+                        // If a layer is selected, use that layer's playhead position
+                        const targetLayer = this.selectedLayerForHandles;
+                        if (targetLayer > 0 && this.layerPlayheads && this.layerPlayheads[targetLayer - 1] !== undefined) {
+                            playheadPos = this.layerPlayheads[targetLayer - 1];
+                        }
+
+                        this.updatePlayhead(playheadPos);
                     }
 
                     // Update time display

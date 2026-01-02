@@ -1652,6 +1652,17 @@ public:
         return 0.0f;
     }
 
+    // Get playhead position for a specific layer (1-indexed)
+    float getLayerPlayheadPosition(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getPlayheadPosition();
+        }
+        return 0.0f;
+    }
+
     float getLoopLengthSeconds() const
     {
         if (masterLoopLength <= 0 || currentSampleRate <= 0)

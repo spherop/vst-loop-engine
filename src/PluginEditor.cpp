@@ -433,6 +433,14 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       result->setProperty("hasContent", loopEngine.hasContent());
                       result->setProperty("isReversed", loopEngine.getIsReversed());
 
+                      // Add per-layer playhead positions for accurate layer-specific visualization
+                      juce::Array<juce::var> layerPlayheads;
+                      for (int i = 0; i < 8; ++i)
+                      {
+                          layerPlayheads.add(loopEngine.getLayerPlayheadPosition(i + 1));
+                      }
+                      result->setProperty("layerPlayheads", layerPlayheads);
+
                       // Get combined waveform data (100 points for visualization)
                       auto waveformStartTime = juce::Time::getHighResolutionTicks();
                       auto waveformData = loopEngine.getWaveformData(100);
