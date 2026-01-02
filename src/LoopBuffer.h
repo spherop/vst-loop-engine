@@ -905,6 +905,63 @@ public:
         }
     }
 
+    // Peek playback without applying fade/volume/pan - used for Layer Mode bounce
+    // We want to record the raw buffer content, not the attenuated output
+    void peekPlaybackRaw(juce::AudioBuffer<float>& buffer) const
+    {
+        if (loopLength <= 0 || state.load() != State::Playing)
+        {
+            buffer.clear();
+            return;
+        }
+
+        const int numSamples = buffer.getNumSamples();
+        float* leftChannel = buffer.getWritePointer(0);
+        float* rightChannel = buffer.getNumChannels() > 1 ? buffer.getWritePointer(1) : nullptr;
+
+        const int effectiveStart = loopStart;
+        const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
+        const int effectiveLength = effectiveEnd - effectiveStart;
+
+        if (effectiveLength <= 0)
+        {
+            buffer.clear();
+            return;
+        }
+
+        // Get playback rate (still needed for position calculation)
+        const float rate = playbackRateSmoothed.getTargetValue();
+        const bool reversed = isReversed.load();
+
+        float peekHead = playHead;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            // Read with crossfade at boundaries
+            float rawL, rawR;
+            readWithCrossfade(rawL, rawR, peekHead, effectiveStart, effectiveEnd);
+
+            // Output raw content - no fade, volume, or pan applied
+            leftChannel[i] = rawL;
+            if (rightChannel)
+                rightChannel[i] = rawR;
+
+            // Advance peek head (simulating playback without modifying actual state)
+            if (reversed)
+            {
+                peekHead -= rate;
+                while (peekHead < effectiveStart)
+                    peekHead += effectiveLength;
+            }
+            else
+            {
+                peekHead += rate;
+                while (peekHead >= effectiveEnd)
+                    peekHead -= effectiveLength;
+            }
+        }
+    }
+
     bool hasContent() const { return loopLength > 0; }
     bool getIsReversed() const { return isReversed.load(); }
     bool getReversed() const { return isReversed.load(); }

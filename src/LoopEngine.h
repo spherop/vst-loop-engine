@@ -1098,10 +1098,11 @@ public:
 
                     if (bounceFromLayer >= 0)
                     {
-                        // Get this layer's playback without advancing its state
+                        // Get this layer's RAW playback (no fade/volume/pan)
+                        // We want to record the actual buffer content, not attenuated output
                         juce::AudioBuffer<float> tempLayer(numChannels, numSamples);
                         tempLayer.clear();
-                        layers[bounceFromLayer].peekPlayback(tempLayer);
+                        layers[bounceFromLayer].peekPlaybackRaw(tempLayer);
 
                         // Copy to bounce buffer (only one layer, so copy not add)
                         for (int ch = 0; ch < numChannels; ++ch)
