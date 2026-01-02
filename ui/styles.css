@@ -1067,7 +1067,8 @@ html, body {
     top: 0;
     bottom: 0;
     width: 8px;
-    background: rgba(79, 195, 247, 0.2);
+    /* Use CSS variable for layer-specific color, fallback to accent */
+    background: color-mix(in srgb, var(--loop-region-color, #4fc3f7) 20%, transparent);
     cursor: ew-resize;
     pointer-events: all;
     transition: background 0.15s ease, transform 0.1s ease;
@@ -1076,12 +1077,12 @@ html, body {
 }
 
 .loop-handle:hover {
-    background: rgba(79, 195, 247, 0.5);
+    background: color-mix(in srgb, var(--loop-region-color, #4fc3f7) 50%, transparent);
     width: 10px;
 }
 
 .loop-handle:active {
-    background: rgba(79, 195, 247, 0.7);
+    background: color-mix(in srgb, var(--loop-region-color, #4fc3f7) 70%, transparent);
 }
 
 .loop-handle::after {
@@ -1092,9 +1093,10 @@ html, body {
     transform: translate(-50%, -50%);
     width: 2px;
     height: 20px;
-    background: var(--looper-accent);
+    /* Use CSS variable for layer-specific color */
+    background: var(--loop-region-color, var(--looper-accent));
     border-radius: 1px;
-    box-shadow: 0 0 4px var(--looper-accent-glow);
+    box-shadow: 0 0 4px var(--loop-region-color, var(--looper-accent-glow));
 }
 
 .loop-handle.start {

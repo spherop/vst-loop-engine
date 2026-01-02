@@ -475,9 +475,16 @@ class LooperController {
         this.minZoom = 1.0;
         this.maxZoom = 8.0;
 
-        // Loop region values (0-1 normalized)
+        // Loop region values (0-1 normalized) - global defaults
         this.loopStart = 0;
         this.loopEnd = 1;
+
+        // Per-layer loop bounds (0 = global, 1-8 = layer-specific)
+        this.selectedLayerForHandles = 0;  // 0 = global mode, 1-8 = per-layer
+        this.layerLoopBounds = [];
+        for (let i = 0; i < 8; i++) {
+            this.layerLoopBounds.push({ start: 0, end: 1 });
+        }
 
         // Per-layer colors for waveform visualization
         // 8 distinct colors: base blue, then variations for each layer
@@ -543,6 +550,11 @@ class LooperController {
         this.getLayerVolumeFn = getNativeFunction("getLayerVolume");
         this.setLayerPanFn = getNativeFunction("setLayerPan");
         this.getLayerPanFn = getNativeFunction("getLayerPan");
+
+        // Per-layer loop bounds native functions
+        this.setLayerLoopStartFn = getNativeFunction("setLayerLoopStart");
+        this.setLayerLoopEndFn = getNativeFunction("setLayerLoopEnd");
+        this.getLayerLoopBoundsFn = getNativeFunction("getLayerLoopBounds");
 
         // Loop length setting (bars + beats)
         this.loopLengthBars = 0;
@@ -1069,14 +1081,25 @@ class LooperController {
                 // Only drag if clicking on the region itself, not the handles
                 if (e.target === this.loopRegion) {
                     e.stopPropagation();
-                    const regionWidth = this.loopEnd - this.loopStart;
+                    // Get current bounds based on mode
+                    const targetLayer = this.selectedLayerForHandles;
+                    let currentStart, currentEnd;
+                    if (targetLayer === 0) {
+                        currentStart = this.loopStart;
+                        currentEnd = this.loopEnd;
+                    } else {
+                        const bounds = this.layerLoopBounds[targetLayer - 1];
+                        currentStart = bounds.start;
+                        currentEnd = bounds.end;
+                    }
+                    const regionWidth = currentEnd - currentStart;
                     // Only allow dragging if region is smaller than full width
                     if (regionWidth < 0.99) {
                         this.draggingHandle = 'region';
                         this.regionDragWidth = regionWidth;
                         const rect = this.waveformContainer.getBoundingClientRect();
                         this.regionDragStartX = (e.clientX - rect.left) / rect.width;
-                        this.regionDragStartLoopStart = this.loopStart;
+                        this.regionDragStartLoopStart = currentStart;
                         document.body.style.cursor = 'grab';
                     }
                 }
@@ -1091,18 +1114,28 @@ class LooperController {
             let normalizedPos = (e.clientX - rect.left) / rect.width;
             normalizedPos = Math.max(0, Math.min(1, normalizedPos));
 
+            // Get current bounds based on whether we're in global or per-layer mode
+            const targetLayer = this.selectedLayerForHandles;
+            let currentStart, currentEnd;
+            if (targetLayer === 0) {
+                currentStart = this.loopStart;
+                currentEnd = this.loopEnd;
+            } else {
+                const bounds = this.layerLoopBounds[targetLayer - 1];
+                currentStart = bounds.start;
+                currentEnd = bounds.end;
+            }
+
             if (this.draggingHandle === 'start') {
                 // Start can't go past end - 1%
-                const maxStart = this.loopEnd - 0.01;
+                const maxStart = currentEnd - 0.01;
                 normalizedPos = Math.min(normalizedPos, maxStart);
-                this.setLoopStart(normalizedPos);
-                this.sendLoopStartToJuce(normalizedPos);
+                this.applyLoopStart(normalizedPos, targetLayer);
             } else if (this.draggingHandle === 'end') {
                 // End can't go before start + 1%
-                const minEnd = this.loopStart + 0.01;
+                const minEnd = currentStart + 0.01;
                 normalizedPos = Math.max(normalizedPos, minEnd);
-                this.setLoopEnd(normalizedPos);
-                this.sendLoopEndToJuce(normalizedPos);
+                this.applyLoopEnd(normalizedPos, targetLayer);
             } else if (this.draggingHandle === 'region') {
                 // Move the entire region while maintaining width
                 document.body.style.cursor = 'grabbing';
@@ -1120,10 +1153,8 @@ class LooperController {
                     newStart = 1 - this.regionDragWidth;
                 }
 
-                this.setLoopStart(newStart);
-                this.setLoopEnd(newEnd);
-                this.sendLoopStartToJuce(newStart);
-                this.sendLoopEndToJuce(newEnd);
+                this.applyLoopStart(newStart, targetLayer);
+                this.applyLoopEnd(newEnd, targetLayer);
             }
         });
 
@@ -1162,6 +1193,91 @@ class LooperController {
             }
         } catch (e) {
             console.error('Error setting loop end:', e);
+        }
+    }
+
+    // Apply loop start to either global (layer=0) or specific layer (1-8)
+    applyLoopStart(value, targetLayer) {
+        if (targetLayer === 0) {
+            // Global mode - apply to all layers via parameter
+            this.loopStart = value;
+            this.sendLoopStartToJuce(value);
+        } else {
+            // Per-layer mode - apply to specific layer
+            this.layerLoopBounds[targetLayer - 1].start = value;
+            this.sendLayerLoopStartToJuce(targetLayer, value);
+        }
+        this.updateLoopRegionShade();
+    }
+
+    // Apply loop end to either global (layer=0) or specific layer (1-8)
+    applyLoopEnd(value, targetLayer) {
+        if (targetLayer === 0) {
+            // Global mode - apply to all layers via parameter
+            this.loopEnd = value;
+            this.sendLoopEndToJuce(value);
+        } else {
+            // Per-layer mode - apply to specific layer
+            this.layerLoopBounds[targetLayer - 1].end = value;
+            this.sendLayerLoopEndToJuce(targetLayer, value);
+        }
+        this.updateLoopRegionShade();
+    }
+
+    // Send per-layer loop start to C++ backend
+    async sendLayerLoopStartToJuce(layer, value) {
+        try {
+            if (this.setLayerLoopStartFn) {
+                await this.setLayerLoopStartFn(layer, value);
+            }
+        } catch (e) {
+            console.error('Error setting layer loop start:', e);
+        }
+    }
+
+    // Send per-layer loop end to C++ backend
+    async sendLayerLoopEndToJuce(layer, value) {
+        try {
+            if (this.setLayerLoopEndFn) {
+                await this.setLayerLoopEndFn(layer, value);
+            }
+        } catch (e) {
+            console.error('Error setting layer loop end:', e);
+        }
+    }
+
+    // Load per-layer loop bounds from C++ backend
+    async loadLayerLoopBounds(layer) {
+        try {
+            if (this.getLayerLoopBoundsFn) {
+                const bounds = await this.getLayerLoopBoundsFn(layer);
+                if (bounds) {
+                    this.layerLoopBounds[layer - 1] = {
+                        start: bounds.start || 0,
+                        end: bounds.end || 1
+                    };
+                    this.updateLoopRegionShade();
+                    console.log(`[Loop] Loaded layer ${layer} bounds:`, bounds);
+                }
+            }
+        } catch (e) {
+            console.error('Error loading layer loop bounds:', e);
+        }
+    }
+
+    // Update loop region color based on selected layer
+    updateLoopRegionColor(layer) {
+        if (!this.loopRegion) return;
+
+        if (layer === 0) {
+            // Global mode - use default accent color
+            this.loopRegion.style.setProperty('--loop-region-color', '#4fc3f7');
+            this.loopRegionShade?.style.setProperty('--loop-region-color', '#4fc3f7');
+        } else {
+            // Use layer-specific color
+            const color = this.layerColors[layer - 1];
+            this.loopRegion.style.setProperty('--loop-region-color', color);
+            this.loopRegionShade?.style.setProperty('--loop-region-color', color);
         }
     }
 
@@ -1209,13 +1325,40 @@ class LooperController {
 
     // Select a layer for editing - shows white outline
     selectLayer(layer) {
-        this.selectedLayer = layer;
-
-        // Update visual selection on layer buttons
-        this.layerBtns.forEach(btn => {
-            const btnLayer = parseInt(btn.dataset.layer);
-            btn.classList.toggle('selected', btnLayer === layer);
-        });
+        // Toggle selection behavior for loop handles
+        if (this.selectedLayerForHandles === layer) {
+            // Same layer clicked again - deselect (return to global)
+            this.selectedLayerForHandles = 0;
+            this.selectedLayer = 0;
+            this.updateLoopRegionShade();
+            this.updateLoopRegionColor(0);
+            // Hide the layer panel
+            if (window.layerPanelController) {
+                window.layerPanelController.hidePanel();
+            }
+            // Remove selection highlight from all buttons
+            this.layerBtns.forEach(btn => {
+                btn.classList.remove('selected');
+            });
+            console.log('[Loop] Deselected layer, returning to global handles');
+        } else {
+            // New layer selected
+            this.selectedLayerForHandles = layer;
+            this.selectedLayer = layer;
+            // Load that layer's loop bounds and update display
+            this.loadLayerLoopBounds(layer);
+            this.updateLoopRegionColor(layer);
+            // Show layer panel
+            if (window.layerPanelController) {
+                window.layerPanelController.showPanel(layer);
+            }
+            // Update visual selection on layer buttons
+            this.layerBtns.forEach(btn => {
+                const btnLayer = parseInt(btn.dataset.layer);
+                btn.classList.toggle('selected', btnLayer === layer);
+            });
+            console.log(`[Loop] Selected layer ${layer} for handles`);
+        }
     }
 
     // Zoom methods
@@ -1252,19 +1395,33 @@ class LooperController {
 
     // Loop region visualization
     updateLoopRegionShade() {
+        // Get the appropriate loop bounds based on mode
+        const targetLayer = this.selectedLayerForHandles;
+        let start, end;
+        if (targetLayer === 0) {
+            // Global mode
+            start = this.loopStart;
+            end = this.loopEnd;
+        } else {
+            // Per-layer mode
+            const bounds = this.layerLoopBounds[targetLayer - 1];
+            start = bounds.start;
+            end = bounds.end;
+        }
+
         if (this.loopRegionShade) {
-            this.loopRegionShade.style.setProperty('--loop-start', `${this.loopStart * 100}%`);
-            this.loopRegionShade.style.setProperty('--loop-end', `${this.loopEnd * 100}%`);
+            this.loopRegionShade.style.setProperty('--loop-start', `${start * 100}%`);
+            this.loopRegionShade.style.setProperty('--loop-end', `${end * 100}%`);
         }
 
         // Update the draggable loop region position via CSS variables
         // The handles are positioned relative to the loop-region edges via CSS
         if (this.loopRegion) {
-            this.loopRegion.style.setProperty('--loop-start', `${this.loopStart * 100}%`);
-            this.loopRegion.style.setProperty('--loop-end', `${this.loopEnd * 100}%`);
+            this.loopRegion.style.setProperty('--loop-start', `${start * 100}%`);
+            this.loopRegion.style.setProperty('--loop-end', `${end * 100}%`);
 
             // Add/remove full-width class to control cursor
-            const regionWidth = this.loopEnd - this.loopStart;
+            const regionWidth = end - start;
             if (regionWidth >= 0.99) {
                 this.loopRegion.classList.add('full-width');
             } else {
@@ -1721,12 +1878,22 @@ class LooperController {
             this.updateTransportUI('idle');
             this.updateLayerUI(1, 0);
 
-            // Reset loop start/end to defaults
+            // Reset loop start/end to defaults (global)
             this.loopStart = 0;
             this.loopEnd = 1;
-            this.updateLoopRegionShade();
 
-            // Note: loopStart/loopEnd knobs removed - now using drag handles
+            // Reset per-layer loop bounds
+            this.selectedLayerForHandles = 0;
+            for (let i = 0; i < 8; i++) {
+                this.layerLoopBounds[i] = { start: 0, end: 1 };
+            }
+            this.updateLoopRegionShade();
+            this.updateLoopRegionColor(0);
+
+            // Remove selection highlight from layer buttons
+            this.layerBtns.forEach(btn => {
+                btn.classList.remove('selected');
+            });
 
             // Also reset layer content states
             this.layerContentStates = [false, false, false, false, false, false, false, false];
