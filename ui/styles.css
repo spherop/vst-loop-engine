@@ -1248,6 +1248,38 @@ html, body {
     outline-offset: 1px;
 }
 
+/* Layer hierarchy - topmost unmuted layer is most prominent */
+.layer-btn.topmost-layer {
+    transform: scale(1.15);
+    z-index: 10;
+    box-shadow: 0 0 16px currentColor !important;
+}
+
+/* Progressively smaller layers below the topmost */
+.layer-btn.depth-1 {
+    transform: scale(0.95);
+    opacity: 0.85;
+    z-index: 9;
+}
+
+.layer-btn.depth-2 {
+    transform: scale(0.88);
+    opacity: 0.7;
+    z-index: 8;
+}
+
+.layer-btn.depth-3 {
+    transform: scale(0.82);
+    opacity: 0.55;
+    z-index: 7;
+}
+
+.layer-btn.depth-4 {
+    transform: scale(0.78);
+    opacity: 0.4;
+    z-index: 6;
+}
+
 .layer-btn.undone::after {
     content: 'U';
     position: absolute;

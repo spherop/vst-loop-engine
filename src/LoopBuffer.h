@@ -65,6 +65,10 @@ public:
         fadeSmoothed.reset(sampleRate, 0.1);  // 100ms smoothing for fade
         fadeSmoothed.setCurrentAndTargetValue(1.0f);  // Default to 100% (no fade)
 
+        // Mute gain smoother for click-free muting (15ms fade)
+        muteGainSmoothed.reset(sampleRate, 0.015);
+        muteGainSmoothed.setCurrentAndTargetValue(isMuted.load() ? 0.0f : 1.0f);
+
         // Prepare block-based phase vocoder for efficient pitch shifting
         blockPitchShifter.prepare(sampleRate, samplesPerBlock);
 
@@ -88,10 +92,12 @@ public:
         state.store(State::Idle);
         isReversed.store(false);
         isMuted.store(false);
+        isSoloed.store(false);
         fadeActive.store(false);
         playbackRateSmoothed.setCurrentAndTargetValue(1.0f);
         pitchRatioSmoothed.setCurrentAndTargetValue(1.0f);
         fadeSmoothed.setCurrentAndTargetValue(1.0f);
+        muteGainSmoothed.setCurrentAndTargetValue(1.0f);  // Unmuted by default
         currentFadeMultiplier.store(1.0f);
         lastPlayheadPosition = 0.0f;
         skipFirstBlock = false;
@@ -142,6 +148,8 @@ public:
         state.store(other.state.load());
         isReversed.store(other.isReversed.load());
         isMuted.store(other.isMuted.load());
+        // Sync mute gain smoother with muted state
+        muteGainSmoothed.setCurrentAndTargetValue(other.isMuted.load() ? 0.0f : 1.0f);
         fadeActive.store(other.fadeActive.load());
         currentFadeMultiplier.store(other.currentFadeMultiplier.load());
         lastPlayheadPosition = other.lastPlayheadPosition;
@@ -902,9 +910,23 @@ public:
     bool getReversed() const { return isReversed.load(); }
     float getPlaybackRate() const { return playbackRateSmoothed.getTargetValue(); }
 
-    // Mute control
-    void setMuted(bool muted) { isMuted.store(muted); }
+    // Mute control with click-free smoothing
+    void setMuted(bool muted)
+    {
+        isMuted.store(muted);
+        muteGainSmoothed.setTargetValue(muted ? 0.0f : 1.0f);
+    }
     bool getMuted() const { return isMuted.load(); }
+
+    // Get current smoothed mute gain (call per-sample or per-block)
+    float getMuteGain() { return muteGainSmoothed.getNextValue(); }
+
+    // Check if mute is transitioning (for optimization - can skip processing if fully muted and stable)
+    bool isMuteTransitioning() const { return muteGainSmoothed.isSmoothing(); }
+
+    // Solo control (soloed layers play exclusively when any layer is soloed)
+    void setSoloed(bool soloed) { isSoloed.store(soloed); }
+    bool getSoloed() const { return isSoloed.load(); }
 
     // Layer type control (Regular vs Override/ADD+)
     void setLayerType(LayerType type) { layerType = type; }
@@ -1158,8 +1180,10 @@ private:
     juce::SmoothedValue<float> playbackRateSmoothed;
     juce::SmoothedValue<float> pitchRatioSmoothed;
     juce::SmoothedValue<float> fadeSmoothed;  // 0.0 = full fade, 1.0 = no fade
+    juce::SmoothedValue<float> muteGainSmoothed;  // 0.0 = muted, 1.0 = unmuted (for click-free muting)
     std::atomic<bool> isReversed { false };
     std::atomic<bool> isMuted { false };
+    std::atomic<bool> isSoloed { false };
     std::atomic<float> volume { 1.0f };      // Per-layer volume (0.0 to 1.0)
     std::atomic<float> pan { 0.0f };         // Per-layer pan (-1.0 to 1.0)
     std::atomic<bool> fadeActive { false };  // True when fade should apply during playback (any layer is recording)

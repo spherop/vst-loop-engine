@@ -1574,6 +1574,18 @@ class LooperController {
             // Count active (non-empty) layers for spread calculation
             const activeLayers = displayWaveforms.filter(d => d && d.length > 0).length;
 
+            // Find the topmost unmuted layer with content for visual hierarchy
+            let topmostUnmutedLayerIdx = -1;
+            for (let i = displayWaveforms.length - 1; i >= 0; i--) {
+                if (displayWaveforms[i] && displayWaveforms[i].length > 0) {
+                    const isMuted = layerMutes && layerMutes[i];
+                    if (!isMuted) {
+                        topmostUnmutedLayerIdx = i;
+                        break;
+                    }
+                }
+            }
+
             // When a layer is selected for handle editing, only show that layer's waveform
             // This makes it easier to see individual layer loop bounds
             const selectedLayer = this.selectedLayerForHandles;  // 0 = global/all, 1-8 = specific layer
@@ -1591,11 +1603,16 @@ class LooperController {
                 const isMuted = layerMutes && layerMutes[layerIdx];
                 const layerColor = this.layerColors[layerIdx % this.layerColors.length];
 
+                // Calculate depth from topmost for visual hierarchy
+                // topmost = 0, one below = 1, etc.
+                const depthFromTop = (topmostUnmutedLayerIdx >= 0 && !isMuted)
+                    ? topmostUnmutedLayerIdx - layerIdx
+                    : 0;
+
                 // Calculate per-layer vertical offset based on spread
                 // When spread is 0, all layers are centered (layerCenterY = centerY)
                 // When spread is 1, layers are evenly distributed vertically with padding
                 let layerCenterY = centerY;
-                let layerSpacing = height;  // Default: full height available for single layer
 
                 // Reserve small space for waveform amplitude at top and bottom
                 const padding = height * 0.05;  // 5% padding on each side (just enough to prevent clipping)
@@ -1605,7 +1622,6 @@ class LooperController {
                     // At full spread, distribute layers evenly within usable area
                     // Each layer gets equal vertical space
                     const slotHeight = usableHeight / activeLayers;
-                    layerSpacing = slotHeight;
 
                     // Find this layer's position among active layers
                     let activeIdx = 0;
@@ -1631,6 +1647,23 @@ class LooperController {
                     const maxAmplitudeAtFullSpread = (slotHeight * 0.4) / height;  // 40% of slot on each side
                     amplitudeScale = 0.35 * (1 - this.layerSpread) + maxAmplitudeAtFullSpread * this.layerSpread;
                 }
+
+                // Apply visual hierarchy based on depth from topmost layer
+                // Topmost layer is fullest, layers below are progressively smaller/dimmer
+                let hierarchyAmplitudeMultiplier = 1.0;
+                let hierarchyOpacity = 0.60;  // Base opacity (99 hex = ~60%)
+                if (depthFromTop > 0 && !isMuted) {
+                    // Reduce amplitude by 8% per layer depth
+                    hierarchyAmplitudeMultiplier = Math.max(0.6, 1.0 - (depthFromTop * 0.08));
+                    // Reduce opacity by 12% per layer depth
+                    hierarchyOpacity = Math.max(0.25, 0.60 - (depthFromTop * 0.12));
+                } else if (depthFromTop === 0 && !isMuted) {
+                    // Topmost layer gets a boost
+                    hierarchyAmplitudeMultiplier = 1.1;
+                    hierarchyOpacity = 0.85;
+                }
+
+                amplitudeScale *= hierarchyAmplitudeMultiplier;
 
                 if (isMuted) {
                     // Muted/undone layers: draw as colored outline (ghost effect)
@@ -1664,7 +1697,9 @@ class LooperController {
                     this.ctx.stroke();
                 } else {
                     // Active layers: draw as filled bars
-                    this.ctx.fillStyle = layerColor + '99';  // 60% opacity for active
+                    // Use hierarchy opacity for visual depth effect
+                    const opacityHex = Math.round(hierarchyOpacity * 255).toString(16).padStart(2, '0');
+                    this.ctx.fillStyle = layerColor + opacityHex;
 
                     for (let i = 0; i < layerData.length; i++) {
                         const amplitude = layerData[i] * (height * amplitudeScale);
@@ -2059,16 +2094,31 @@ class LooperController {
             this.layerOverrideStates = layerOverrides;
         }
 
+        // Find the topmost unmuted layer with content for visual hierarchy
+        let topmostUnmutedLayer = -1;  // -1 means none found
+        for (let i = 7; i >= 0; i--) {  // Check from layer 8 down to layer 1
+            if (this.layerContentStates && this.layerContentStates[i]) {
+                // Check if not muted via mixer
+                const isMuted = window.mixerController?.channels[i]?.muted || false;
+                if (!isMuted) {
+                    topmostUnmutedLayer = i + 1;  // Convert to 1-indexed
+                    break;
+                }
+            }
+        }
+        this.topmostUnmutedLayer = topmostUnmutedLayer;
+
         this.layerBtns.forEach(async btn => {
             const layer = parseInt(btn.dataset.layer);
             const idx = layer - 1;  // 0-indexed
-            btn.classList.remove('active', 'has-content', 'override-layer');
+            btn.classList.remove('active', 'has-content', 'override-layer', 'topmost-layer', 'depth-1', 'depth-2', 'depth-3', 'depth-4');
 
             // Reset inline styles
             btn.style.background = '';
             btn.style.borderColor = '';
             btn.style.color = '';
             btn.style.boxShadow = '';
+            btn.style.transform = '';
 
             if (layer === currentLayer) {
                 btn.classList.add('active');
@@ -2080,6 +2130,18 @@ class LooperController {
             // Use actual content state instead of just highestLayer
             if (this.layerContentStates[idx]) {
                 btn.classList.add('has-content');
+
+                // Apply visual hierarchy based on depth from topmost unmuted layer
+                // Topmost unmuted layer = largest, progressively smaller as depth increases
+                const isMuted = window.mixerController?.channels[idx]?.muted || false;
+                if (topmostUnmutedLayer > 0 && layer <= topmostUnmutedLayer && !isMuted) {
+                    const depthFromTop = topmostUnmutedLayer - layer;  // 0 = topmost, 1 = one below, etc.
+                    if (depthFromTop === 0) {
+                        btn.classList.add('topmost-layer');
+                    } else if (depthFromTop <= 4) {
+                        btn.classList.add(`depth-${depthFromTop}`);
+                    }
+                }
 
                 // Override layers get special styling - orange/amber color
                 if (isOverride) {

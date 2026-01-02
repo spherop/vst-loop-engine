@@ -175,6 +175,26 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       }
                       complete(juce::var(result.get()));
                   })
+                  .withNativeFunction("setLayerSoloed", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          bool soloed = static_cast<bool>(args[1]);
+                          processorRef.getLoopEngine().setLayerSoloed(layer, soloed);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerSoloed", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          result->setProperty("soloed", processorRef.getLoopEngine().getLayerSoloed(layer));
+                      }
+                      complete(juce::var(result.get()));
+                  })
                   .withNativeFunction("setLayerVolume", [this](const juce::Array<juce::var>& args, auto complete)
                   {
                       if (args.size() >= 2)
@@ -480,6 +500,13 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       for (bool muted : muteStates)
                           muteArray.add(muted);
                       result->setProperty("layerMutes", muteArray);
+
+                      // Get solo states for each layer
+                      auto soloStates = loopEngine.getLayerSoloStates();
+                      juce::Array<juce::var> soloArray;
+                      for (bool soloed : soloStates)
+                          soloArray.add(soloed);
+                      result->setProperty("layerSolos", soloArray);
 
                       // Get layer types (override vs regular) for each layer
                       juce::Array<juce::var> overrideArray;

@@ -53,6 +53,10 @@ public:
         smearCaptureLength = 0;
         smearActive = false;
 
+        // Initialize input mute gain smoother (15ms fade for click-free muting)
+        inputMuteGainSmoothed.reset(sampleRate, 0.015);
+        inputMuteGainSmoothed.setCurrentAndTargetValue(inputMuted.load() ? 0.0f : 1.0f);
+
         // Reset state
         currentLayer = 0;
         highestLayer = 0;
@@ -621,6 +625,50 @@ public:
         return false;
     }
 
+    // Per-layer solo (1-indexed for UI)
+    // When any layer is soloed, only soloed layers play
+    void setLayerSoloed(int layer, bool soloed)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            bool wasSoloed = layers[idx].getSoloed();
+            layers[idx].setSoloed(soloed);
+
+            // Update solo count
+            if (soloed && !wasSoloed)
+                soloCount.fetch_add(1);
+            else if (!soloed && wasSoloed)
+                soloCount.fetch_sub(1);
+
+            DBG("Layer " + juce::String(layer) + " soloed: " + juce::String(soloed ? "true" : "false") +
+                " (total soloed: " + juce::String(soloCount.load()) + ")");
+        }
+    }
+
+    bool getLayerSoloed(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getSoloed();
+        }
+        return false;
+    }
+
+    // Check if any layer is soloed
+    bool hasAnySoloed() const { return soloCount.load() > 0; }
+
+    // Get solo states for all layers (for UI sync)
+    std::vector<bool> getLayerSoloStates() const
+    {
+        std::vector<bool> states;
+        states.reserve(NUM_LAYERS);
+        for (int i = 0; i < NUM_LAYERS; ++i)
+            states.push_back(layers[i].getSoloed());
+        return states;
+    }
+
     // Per-layer volume (1-indexed for UI)
     void setLayerVolume(int layer, float vol)
     {
@@ -908,10 +956,26 @@ public:
         for (int ch = 0; ch < numChannels; ++ch)
             inputBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
 
-        // Apply input mute
-        if (inputMuted.load())
+        // Apply smoothed input mute for click-free transitions
+        bool isInputMuted = inputMuted.load();
+        bool isInputMuteTransitioning = inputMuteGainSmoothed.isSmoothing();
+        if (isInputMuted || isInputMuteTransitioning)
         {
-            inputBuffer.clear();
+            // Get pointers for all channels
+            float* channelData[2] = { nullptr, nullptr };
+            for (int ch = 0; ch < numChannels && ch < 2; ++ch)
+                channelData[ch] = inputBuffer.getWritePointer(ch);
+
+            // Apply gain per-sample (smoother advances once per sample, applied to all channels)
+            for (int s = 0; s < numSamples; ++s)
+            {
+                float muteGain = inputMuteGainSmoothed.getNextValue();
+                for (int ch = 0; ch < numChannels && ch < 2; ++ch)
+                {
+                    if (channelData[ch])
+                        channelData[ch][s] *= muteGain;
+                }
+            }
         }
 
         // Clear output buffers - we'll add layers to them
@@ -1063,23 +1127,34 @@ public:
             }
         }
 
+        // Check if solo is active (any layer is soloed)
+        bool anySoloActive = soloCount.load() > 0;
+
         for (int i = 0; i <= highestLayer; ++i)
         {
             bool hasContent = layers[i].hasContent();
             bool isRecording = (layers[i].getState() == LoopBuffer::State::Recording);
             bool isOverdubbing = (layers[i].getState() == LoopBuffer::State::Overdubbing);
-            bool isMuted = layers[i].getMuted();
+            bool isMutedState = layers[i].getMuted();
+            bool isMuteTransitioning = layers[i].isMuteTransitioning();
+            bool isSoloed = layers[i].getSoloed();
+
+            // Solo logic: if any layer is soloed, treat non-soloed layers as muted
+            // (Recording/overdubbing layers always play for monitoring)
+            bool effectivelyMuted = isMutedState || (anySoloActive && !isSoloed && !isRecording && !isOverdubbing);
 
             if (!hasContent && !isRecording)
                 continue;
 
-            // Skip muted layers (but still advance playhead so they stay in sync)
-            if (isMuted)
+            // Check if layer is fully muted and not transitioning (can skip for efficiency)
+            // But if transitioning, we need to process to get the smooth fade
+            if (effectivelyMuted && !isMuteTransitioning)
             {
-                // Use pre-allocated dummy buffer to advance the layer's state
+                // Fully muted and stable - advance playhead but skip processing
                 dummyBuffer.clear();
                 layers[i].processBlock(dummyBuffer);
-                // Don't mix muted layer into output
+                // Consume the mute gain value to keep smoother in sync
+                layers[i].getMuteGain();
                 continue;
             }
 
@@ -1092,6 +1167,8 @@ public:
                 // Still advance playhead to stay in sync
                 dummyBuffer.clear();
                 layers[i].processBlock(dummyBuffer);
+                // Consume the mute gain value to keep smoother in sync
+                layers[i].getMuteGain();
                 continue;
             }
 
@@ -1135,6 +1212,27 @@ public:
             }
 
             layers[i].processBlock(layerBuffer);
+
+            // Apply smoothed mute gain for click-free muting
+            // This must be done per-sample to get the smooth transition
+            if (isMuteTransitioning || isMutedState)
+            {
+                // Get pointers for all channels
+                float* channelData[2] = { nullptr, nullptr };
+                for (int ch = 0; ch < numChannels && ch < 2; ++ch)
+                    channelData[ch] = layerBuffer.getWritePointer(ch);
+
+                // Apply gain per-sample (smoother advances once per sample, applied to all channels)
+                for (int s = 0; s < numSamples; ++s)
+                {
+                    float muteGain = layers[i].getMuteGain();
+                    for (int ch = 0; ch < numChannels && ch < 2; ++ch)
+                    {
+                        if (channelData[ch])
+                            channelData[ch][s] *= muteGain;
+                    }
+                }
+            }
 
             // Check per-layer peak levels for diagnostic metering and VU meters
             int layerClips = 0;
@@ -1812,7 +1910,11 @@ public:
     }
 
     // Input monitoring controls
-    void setInputMuted(bool muted) { inputMuted.store(muted); }
+    void setInputMuted(bool muted)
+    {
+        inputMuted.store(muted);
+        inputMuteGainSmoothed.setTargetValue(muted ? 0.0f : 1.0f);
+    }
     bool getInputMuted() const { return inputMuted.load(); }
     float getInputLevelL() const { return inputLevelL.load(); }
     float getInputLevelR() const { return inputLevelR.load(); }
@@ -2217,6 +2319,8 @@ private:
     std::atomic<float> inputLevelL { 0.0f };
     std::atomic<float> inputLevelR { 0.0f };
     std::atomic<bool> inputMuted { false };
+    juce::SmoothedValue<float> inputMuteGainSmoothed;  // For click-free input muting
+    std::atomic<int> soloCount { 0 };  // Number of layers currently soloed
 
     // Diagnostic metering for debugging audio issues
     std::atomic<float> preClipPeakL { 0.0f };   // Peak level before soft clipping
