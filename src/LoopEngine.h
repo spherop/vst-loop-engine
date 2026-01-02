@@ -1078,27 +1078,34 @@ public:
                     bounceBuffer.setSize(numChannels, numSamples, false, false, true);
                     bounceBuffer.clear();
 
-                    // Accumulate playback from all layers below the recording layer
-                    for (int i = 0; i < recordingLayerIndex; ++i)
+                    // In Layer Mode, only bounce from the HIGHEST unmuted layer below recording layer
+                    // This is because each layer already contains ALL prior layers' content baked in
+                    // (from when that layer was recorded). Bouncing multiple layers would cause
+                    // volume buildup as early layers' content gets included multiple times.
+                    //
+                    // Find the highest unmuted layer below recording layer
+                    int bounceFromLayer = -1;
+                    for (int i = recordingLayerIndex - 1; i >= 0; --i)
                     {
                         if (!layers[i].hasContent() || layers[i].getMuted())
                             continue;
-
-                        // Skip if below an override layer
+                        // Skip if below an override layer (override layers supersede all below)
                         if (highestOverride >= 0 && i < highestOverride && !layers[i].isOverrideLayer())
                             continue;
+                        bounceFromLayer = i;
+                        break;  // Found highest valid layer
+                    }
 
+                    if (bounceFromLayer >= 0)
+                    {
                         // Get this layer's playback without advancing its state
-                        // We'll use a temp buffer and just peek at what it would output
                         juce::AudioBuffer<float> tempLayer(numChannels, numSamples);
                         tempLayer.clear();
+                        layers[bounceFromLayer].peekPlayback(tempLayer);
 
-                        // Read the layer's current content at its playhead position
-                        layers[i].peekPlayback(tempLayer);
-
-                        // Add to bounce buffer
+                        // Copy to bounce buffer (only one layer, so copy not add)
                         for (int ch = 0; ch < numChannels; ++ch)
-                            bounceBuffer.addFrom(ch, 0, tempLayer, ch, 0, numSamples);
+                            bounceBuffer.copyFrom(ch, 0, tempLayer, ch, 0, numSamples);
                     }
                 }
             }

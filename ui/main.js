@@ -2138,8 +2138,10 @@ class LooperController {
                     const depthFromTop = topmostUnmutedLayer - layer;  // 0 = topmost, 1 = one below, etc.
                     if (depthFromTop === 0) {
                         btn.classList.add('topmost-layer');
-                    } else if (depthFromTop <= 4) {
-                        btn.classList.add(`depth-${depthFromTop}`);
+                    } else {
+                        // Cap at depth-4 for layers further down
+                        const depthClass = Math.min(depthFromTop, 4);
+                        btn.classList.add(`depth-${depthClass}`);
                     }
                 }
 
