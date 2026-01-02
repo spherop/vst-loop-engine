@@ -1738,6 +1738,16 @@ class LooperController {
             this.lastLayerWaveforms = null;
             this.lastLayerMutes = null;
             this._loggedLayerColors = false;
+
+            // Reset mixer visuals and state
+            if (window.mixerController) {
+                window.mixerController.resetAll();
+            }
+
+            // Hide layer panel if open
+            if (window.layerPanelController) {
+                window.layerPanelController.hidePanel();
+            }
         } catch (e) {
             console.error('Error clearing:', e);
         }
@@ -4863,6 +4873,10 @@ class MixerViewController {
         if (this.mixerViewBtn) this.mixerViewBtn.classList.add('active');
         if (this.viewLabel) this.viewLabel.textContent = 'MIXER';
 
+        // Hide layer control panel in mixer view
+        const layerPanel = document.getElementById('layer-control-panel');
+        if (layerPanel) layerPanel.classList.add('hidden');
+
         // Sync mixer state from looper controller layer buttons
         this.syncFromLayerButtons();
 
@@ -5321,6 +5335,72 @@ class MixerViewController {
             return Math.round(100 + boost * 27);
         }
     }
+
+    // Reset all mixer state and visuals (called on CLR)
+    resetAll() {
+        this.soloedLayer = null;
+
+        this.channels.forEach((channel, idx) => {
+            // Reset state
+            channel.volume = 1.0;
+            channel.pan = 0;
+            channel.muted = false;
+            channel.solo = false;
+            channel.hasContent = false;
+            channel.eqLow = 0;
+            channel.eqMid = 0;
+            channel.eqHigh = 0;
+            channel.loopStart = 0;
+            channel.loopEnd = 1;
+            channel.reversed = false;
+
+            // Reset fader visual to unity (position 100)
+            if (channel.fader) {
+                channel.fader.value = 100;
+            }
+            if (channel.faderMeter) {
+                channel.faderMeter.style.height = '0%';
+            }
+
+            // Reset pan knob visual
+            if (channel.panIndicator) {
+                channel.panIndicator.style.transform = 'translateX(-50%) rotate(0deg)';
+            }
+
+            // Reset mute/solo buttons
+            if (channel.muteBtn) channel.muteBtn.classList.remove('active');
+            if (channel.soloBtn) channel.soloBtn.classList.remove('active');
+
+            // Reset channel element states
+            if (channel.channelEl) {
+                channel.channelEl.classList.remove('has-content', 'muted', 'solo', 'override-layer');
+            }
+
+            // Reset EQ knob visuals
+            ['Low', 'Mid', 'High'].forEach(band => {
+                const indicator = channel[`eq${band}Indicator`];
+                if (indicator) {
+                    indicator.style.transform = 'translateX(-50%) rotate(0deg)';
+                }
+            });
+
+            // Reset reverse button
+            if (channel.reverseBtn) {
+                channel.reverseBtn.classList.remove('active');
+            }
+
+            // Reset VU meter
+            if (channel.vuNeedle) {
+                channel.vuNeedle.style.transform = 'translateX(-50%) rotate(-45deg)';
+            }
+
+            // Sync to layer buttons
+            this.syncMuteToLayerButton(idx + 1, false);
+            this.syncSoloToLayerButton(idx + 1, false);
+        });
+
+        console.log('[Mixer] All channels reset');
+    }
 }
 
 // ============================================
@@ -5330,6 +5410,7 @@ class MixerViewController {
 class LayerPanelController {
     constructor() {
         this.panel = document.getElementById('layer-control-panel');
+        this.layerTitleEl = document.getElementById('layer-panel-title');
         this.layerNumEl = document.getElementById('layer-panel-num');
         this.closeBtn = document.getElementById('layer-panel-close');
 
@@ -5532,10 +5613,20 @@ class LayerPanelController {
     }
 
     showPanel(layer) {
+        // Only show in waveform view, not mixer view
+        if (window.mixerController && window.mixerController.currentView === 'mixer') {
+            return;  // Don't show panel in mixer view
+        }
+
         this.selectedLayer = layer;
+        const layerColor = this.layerColors[layer - 1];
+
+        // Color the entire "LAYER X" title in the layer color
+        if (this.layerTitleEl) {
+            this.layerTitleEl.style.color = layerColor;
+        }
         if (this.layerNumEl) {
             this.layerNumEl.textContent = layer;
-            this.layerNumEl.style.color = this.layerColors[layer - 1];
         }
 
         // Load layer state from engine
@@ -6252,7 +6343,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.mixerController = new MixerViewController();
 
     // Layer panel controller (per-layer EQ, loop bounds, reverse)
-    new LayerPanelController();
+    window.layerPanelController = new LayerPanelController();
 
     // Reverse toggle - setup handled in LooperController
     looperController.setupReverseButton();

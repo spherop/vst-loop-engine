@@ -158,7 +158,7 @@ public:
             layers[i].setLoopStart(0.0f);
             layers[i].setLoopEnd(1.0f);
             layers[i].setPlaybackRate(1.0f);
-            layers[i].setReverse(false);
+            layers[i].setReverse(isReversed);  // Reset to current global reverse state
             // Pitch and fade are controlled by APVTS, don't reset here
         }
     }
@@ -815,6 +815,11 @@ public:
 
     void setReverse(bool reversed)
     {
+        // Only apply if the global reverse state actually changed
+        // This prevents the global param from overwriting per-layer reverse settings every block
+        if (isReversed == reversed)
+            return;
+
         // Store the master reverse state
         isReversed = reversed;
 
@@ -823,6 +828,8 @@ public:
         {
             layers[i].setReverse(reversed);
         }
+
+        DBG("Global reverse changed to: " + juce::String(reversed ? "true" : "false"));
     }
 
     void setPitchShift(float semitones)
