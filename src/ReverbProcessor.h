@@ -35,6 +35,7 @@ public:
         spec.maximumBlockSize = static_cast<juce::uint32>(samplesPerBlock);
         spec.numChannels = 2;
         reverb.prepare(spec);
+        reverb.reset();  // Clear any stale data in reverb buffers
 
         // Bypass gain smoother
         bypassGain.reset(sampleRate, 0.050);
@@ -136,8 +137,19 @@ public:
 
     void setEnabled(bool on)
     {
+        // Reset reverb when enabling to clear any stale/garbage data in buffers
+        // This prevents loud buzz or feedback sounds when turning on reverb
+        if (on && !enabled.load())
+        {
+            reverb.reset();
+        }
         bypassGain.setTargetValue(on ? 1.0f : 0.0f);
         enabled.store(on);
+    }
+
+    void reset()
+    {
+        reverb.reset();
     }
 
     bool getEnabled() const { return enabled.load(); }
