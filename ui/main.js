@@ -724,6 +724,13 @@ class LooperController {
         if (this.modeToggleBtn) {
             this.modeToggleBtn.classList.toggle('layer-mode', this.layerModeEnabled);
         }
+        // Update layer indicators label
+        const layerModeLabelEl = document.getElementById('layer-mode-label');
+        if (layerModeLabelEl) {
+            layerModeLabelEl.textContent = this.layerModeEnabled ? 'LAYER' : 'TRACK';
+        }
+        // Update layer button hierarchy (only in Layer mode)
+        this.updateLayerUI(this.currentLayer, this.highestLayer);
     }
 
     setupInputMonitor() {
@@ -2135,10 +2142,11 @@ class LooperController {
             if (this.layerContentStates[idx]) {
                 btn.classList.add('has-content');
 
-                // Apply visual hierarchy based on depth from topmost unmuted layer
-                // Topmost unmuted layer = largest, progressively smaller as depth increases
+                // Apply visual hierarchy ONLY in Layer mode (not Track mode)
+                // In Layer mode: topmost unmuted layer = largest, progressively smaller as depth increases
+                // In Track mode: all layers equal size (no hierarchy)
                 const isMuted = window.mixerController?.channels[idx]?.muted || false;
-                if (topmostUnmutedLayer > 0 && layer <= topmostUnmutedLayer && !isMuted) {
+                if (this.layerModeEnabled && topmostUnmutedLayer > 0 && layer <= topmostUnmutedLayer && !isMuted) {
                     const depthFromTop = topmostUnmutedLayer - layer;  // 0 = topmost, 1 = one below, etc.
                     if (depthFromTop === 0) {
                         btn.classList.add('topmost-layer');
