@@ -5,7 +5,7 @@ Loop Engine is a VST3/AU audio plugin built with JUCE 8 and a WebView-based UI. 
 
 ## Build Commands
 ```bash
-# Configure
+# Configure (REQUIRED when UI files change - see note below)
 cmake -B build -G Ninja
 
 # Build
@@ -14,6 +14,18 @@ cmake --build build
 # Clean rebuild
 rm -rf build && cmake -B build -G Ninja && cmake --build build
 ```
+
+### UI File Changes Require Reconfigure (CRITICAL)
+**When modifying files in `ui/` (HTML, CSS, JS), you MUST run `cmake -B build` before `cmake --build build`.**
+
+The UI files are embedded into BinaryData via CMake's `file(GLOB_RECURSE ...)`, which only evaluates at **configure time**. Running just `cmake --build build` will NOT pick up UI file changes - the old versions will be embedded in the plugin.
+
+**Safe pattern for UI changes:**
+```bash
+cmake -B build -G Ninja && cmake --build build
+```
+
+This ensures the file glob is re-evaluated and new UI files are included.
 
 ## Crucial Practices
 

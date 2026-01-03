@@ -161,6 +161,7 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       {
                           int layer = static_cast<int>(args[0]);
                           bool muted = static_cast<bool>(args[1]);
+                          DBG("setLayerMuted native call: layer=" + juce::String(layer) + " muted=" + juce::String(muted ? "true" : "false"));
                           processorRef.getLoopEngine().setLayerMuted(layer, muted);
                       }
                       complete({});

@@ -2325,6 +2325,13 @@ class LooperController {
 
                     // Sync layer mute UI states from backend
                     if (state.layerMutes && state.layerMutes.length > 0) {
+                        // DEBUG: Show backend mute state in LAYERS knob display
+                        const mutedLayers = state.layerMutes.map((m, i) => m ? i+1 : null).filter(x => x !== null);
+                        const layerDepthValueEl = document.getElementById('layerDepth-value');
+                        if (layerDepthValueEl && mutedLayers.length > 0) {
+                            // Only show if we have knob-muted layers (don't overwrite during drag)
+                            // layerDepthValueEl.textContent = `B:${mutedLayers.join('')}`;
+                        }
                         this.syncLayerMuteUI(state.layerMutes, state.layer || 1, state.highestLayer || 1);
                     }
                 }
@@ -6329,74 +6336,124 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // LAYERS knob: Controls how many layers are audible (undo/redo navigation)
-    // All the way right = all layers, turning left progressively mutes from top down
+    // LAYERS knob: Blooper-style UNDO knob
+    // All the way right = all layers audible, turning left progressively mutes from top down
+    // Like Blooper: smooth scroll through layer history, unmute/mute as you turn
     const layerDepthValueEl = document.getElementById('layerDepth-value');
+    const layerDepthKnobEl = document.getElementById('layerDepth-knob');
+    let knobMutedLayers = new Set();
 
-    // Function to apply layer depth muting
+    // Store native function reference once (same pattern as mixer)
+    const layerMuteFn = getNativeFunction('setLayerMuted');
+
+    // Debug: mark element found immediately
+    if (layerDepthValueEl) {
+        layerDepthValueEl.textContent = layerMuteFn ? 'RDY' : 'NO-FN';
+    }
+
+    // Function to apply layer depth muting - Blooper style
     const applyLayerDepth = async (normalizedValue) => {
-        // Get the highest layer with content
-        const highestLayer = window.looperController?.highestLayer || 1;
+        // Use layerContentStates to determine which layers have content
+        const contentStates = looperController?.layerContentStates || [];
 
-        if (highestLayer <= 1) {
-            // Only one layer - always show ALL
-            if (layerDepthValueEl) layerDepthValueEl.textContent = 'ALL';
+        // Count layers with content
+        let layersWithContent = [];
+        for (let i = 0; i < contentStates.length; i++) {
+            if (contentStates[i]) {
+                layersWithContent.push(i + 1);  // 1-indexed
+            }
+        }
+
+        const numLayersWithContent = layersWithContent.length;
+
+        if (numLayersWithContent <= 1) {
+            // Only one layer or no layers
+            if (layerDepthValueEl) layerDepthValueEl.textContent = numLayersWithContent === 0 ? 'NONE' : 'L1';
+            // Unmute everything
+            for (const layer of knobMutedLayers) {
+                await setLayerMuteState(layer, false);
+            }
+            knobMutedLayers.clear();
             return;
         }
 
-        // Calculate how many layers should be audible based on knob position
-        // 1.0 = all layers, 0.0 = only layer 1
-        // Divide the range into (highestLayer) segments
-        const layersToPlay = Math.max(1, Math.round(normalizedValue * highestLayer));
+        // Map normalized value to number of layers to play (1 to numLayersWithContent)
+        // 1.0 = all layers, near 0 = only layer 1
+        const layersToPlay = Math.max(1, Math.round(normalizedValue * numLayersWithContent));
 
-        // Update display
+        // Update display to show how many layers are audible
         if (layerDepthValueEl) {
-            if (layersToPlay >= highestLayer) {
+            if (layersToPlay >= numLayersWithContent) {
                 layerDepthValueEl.textContent = 'ALL';
             } else {
                 layerDepthValueEl.textContent = `1-${layersToPlay}`;
             }
         }
 
-        // Mute layers above the threshold, unmute layers at or below
-        if (window.mixerController) {
-            for (let i = 0; i < 8; i++) {
-                const layerNum = i + 1;  // 1-indexed
-                const shouldBeMuted = layerNum > layersToPlay;
-                const channel = window.mixerController.channels[i];
+        // Mute/unmute layers based on knob position
+        // Only consider layers that have content
+        // layersToPlay means: keep the BOTTOM N layers unmuted, mute the rest from top
+        for (let i = 0; i < layersWithContent.length; i++) {
+            const layerNum = layersWithContent[i];
+            // Layers at index >= layersToPlay should be muted (counting from bottom)
+            const shouldBeMuted = i >= layersToPlay;
 
-                if (channel && channel.muted !== shouldBeMuted) {
-                    // Toggle mute state
-                    channel.muted = shouldBeMuted;
-
-                    // Update backend
-                    if (window.__JUCE__?.backend?.getNativeFunction) {
-                        const setLayerMuteFn = window.__JUCE__.backend.getNativeFunction('setLayerMute');
-                        if (setLayerMuteFn) {
-                            await setLayerMuteFn(layerNum, shouldBeMuted);
-                        }
-                    }
-
-                    // Update visual state
-                    const muteBtn = channel.element?.querySelector('.mixer-mute-btn');
-                    if (muteBtn) {
-                        muteBtn.classList.toggle('active', shouldBeMuted);
-                    }
-                }
+            if (shouldBeMuted && !knobMutedLayers.has(layerNum)) {
+                // Mute this layer
+                console.log(`[LAYERS] MUTE layer ${layerNum}`);
+                await setLayerMuteState(layerNum, true);
+                knobMutedLayers.add(layerNum);
+            } else if (!shouldBeMuted && knobMutedLayers.has(layerNum)) {
+                // Unmute this layer (was muted by knob)
+                console.log(`[LAYERS] UNMUTE layer ${layerNum}`);
+                await setLayerMuteState(layerNum, false);
+                knobMutedLayers.delete(layerNum);
             }
         }
 
-        // Trigger UI update
-        if (window.looperController) {
-            window.looperController.updateLayerUI(
-                window.looperController.currentLayer,
-                window.looperController.highestLayer
+        // Trigger UI update for layer buttons (use module-level variable)
+        // Update layer button visuals
+        if (looperController) {
+            looperController.updateLayerUI(
+                looperController.currentLayer,
+                looperController.highestLayer
             );
         }
     };
 
-    // Create a custom knob that doesn't bind to APVTS
-    const layerDepthKnobEl = document.getElementById('layerDepth-knob');
+    // Helper to set layer mute state - simple direct call like mixer does
+    const setLayerMuteState = async (layerNum, muted) => {
+        if (!layerMuteFn) return;
+
+        try {
+            await layerMuteFn(layerNum, muted);
+        } catch (e) {
+            console.error('[LAYERS] Error calling setLayerMuted:', e);
+        }
+
+        // Update mixer controller state if available
+        const idx = layerNum - 1;
+        const channel = window.mixerController?.channels[idx];
+        if (channel) {
+            channel.muted = muted;
+            // Update visual state
+            const muteBtn = channel.element?.querySelector('.mixer-mute-btn');
+            if (muteBtn) {
+                muteBtn.classList.toggle('active', muted);
+            }
+        }
+
+        // Update layer button visual state (show as "undone" when knob-muted)
+        const layerBtn = document.querySelector(`.layer-btn[data-layer="${layerNum}"]`);
+        if (layerBtn) {
+            layerBtn.classList.toggle('undone', muted);
+        }
+    };
+
+    // Setup knob drag behavior
+    // DEBUG: Set a visible indicator that we reached this code
+    if (layerDepthValueEl) layerDepthValueEl.textContent = layerDepthKnobEl ? 'K:OK' : 'K:NO';
+
     if (layerDepthKnobEl) {
         let isDragging = false;
         let startY = 0;
@@ -6404,41 +6461,57 @@ document.addEventListener('DOMContentLoaded', () => {
         let currentValue = 1.0;
 
         const updateKnobVisual = (value) => {
-            const dot = layerDepthKnobEl.querySelector('.knob-dot');
-            if (dot) {
-                // Map 0-1 to rotation angle (-135 to 135 degrees)
-                const angle = -135 + (value * 270);
-                layerDepthKnobEl.style.transform = `rotate(${angle}deg)`;
-            }
+            // Map 0-1 to rotation angle (-135 to 135 degrees)
+            const angle = -135 + (value * 270);
+            layerDepthKnobEl.style.transform = `rotate(${angle}deg)`;
         };
 
         // Initialize at max (all layers)
         updateKnobVisual(1.0);
+        console.log('[LAYERS] Knob initialized at 1.0');
 
         layerDepthKnobEl.addEventListener('mousedown', (e) => {
             isDragging = true;
             startY = e.clientY;
             startValue = currentValue;
+            // Visual debug: show "..." when drag starts
+            if (layerDepthValueEl) layerDepthValueEl.textContent = '...';
             e.preventDefault();
+            e.stopPropagation();
         });
 
         document.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
 
             const deltaY = startY - e.clientY;
-            const sensitivity = 0.005;
+            const sensitivity = 0.005;  // Adjusted sensitivity
             let newValue = startValue + (deltaY * sensitivity);
-            newValue = Math.max(0, Math.min(1, newValue));
+            newValue = Math.max(0.001, Math.min(1, newValue));
 
-            if (Math.abs(newValue - currentValue) > 0.01) {
-                currentValue = newValue;
-                updateKnobVisual(currentValue);
-                applyLayerDepth(currentValue);
+            currentValue = newValue;
+            updateKnobVisual(currentValue);
+
+            // Get content states and count layers
+            const contentStates = looperController?.layerContentStates || [];
+            let layerCount = 0;
+            for (let i = 0; i < contentStates.length; i++) {
+                if (contentStates[i]) layerCount++;
             }
+
+            // Visual debug: show knob value and layer count
+            if (layerDepthValueEl) {
+                layerDepthValueEl.textContent = `${Math.round(currentValue * 100)}/${layerCount}L`;
+            }
+
+            applyLayerDepth(currentValue);
         });
 
         document.addEventListener('mouseup', () => {
-            isDragging = false;
+            if (isDragging) {
+                isDragging = false;
+                // After drag ends, show final state
+                applyLayerDepth(currentValue);
+            }
         });
 
         // Double-click to reset to ALL
@@ -6457,9 +6530,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 applyLayerDepth(v);
             },
             reset: () => {
+                // Clear knob-muted layers and reset to "all layers audible"
+                knobMutedLayers.clear();
                 currentValue = 1.0;
                 updateKnobVisual(1.0);
-                applyLayerDepth(1.0);
+                // Don't overwrite debug text during init - only set ALL if it's showing a layer count
+                if (layerDepthValueEl && !layerDepthValueEl.textContent.startsWith('K:')) {
+                    layerDepthValueEl.textContent = 'ALL';
+                }
             }
         };
     }
