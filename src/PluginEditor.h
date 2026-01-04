@@ -2,6 +2,7 @@
 
 #include "PluginProcessor.h"
 #include <juce_gui_extra/juce_gui_extra.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 
 class LoopEngineEditor : public juce::AudioProcessorEditor,
                         private juce::Timer
@@ -12,6 +13,10 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+
+    // Export functionality
+    juce::String exportMixToWav();       // Returns file path on success, empty on failure
+    void startDragExport();              // Export and start native drag operation
 
 private:
     void timerCallback() override;
@@ -167,6 +172,9 @@ private:
     juce::WebSliderParameterAttachment reverbModDepthAttachment;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url);
+
+    // Last exported file for drag operation
+    juce::File lastExportedFile;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoopEngineEditor)
 };

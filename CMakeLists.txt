@@ -78,6 +78,7 @@ target_link_libraries(LoopEngine
     PRIVATE
         LoopEngineData
         juce::juce_audio_utils
+        juce::juce_audio_formats
         juce::juce_dsp
         juce::juce_gui_extra
     PUBLIC

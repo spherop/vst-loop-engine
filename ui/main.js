@@ -569,6 +569,11 @@ class LooperController {
         this.layerModeEnabled = false;
         this.setLayerModeFn = getNativeFunction("setLayerMode");
 
+        // Export functions - drag uses mousedown to trigger native JUCE drag
+        this.exportMixToWavFn = getNativeFunction("exportMixToWav");
+        this.hasExportableContentFn = getNativeFunction("hasExportableContent");
+        this.startDragExportFn = getNativeFunction("startDragExport");
+
         // Input monitoring state
         this.inputMuted = false;
 
@@ -680,6 +685,7 @@ class LooperController {
         this.undoBtn = document.getElementById('undo-btn');
         this.redoBtn = document.getElementById('redo-btn');
         this.clearBtn = document.getElementById('clear-btn');
+        this.exportBtn = document.getElementById('export-btn');
         this.addBtn = document.getElementById('add-btn');
         this.timeDisplay = document.getElementById('loop-time-display');
 
@@ -700,6 +706,118 @@ class LooperController {
         }
         if (this.clearBtn) {
             this.clearBtn.addEventListener('click', () => this.clear());
+        }
+
+        // Export/WAV button - DRAG to DAW or CLICK to reveal in Finder
+        // Key insight from JUCE forum: use mousedown (not dragstart) to trigger native drag
+        if (this.exportBtn) {
+            let dragStarted = false;
+            let mouseDownPos = null;
+
+            // mousedown - prepare for potential drag
+            this.exportBtn.addEventListener('mousedown', async (e) => {
+                // Only handle left mouse button
+                if (e.button !== 0) return;
+
+                const hasContent = await this.hasExportableContentFn();
+                if (!hasContent) {
+                    console.log('[LOOPER] No content to export');
+                    this.exportBtn.classList.add('disabled');
+                    return;
+                }
+
+                dragStarted = false;
+                mouseDownPos = { x: e.clientX, y: e.clientY };
+                console.log('[LOOPER] Export button mousedown - ready for drag');
+            });
+
+            // mousemove - detect drag gesture and initiate native drag
+            this.exportBtn.addEventListener('mousemove', async (e) => {
+                if (!mouseDownPos || dragStarted) return;
+
+                // Calculate distance from mousedown position
+                const dx = e.clientX - mouseDownPos.x;
+                const dy = e.clientY - mouseDownPos.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // If moved more than 5px, start the drag
+                if (distance > 5) {
+                    dragStarted = true;
+                    this.exportBtn.classList.add('exporting');
+                    console.log('[LOOPER] Starting drag export...');
+
+                    try {
+                        // This triggers native JUCE drag with the exported file
+                        await this.startDragExportFn();
+                        console.log('[LOOPER] Drag initiated');
+                    } catch (err) {
+                        console.error('[LOOPER] Drag export error:', err);
+                    }
+
+                    // Reset state after short delay
+                    setTimeout(() => {
+                        this.exportBtn.classList.remove('exporting');
+                    }, 500);
+                }
+            });
+
+            // mouseup - if no drag happened, treat as click (export + reveal)
+            this.exportBtn.addEventListener('mouseup', async (e) => {
+                if (e.button !== 0) return;
+
+                // If we started a drag, don't do click action
+                if (dragStarted) {
+                    mouseDownPos = null;
+                    dragStarted = false;
+                    return;
+                }
+
+                // Check we had a valid mousedown on this button
+                if (!mouseDownPos) return;
+
+                mouseDownPos = null;
+
+                // Click action: export and reveal in Finder
+                const hasContent = await this.hasExportableContentFn();
+                if (!hasContent) {
+                    console.log('[LOOPER] No content to export');
+                    this.exportBtn.classList.add('disabled');
+                    return;
+                }
+
+                this.exportBtn.classList.add('exporting');
+                console.log('[LOOPER] Exporting mix to WAV...');
+
+                try {
+                    const result = await this.exportMixToWavFn(true);  // true = reveal in Finder
+                    if (result && result.success) {
+                        console.log('[LOOPER] Exported to:', result.filePath);
+                    } else {
+                        console.error('[LOOPER] Export failed');
+                    }
+                } catch (err) {
+                    console.error('[LOOPER] Export error:', err);
+                }
+
+                setTimeout(() => {
+                    this.exportBtn.classList.remove('exporting');
+                }, 500);
+            });
+
+            // mouseleave - reset drag state if mouse leaves button
+            this.exportBtn.addEventListener('mouseleave', () => {
+                mouseDownPos = null;
+            });
+
+            // Update disabled state on hover
+            this.exportBtn.addEventListener('mouseenter', async () => {
+                const hasContent = await this.hasExportableContentFn();
+                if (!hasContent) {
+                    this.exportBtn.classList.add('disabled');
+                } else {
+                    this.exportBtn.classList.remove('disabled');
+                }
+            });
         }
 
         // ADD+ button - MODE TOGGLE for additive recording (Blooper-style)

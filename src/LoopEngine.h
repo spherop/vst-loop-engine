@@ -2425,6 +2425,51 @@ public:
         DBG("completeFlatten() - Complete, layer 0 now contains flattened audio with all effects baked in");
     }
 
+    // ============================================
+    // AUDIO EXPORT - Render mix to buffer for WAV export
+    // ============================================
+
+    // Render all layers to a buffer (for export, doesn't modify state)
+    // Returns the rendered buffer, or empty buffer if no content
+    juce::AudioBuffer<float> renderMixToBuffer() const
+    {
+        if (masterLoopLength <= 0 || !hasContent())
+        {
+            return juce::AudioBuffer<float>();
+        }
+
+        // Create output buffer
+        juce::AudioBuffer<float> mixBuffer(2, masterLoopLength);
+        mixBuffer.clear();
+
+        // Sum all non-muted layers with their effects
+        for (int i = 0; i <= highestLayer; ++i)
+        {
+            if (layers[i].getMuted() || !layers[i].hasContent())
+                continue;
+
+            layers[i].addToBufferWithEffects(mixBuffer, currentSampleRate);
+        }
+
+        // Apply soft clipping to prevent clipping
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            float* data = mixBuffer.getWritePointer(ch);
+            for (int s = 0; s < masterLoopLength; ++s)
+            {
+                data[s] = softClip(data[s]);
+            }
+        }
+
+        DBG("renderMixToBuffer() - Rendered " + juce::String(highestLayer + 1) +
+            " layers, " + juce::String(masterLoopLength) + " samples");
+
+        return mixBuffer;
+    }
+
+    // Get the current sample rate (needed for WAV export)
+    double getSampleRate() const { return currentSampleRate; }
+
     // Get target loop length in samples (0 = unlimited)
     int getTargetLoopLengthSamples() const
     {

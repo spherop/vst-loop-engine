@@ -993,6 +993,38 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                       defaults->setProperty("enabled", true);
                       complete(juce::var(defaults));
                   })
+                  // =========== AUDIO EXPORT NATIVE FUNCTIONS ===========
+                  .withNativeFunction("exportMixToWav", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      // Export mix to WAV file and return the file path
+                      // Optional arg: whether to reveal in Finder after export
+                      bool revealInFinder = args.size() > 0 ? static_cast<bool>(args[0]) : false;
+
+                      juce::String filePath = exportMixToWav();
+                      juce::DynamicObject::Ptr result = new juce::DynamicObject();
+                      result->setProperty("success", filePath.isNotEmpty());
+                      result->setProperty("filePath", filePath);
+
+                      if (filePath.isNotEmpty() && revealInFinder)
+                      {
+                          // Reveal the file in Finder
+                          juce::File(filePath).revealToUser();
+                      }
+
+                      complete(juce::var(result.get()));
+                  })
+                  .withNativeFunction("hasExportableContent", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      // Check if there's content to export
+                      complete(processorRef.getLoopEngine().hasContent());
+                  })
+                  .withNativeFunction("startDragExport", [this](const juce::Array<juce::var>&, auto complete)
+                  {
+                      // Export and initiate native drag - called from JS mousedown
+                      // Using mousedown instead of dragstart avoids conflict with JUCE's drag system
+                      startDragExport();
+                      complete({});
+                  })
                   .withResourceProvider(
                       [this](const auto& url) { return getResource(url); },
                       juce::URL("http://localhost/").getOrigin())),
@@ -1159,6 +1191,10 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
     addAndMakeVisible(webView);
     webView.goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
+    // Note: Drag-to-DAW overlay doesn't work with WebView on macOS
+    // The WebView uses native rendering that covers all JUCE components
+    // Export is handled via JS click -> native function instead
+
     // Set default size to fit the full UI without scrolling
     // Two-column layout: looper left, degrade right (larger degrade panel)
     // Increased 15% from 990x667 for more comfortable layout
@@ -1191,6 +1227,106 @@ void LoopEngineEditor::paint(juce::Graphics& g)
 void LoopEngineEditor::resized()
 {
     webView.setBounds(getLocalBounds());
+}
+
+juce::String LoopEngineEditor::exportMixToWav()
+{
+    auto& loopEngine = processorRef.getLoopEngine();
+
+    // Check if there's content to export
+    if (!loopEngine.hasContent())
+    {
+        DBG("exportMixToWav: No content to export");
+        return juce::String();
+    }
+
+    // Render the mix to a buffer
+    juce::AudioBuffer<float> mixBuffer = loopEngine.renderMixToBuffer();
+
+    if (mixBuffer.getNumSamples() == 0)
+    {
+        DBG("exportMixToWav: Empty mix buffer");
+        return juce::String();
+    }
+
+    // Create export directory
+    juce::File exportDir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("LoopEngine")
+        .getChildFile("Exports");
+    exportDir.createDirectory();
+
+    // Generate unique filename with timestamp
+    juce::Time now = juce::Time::getCurrentTime();
+    juce::String timestamp = now.formatted("%Y%m%d_%H%M%S");
+    juce::String filename = "LoopEngine_Mix_" + timestamp + ".wav";
+    juce::File outputFile = exportDir.getChildFile(filename);
+
+    // Create WAV writer
+    juce::WavAudioFormat wavFormat;
+    std::unique_ptr<juce::FileOutputStream> outputStream(outputFile.createOutputStream());
+
+    if (!outputStream)
+    {
+        DBG("exportMixToWav: Failed to create output stream");
+        return juce::String();
+    }
+
+    // 24-bit WAV, stereo
+    double sampleRate = loopEngine.getSampleRate();
+    std::unique_ptr<juce::AudioFormatWriter> writer(
+        wavFormat.createWriterFor(outputStream.get(),
+                                   sampleRate,
+                                   2,      // channels
+                                   24,     // bits per sample
+                                   {},     // metadata
+                                   0));    // quality (not used for WAV)
+
+    if (!writer)
+    {
+        DBG("exportMixToWav: Failed to create WAV writer");
+        return juce::String();
+    }
+
+    // Transfer ownership of stream to writer
+    outputStream.release();
+
+    // Write the buffer
+    writer->writeFromAudioSampleBuffer(mixBuffer, 0, mixBuffer.getNumSamples());
+
+    // Store for drag operation
+    lastExportedFile = outputFile;
+
+    double durationSecs = static_cast<double>(mixBuffer.getNumSamples()) / sampleRate;
+    DBG("exportMixToWav: Exported " + juce::String(durationSecs, 2) + "s to " + outputFile.getFullPathName());
+
+    return outputFile.getFullPathName();
+}
+
+void LoopEngineEditor::startDragExport()
+{
+    // Check if there's content to export
+    if (!processorRef.getLoopEngine().hasContent())
+    {
+        DBG("startDragExport: No content to export");
+        return;
+    }
+
+    // Export the file first
+    juce::String filePath = exportMixToWav();
+    if (filePath.isEmpty())
+    {
+        DBG("startDragExport: Export failed");
+        return;
+    }
+
+    DBG("startDragExport: Starting drag with " + filePath);
+
+    // Perform native file drag - this is the key to making drag-to-DAW work with WebView
+    // By using mousedown in JS (not dragstart), we avoid conflicting with JUCE's drag system
+    // CRITICAL: On macOS, must pass sourceComponent (this) as third parameter
+    juce::StringArray files;
+    files.add(lastExportedFile.getFullPathName());
+    juce::DragAndDropContainer::performExternalDragDropOfFiles(files, false, this);
 }
 
 std::optional<juce::WebBrowserComponent::Resource> LoopEngineEditor::getResource(const juce::String& url)

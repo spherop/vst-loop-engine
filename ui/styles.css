@@ -944,6 +944,44 @@ html, body {
     color: #f44336;
 }
 
+/* Export/WAV Button */
+.transport-btn.export {
+    cursor: grab;
+}
+
+.transport-btn.export:hover {
+    border-color: #4caf50;
+    background: linear-gradient(180deg, #1a2a1a 0%, #0a1a0a 100%);
+}
+
+.transport-btn.export:hover .transport-icon {
+    color: #4caf50;
+}
+
+.transport-btn.export:active {
+    cursor: grabbing;
+    border-color: #66bb6a;
+    box-shadow: 0 0 12px rgba(76, 175, 80, 0.4);
+}
+
+.transport-btn.export.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.transport-btn.export.exporting {
+    animation: export-pulse 0.5s ease-in-out;
+}
+
+@keyframes export-pulse {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(76, 175, 80, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(76, 175, 80, 0.8);
+    }
+}
+
 /* ADD Button - Additive Recording (Blooper-style effect reprinting) */
 .transport-btn.add-btn:hover {
     border-color: #ff9800;
