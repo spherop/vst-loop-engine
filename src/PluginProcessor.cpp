@@ -634,6 +634,11 @@ void LoopEngineProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     // Prepare micro looper
     microLooper.prepare(sampleRate, samplesPerBlock);
 
+    // Pre-allocate processing buffers to avoid allocation on audio thread
+    loopPlaybackBuffer.setSize(2, samplesPerBlock);
+    inputPassthroughBuffer.setSize(2, samplesPerBlock);
+    microLooperInputBuffer.setSize(2, samplesPerBlock);
+
     // Sync persisted bypass states from APVTS to processors
     // This runs once at startup to restore saved effect states
     // Note: bypass params are inverted (true = bypassed = effect OFF)
@@ -829,10 +834,10 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
     if (microLooper.isEnabled())
     {
         // Combine loop playback with input for micro looper processing
-        juce::AudioBuffer<float> microLooperInput(buffer.getNumChannels(), numSamples);
+        // Use pre-allocated buffer to avoid allocation on audio thread
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         {
-            float* dest = microLooperInput.getWritePointer(ch);
+            float* dest = microLooperInputBuffer.getWritePointer(ch);
             const float* loopData = loopPlaybackBuffer.getReadPointer(ch);
             const float* inputData = inputPassthroughBuffer.getReadPointer(ch);
             for (int i = 0; i < numSamples; ++i)
@@ -842,12 +847,12 @@ void LoopEngineProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::M
         }
 
         // Process through micro looper
-        microLooper.processBlock(microLooperInput);
+        microLooper.processBlock(microLooperInputBuffer);
 
         // Copy result back to main buffer
         for (int ch = 0; ch < buffer.getNumChannels(); ++ch)
         {
-            buffer.copyFrom(ch, 0, microLooperInput, ch, 0, numSamples);
+            buffer.copyFrom(ch, 0, microLooperInputBuffer, ch, 0, numSamples);
         }
     }
     else

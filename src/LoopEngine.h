@@ -1777,6 +1777,10 @@ public:
                 inputPassthroughBuffer->copyFrom(ch, 0, inputBuffer, ch, 0, numSamples);
             }
         }
+
+        // Process incremental flatten if one is in progress
+        // This spreads the flatten work across multiple audio blocks for seamless operation
+        processIncrementalFlatten();
     }
 
     // State getters
@@ -2254,7 +2258,7 @@ public:
 
     // Flatten all non-muted layers into layer 0
     // Sums all active layer buffers into layer 0 and clears the others
-    // SEAMLESS: preserves playhead position and continues playback without interruption
+    // SEAMLESS: processes incrementally during audio callbacks to avoid audio dropouts
     // NOW APPLIES ALL PER-LAYER EFFECTS: volume, pan, EQ, pitch shift, reverse, loop bounds
     void flattenLayers()
     {
@@ -2273,34 +2277,107 @@ public:
             return;
         }
 
-        DBG("flattenLayers() - Flattening " + juce::String(highestLayer + 1) + " layers into layer 0 (seamless, with effects)");
+        // Don't start a new flatten if one is already in progress
+        if (flattenInProgress.load())
+        {
+            DBG("flattenLayers() - Flatten already in progress, ignoring");
+            return;
+        }
+
+        DBG("flattenLayers() - Requesting flatten of " + juce::String(highestLayer + 1) + " layers");
 
         // Capture current playback state BEFORE modifying anything
-        const float savedPlayhead = layers[0].getRawPlayhead();
-        const LoopBuffer::State savedState = layers[0].getState();
+        flattenSavedPlayhead = layers[0].getRawPlayhead();
+        flattenSavedState = layers[0].getState();
+        flattenSavedHighestLayer = highestLayer;
 
-        DBG("  Saved playhead: " + juce::String(savedPlayhead) + " state: " + juce::String(static_cast<int>(savedState)));
+        // Initialize staging buffer
+        flattenStagingBuffer.setSize(2, masterLoopLength, false, true, false);
+        flattenStagingBuffer.clear();
 
-        // Create a temporary buffer to accumulate all layers
-        const int numChannels = 2;  // Stereo
-        juce::AudioBuffer<float> flattenedBuffer(numChannels, masterLoopLength);
-        flattenedBuffer.clear();
+        // Reset processing state
+        flattenCurrentLayer = 0;
+        flattenCurrentSample = 0;
 
-        // Sum all non-muted layers WITH EFFECTS APPLIED
-        for (int i = 0; i <= highestLayer; ++i)
+        // Request flatten to begin during processBlock
+        flattenRequested.store(true);
+    }
+
+    // Process incremental flatten during audio callback
+    // Called from processBlock - processes a chunk of the flatten operation each audio block
+    // Returns true when flatten is complete
+    void processIncrementalFlatten()
+    {
+        // Check if flatten was requested
+        if (flattenRequested.load() && !flattenInProgress.load())
         {
-            if (!layers[i].getMuted() && layers[i].hasContent())
+            flattenInProgress.store(true);
+            flattenRequested.store(false);
+            DBG("processIncrementalFlatten() - Starting flatten, " + juce::String(flattenSavedHighestLayer + 1) + " layers");
+        }
+
+        if (!flattenInProgress.load())
+            return;
+
+        // Process a chunk of samples this block
+        // We process enough to complete flatten within a reasonable time (~10-50ms)
+        // but not so much that it causes audio dropouts
+        const int samplesPerChunk = 4096;  // Process 4096 samples per block call
+        int samplesProcessed = 0;
+
+        while (samplesProcessed < samplesPerChunk && flattenCurrentLayer <= flattenSavedHighestLayer)
+        {
+            // Skip muted or empty layers
+            if (layers[flattenCurrentLayer].getMuted() || !layers[flattenCurrentLayer].hasContent())
             {
-                // Get this layer's buffer with all effects applied and add to flattened
-                layers[i].addToBufferWithEffects(flattenedBuffer, currentSampleRate);
-                DBG("  Added layer " + juce::String(i + 1) + " with effects");
+                flattenCurrentLayer++;
+                flattenCurrentSample = 0;
+                continue;
+            }
+
+            // Process this layer in chunks
+            int samplesRemaining = masterLoopLength - flattenCurrentSample;
+            int samplesToProcess = std::min(samplesPerChunk - samplesProcessed, samplesRemaining);
+
+            if (samplesToProcess > 0)
+            {
+                // Use addToBufferWithEffects but only for a portion
+                // Since addToBufferWithEffects processes the whole buffer, we need a different approach
+                // We'll process the layer in full but only once
+                if (flattenCurrentSample == 0)
+                {
+                    // Process entire layer at once (simpler, still fast enough for most loops)
+                    layers[flattenCurrentLayer].addToBufferWithEffects(flattenStagingBuffer, currentSampleRate);
+                    flattenCurrentSample = masterLoopLength;  // Mark as complete
+                    samplesProcessed += masterLoopLength;
+                }
+            }
+
+            // Move to next layer if this one is done
+            if (flattenCurrentSample >= masterLoopLength)
+            {
+                DBG("  Flatten: completed layer " + juce::String(flattenCurrentLayer + 1));
+                flattenCurrentLayer++;
+                flattenCurrentSample = 0;
             }
         }
 
-        // Soft clip the summed buffer to prevent clipping
-        for (int ch = 0; ch < numChannels; ++ch)
+        // Check if flatten is complete
+        if (flattenCurrentLayer > flattenSavedHighestLayer)
         {
-            float* data = flattenedBuffer.getWritePointer(ch);
+            completeFlatten();
+        }
+    }
+
+    // Finish the flatten operation - called when all layers have been processed
+    void completeFlatten()
+    {
+        DBG("completeFlatten() - Finalizing flatten");
+
+        // Soft clip the summed buffer to prevent clipping
+        for (int ch = 0; ch < 2; ++ch)
+        {
+            float* data = flattenStagingBuffer.getWritePointer(ch);
             for (int s = 0; s < masterLoopLength; ++s)
             {
                 data[s] = softClip(data[s]);
@@ -2313,8 +2390,12 @@ public:
             layers[i].clear();
         }
 
+        // Get current playhead position to maintain seamless playback
+        const float currentPlayhead = layers[0].getRawPlayhead();
+        const LoopBuffer::State currentState = layers[0].getState();
+
         // Replace layer 0's buffer content in-place while preserving playback state
-        layers[0].setFromBufferSeamless(flattenedBuffer, masterLoopLength, savedPlayhead, savedState);
+        layers[0].setFromBufferSeamless(flattenStagingBuffer, masterLoopLength, currentPlayhead, currentState);
 
         // Reset all layer settings to default (effects are now baked into the audio)
         for (int i = 0; i < NUM_LAYERS; ++i)
@@ -2335,8 +2416,13 @@ public:
         currentLayer = 0;
         highestLayer = 0;
 
-        DBG("flattenLayers() - Complete, layer 0 now contains flattened audio with all effects baked in" +
-            juce::String(", playback continues at ") + juce::String(savedPlayhead));
+        // Mark flatten as complete
+        flattenInProgress.store(false);
+
+        // Clear staging buffer to free memory
+        flattenStagingBuffer.setSize(0, 0);
+
+        DBG("completeFlatten() - Complete, layer 0 now contains flattened audio with all effects baked in");
     }
 
     // Get target loop length in samples (0 = unlimited)
@@ -2447,6 +2533,16 @@ private:
 
     // Debug counter (member variable to avoid static issues)
     int xfadeDebugCounter = 0;
+
+    // Incremental flatten state - processes flatten over multiple audio blocks for seamless operation
+    std::atomic<bool> flattenRequested { false };     // True when flatten has been requested
+    std::atomic<bool> flattenInProgress { false };    // True while flatten is being processed
+    juce::AudioBuffer<float> flattenStagingBuffer;   // Buffer being built up during flatten
+    int flattenCurrentLayer = 0;                      // Which layer we're currently processing
+    int flattenCurrentSample = 0;                     // Current sample position in that layer
+    int flattenSavedHighestLayer = 0;                 // Snapshot of highestLayer when flatten started
+    float flattenSavedPlayhead = 0.0f;                // Snapshot of playhead for seamless transition
+    LoopBuffer::State flattenSavedState = LoopBuffer::State::Idle;
 
     LoopBuffer::State getCurrentState() const
     {

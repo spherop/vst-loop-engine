@@ -116,12 +116,62 @@
                 </span>
             </div>
 
-            <!-- Tabs (right) - just LOOPER now, effects are in the rack -->
-            <nav class="tab-bar flex gap-1">
-                <button class="tab active" data-tab="looper">
-                    <span class="tab-label">LOOPER</span>
-                </button>
-            </nav>
+            <!-- Settings (right) - Loop Length, BPM, HOST sync, Version -->
+            <div class="flex items-center gap-3">
+                <!-- Loop Length Selector -->
+                <div class="flex items-center gap-1">
+                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">LEN</span>
+                    <div class="flex flex-col gap-0.5">
+                        <div class="flex items-center gap-1">
+                            <select class="len-select" id="bars-select-header" title="Bars (0 = free mode)">
+                                <option value="0">FREE</option>
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="4">4</option>
+                                <option value="8">8</option>
+                                <option value="16">16</option>
+                            </select>
+                            <span class="font-display text-[6px] text-fd-text-dim">BAR</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <select class="len-select" id="beats-select-header" title="Additional beats">
+                                <option value="0">+0</option>
+                                <option value="1">+1</option>
+                                <option value="2">+2</option>
+                                <option value="3">+3</option>
+                            </select>
+                            <span class="font-display text-[6px] text-fd-text-dim">BEAT</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Divider -->
+                <div class="w-[1px] h-8 bg-fd-border"></div>
+                <!-- HOST toggle and division -->
+                <div class="flex flex-col gap-0.5">
+                    <button class="tempo-sync-btn" id="host-sync-btn-header" title="Sync looper to host transport">
+                        <span class="tempo-sync-led" id="host-sync-led-header"></span>
+                        <span class="tempo-sync-label">HOST</span>
+                    </button>
+                    <select class="tempo-division-select" id="note-value-select-header" disabled>
+                        <option value="0">1/4</option>
+                        <option value="1" selected>1/8</option>
+                        <option value="2">1/8T</option>
+                        <option value="3">1/16</option>
+                        <option value="4">1/16T</option>
+                        <option value="5">1/32</option>
+                    </select>
+                </div>
+                <!-- BPM Display -->
+                <div class="flex items-center gap-1">
+                    <span class="font-mono text-sm font-bold text-fd-accent" id="bpm-display-header"
+                          style="text-shadow: 0 0 10px rgba(255, 107, 53, 0.3);">120</span>
+                    <span class="font-display text-[6px] text-fd-text-dim">BPM</span>
+                </div>
+                <!-- Divider -->
+                <div class="w-[1px] h-8 bg-fd-border"></div>
+                <!-- Version ticker -->
+                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v12.4.3</span>
+            </div>
         </header>
 
         <!-- Main Content - Two Column Layout -->
@@ -164,16 +214,21 @@
                                     <span class="transport-icon">&#9632;</span>
                                     <span class="transport-label">STOP</span>
                                 </button>
+                                <button id="reverse-btn" class="transport-btn reverse" title="Global reverse playback">
+                                    <span class="transport-icon">&#8634;</span>
+                                    <span class="transport-label">REV</span>
+                                </button>
                                 <button id="clear-btn" class="transport-btn clear" title="Clear all layers">
                                     <span class="transport-icon">&#10005;</span>
                                     <span class="transport-label">CLR</span>
                                 </button>
-                                <button id="add-btn" class="transport-btn add-btn" title="Additive Recording - hold to compound effects through loop">
+                                <!-- ADD+ button (hidden for now) -->
+                                <button id="add-btn" class="transport-btn add-btn hidden" title="Additive Recording - hold to compound effects through loop">
                                     <span class="transport-icon">+</span>
                                     <span class="transport-label">ADD</span>
                                 </button>
-                                <!-- UNDO/REDO stacked square buttons -->
-                                <div class="flex flex-col gap-0.5 mr-2">
+                                <!-- UNDO/REDO buttons (hidden - using LAYERS knob instead) -->
+                                <div class="flex flex-col gap-0.5 mr-2 hidden">
                                     <button id="undo-btn" class="transport-btn-stacked" title="Undo last layer">
                                         <span class="transport-icon-stacked">&#8617;</span>
                                     </button>
@@ -183,56 +238,39 @@
                                 </div>
                                 <!-- Divider -->
                                 <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
-                                <!-- Loop Length Selector - Stacked layout -->
-                                <div class="flex items-center gap-1">
-                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">LEN</span>
-                                    <div class="flex flex-col gap-0.5">
-                                        <div class="flex items-center gap-1">
-                                            <select class="len-select" id="bars-select" title="Bars (0 = free mode)">
-                                                <option value="0">FREE</option>
-                                                <option value="1">1</option>
-                                                <option value="2">2</option>
-                                                <option value="4">4</option>
-                                                <option value="8">8</option>
-                                                <option value="16">16</option>
-                                            </select>
-                                            <span class="font-display text-[6px] text-fd-text-dim">BAR</span>
+                                <!-- Global Loop Controls (moved from bottom section) -->
+                                <div class="flex items-center gap-4">
+                                    <!-- SPEED -->
+                                    <div class="flex flex-col items-center gap-0.5 relative" id="speed-control">
+                                        <div class="knob knob-loop-small" id="loopSpeed-knob">
+                                            <div class="knob-dot"></div>
                                         </div>
-                                        <div class="flex items-center gap-1">
-                                            <select class="len-select" id="beats-select" title="Additional beats">
-                                                <option value="0">+0</option>
-                                                <option value="1">+1</option>
-                                                <option value="2">+2</option>
-                                                <option value="3">+3</option>
-                                            </select>
-                                            <span class="font-display text-[6px] text-fd-text-dim">BEAT</span>
+                                        <span class="transport-knob-value" id="loopSpeed-value">100%</span>
+                                        <span class="transport-knob-label">SPEED</span>
+                                    </div>
+                                    <!-- PITCH -->
+                                    <div class="flex flex-col items-center gap-0.5 relative" id="pitch-control">
+                                        <div class="knob knob-loop-small" id="loopPitch-knob">
+                                            <div class="knob-dot"></div>
                                         </div>
+                                        <span class="transport-knob-value" id="loopPitch-value">0st</span>
+                                        <span class="transport-knob-label">PITCH</span>
                                     </div>
-                                </div>
-                                <!-- Divider -->
-                                <div class="w-[1px] h-10 bg-fd-border mx-1"></div>
-                                <!-- Tempo Sync Controls -->
-                                <div class="flex items-center gap-2">
-                                    <!-- HOST toggle and division stacked vertically -->
-                                    <div class="flex flex-col gap-0.5">
-                                        <button class="tempo-sync-btn" id="host-sync-btn" title="Sync looper to host transport">
-                                            <span class="tempo-sync-led" id="host-sync-led"></span>
-                                            <span class="tempo-sync-label">HOST</span>
-                                        </button>
-                                        <select class="tempo-division-select" id="note-value-select" disabled>
-                                            <option value="0">1/4</option>
-                                            <option value="1" selected>1/8</option>
-                                            <option value="2">1/8T</option>
-                                            <option value="3">1/16</option>
-                                            <option value="4">1/16T</option>
-                                            <option value="5">1/32</option>
-                                        </select>
+                                    <!-- LAYERS -->
+                                    <div class="flex flex-col items-center gap-0.5">
+                                        <div class="knob knob-loop-small" id="layerDepth-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="transport-knob-value" id="layerDepth-value">ALL</span>
+                                        <span class="transport-knob-label">LAYERS</span>
                                     </div>
-                                    <!-- BPM Display (far right) -->
-                                    <div class="flex items-center gap-1 ml-2">
-                                        <span class="font-mono text-sm font-bold text-fd-accent" id="bpm-display"
-                                              style="text-shadow: 0 0 10px rgba(255, 107, 53, 0.3);">120</span>
-                                        <span class="font-display text-[6px] text-fd-text-dim">BPM</span>
+                                    <!-- FADE -->
+                                    <div class="flex flex-col items-center gap-0.5">
+                                        <div class="knob knob-loop-small" id="loopFade-knob">
+                                            <div class="knob-dot"></div>
+                                        </div>
+                                        <span class="transport-knob-value" id="loopFade-value">100%</span>
+                                        <span class="transport-knob-label">FADE</span>
                                     </div>
                                 </div>
                             </div>
@@ -670,13 +708,35 @@
                                 </div>
                                 <span class="master-level-indicator" id="master-level-indicator" title="Master output level"></span>
                                 <button class="flatten-btn" id="flatten-btn" title="Flatten all unmuted layers into layer 1">
-                                    <span class="flatten-icon">⊞</span>
+                                    <svg class="flatten-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="7" height="7" rx="1" opacity="0.5"/>
+                                        <rect x="14" y="3" width="7" height="7" rx="1" opacity="0.5"/>
+                                        <rect x="3" y="14" width="7" height="7" rx="1" opacity="0.5"/>
+                                        <rect x="14" y="14" width="7" height="7" rx="1" opacity="0.5"/>
+                                        <path d="M12 8 L12 16" stroke-width="2.5"/>
+                                        <path d="M8 12 L16 12" stroke-width="2.5"/>
+                                        <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+                                    </svg>
                                 </button>
                                 <!-- Track/Layer Mode Toggle -->
                                 <div class="mode-toggle-switch" id="mode-toggle-btn" title="Toggle Track/Layer Mode - Track: layers sum together | Layer: higher layers override">
-                                    <span class="mode-option" id="mode-track">TRACK</span>
-                                    <span class="mode-slider"></span>
-                                    <span class="mode-option" id="mode-layer">LAYER</span>
+                                    <div class="mode-track-indicator"></div>
+                                    <div class="mode-labels">
+                                        <span class="mode-label" id="mode-track">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                                <path d="M4 6h16M4 12h16M4 18h16"/>
+                                            </svg>
+                                            <span>TRK</span>
+                                        </span>
+                                        <span class="mode-label" id="mode-layer">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                                                <path d="M2 12l10 5 10-5" opacity="0.7"/>
+                                                <path d="M2 17l10 5 10-5" opacity="0.4"/>
+                                            </svg>
+                                            <span>LYR</span>
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                             <!-- Loop time + Crossfade (right) -->
@@ -699,6 +759,28 @@
                         <div class="layer-panel-content">
                             <!-- Controls Row -->
                             <div class="layer-controls-row">
+                                <!-- Volume Fader Section -->
+                                <div class="layer-volume-section">
+                                    <span class="layer-section-label">VOL</span>
+                                    <div class="layer-fader-container">
+                                        <div class="layer-fader-scale">
+                                            <span class="layer-fader-mark layer-fader-mark-red">+3</span>
+                                            <span class="layer-fader-mark layer-fader-mark-yellow">0</span>
+                                            <span class="layer-fader-mark layer-fader-mark-green">-10</span>
+                                            <span class="layer-fader-mark layer-fader-mark-dim">-20</span>
+                                        </div>
+                                        <div class="layer-fader-track">
+                                            <div class="layer-fader-zone layer-fader-zone-red"></div>
+                                            <div class="layer-fader-zone layer-fader-zone-yellow"></div>
+                                            <div class="layer-fader-zone layer-fader-zone-green"></div>
+                                            <div class="layer-fader-meter" id="layer-fader-meter"></div>
+                                            <div class="layer-fader-unity"></div>
+                                        </div>
+                                        <input type="range" class="layer-fader" id="layer-volume-fader" min="0" max="127" value="100" orient="vertical">
+                                        <span class="layer-fader-value" id="layer-volume-value">0 dB</span>
+                                    </div>
+                                </div>
+
                                 <!-- Mute/Solo/Pan Section -->
                                 <div class="layer-channel-section">
                                     <div class="layer-channel-buttons">
@@ -776,71 +858,6 @@
                         </div>
                     </div>
 
-                    <!-- Loop Controls (fixed at bottom) -->
-                    <section class="section-card bg-fd-card rounded-lg border border-fd-border p-4 flex-shrink-0">
-                        <div class="flex justify-between items-center">
-                            <!-- Left: Diagnostics toggle + Version ticker -->
-                            <div class="flex items-center gap-2">
-                                <button class="diag-toggle-btn" id="diag-toggle" title="Toggle audio diagnostics">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M3 3v18h18"/>
-                                        <path d="M7 16l4-8 4 6 4-10"/>
-                                    </svg>
-                                </button>
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v12.0.2</span>
-                            </div>
-
-                            <!-- Controls (center) -->
-                            <div class="flex items-center gap-8">
-                                <!-- REVERSE -->
-                                <div class="flex flex-col items-center gap-1">
-                                    <button id="reverse-btn" class="loop-control-btn-large reverse">
-                                        <span class="loop-control-icon-large">&#8634;</span>
-                                    </button>
-                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">REV</span>
-                                </div>
-
-                                <!-- SPEED -->
-                                <div class="flex flex-col items-center gap-1 relative" id="speed-control">
-                                    <div class="knob knob-loop" id="loopSpeed-knob">
-                                        <div class="knob-dot"></div>
-                                    </div>
-                                    <span class="font-mono text-[10px] text-fd-text-dim" id="loopSpeed-value">100% <span class="text-fd-text-dim">0st</span></span>
-                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">SPEED</span>
-                                </div>
-
-                                <!-- PITCH -->
-                                <div class="flex flex-col items-center gap-1 relative" id="pitch-control">
-                                    <div class="knob knob-loop" id="loopPitch-knob">
-                                        <div class="knob-dot"></div>
-                                    </div>
-                                    <span class="font-mono text-[10px] text-fd-text-dim" id="loopPitch-value">100% <span class="text-fd-text-dim">0st</span></span>
-                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">PITCH</span>
-                                </div>
-
-                                <!-- LAYERS (undo/redo navigation) -->
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-loop" id="layerDepth-knob">
-                                        <div class="knob-dot"></div>
-                                    </div>
-                                    <span class="font-mono text-[10px] text-fd-text-dim" id="layerDepth-value">ALL</span>
-                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">LAYERS</span>
-                                </div>
-
-                                <!-- FADE -->
-                                <div class="flex flex-col items-center gap-1">
-                                    <div class="knob knob-loop" id="loopFade-knob">
-                                        <div class="knob-dot"></div>
-                                    </div>
-                                    <span class="font-mono text-[10px] text-fd-text-dim" id="loopFade-value">100%</span>
-                                    <span class="font-display text-[7px] font-bold tracking-[1px] text-fd-text-dim uppercase">FADE</span>
-                                </div>
-                            </div>
-
-                            <!-- Right spacer for balance -->
-                            <div class="w-16"></div>
-                        </div>
-                    </section>
                 </div>
 
                 <!-- RIGHT COLUMN: Effects Rack -->
@@ -1575,6 +1592,16 @@
                                 </div>
                             </div>
 
+                        </div>
+
+                        <!-- Diagnostics toggle (bottom right of effects panel) -->
+                        <div class="flex justify-end p-2 border-t border-fd-border mt-auto">
+                            <button class="diag-toggle-btn" id="diag-toggle" title="Toggle audio diagnostics">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M3 3v18h18"/>
+                                    <path d="M7 16l4-8 4 6 4-10"/>
+                                </svg>
+                            </button>
                         </div>
                     </section>
                 </div>

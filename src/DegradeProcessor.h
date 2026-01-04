@@ -504,16 +504,21 @@ private:
     float lastLpFreq = 20000.0f, lastLpQ = 0.707f;
     juce::SmoothedValue<float> lpFreqSmooth, lpQSmooth;
 
-    // Bit crusher with dithering
+    // Bit crusher with dithering and saturation
     juce::SmoothedValue<float> bitDepthSmooth;
     juce::Random ditherRandom;
     float noiseShapeErrorL = 0.0f;  // For first-order noise shaping (left)
     float noiseShapeErrorR = 0.0f;  // For first-order noise shaping (right)
+    float ditherStateL = 0.0f;      // Filtered dither state (left)
+    float ditherStateR = 0.0f;      // Filtered dither state (right)
+    float dcBlockL = 0.0f;          // DC blocking filter state (left)
+    float dcBlockR = 0.0f;          // DC blocking filter state (right)
 
     // Sample rate reducer with anti-aliasing
     float srHoldL = 0.0f, srHoldR = 0.0f;
     float srPrevHoldL = 0.0f, srPrevHoldR = 0.0f;  // Previous held values for interpolation
     float srCounter = 0.0f;
+    float srHfPrevL = 0.0f, srHfPrevR = 0.0f;      // High-frequency compensation state
     juce::SmoothedValue<float> srReductionSmooth;
 
     // Anti-alias filter state for sample rate reduction
@@ -680,37 +685,64 @@ private:
         if (bits >= 15.9f)
             return input;  // No crushing
 
+        // ===== PRE-SATURATION =====
+        // Add subtle warmth/harmonics before quantization
+        // This gives character instead of just adding noise
+        // More saturation at lower bit depths for vintage character
+        const float satAmount = (16.0f - bits) / 30.0f;  // 0 at 16-bit, ~0.5 at 1-bit
+        float saturated = input;
+        if (satAmount > 0.01f)
+        {
+            // Soft saturation using tanh-like curve
+            const float drive = 1.0f + satAmount * 2.0f;
+            saturated = std::tanh(input * drive) / std::tanh(drive);
+        }
+
+        // ===== QUANTIZATION =====
         // Number of quantization levels
         const float levels = std::pow(2.0f, bits);
         const float stepSize = 2.0f / levels;  // -1 to 1 range
 
-        // Triangular probability density function (TPDF) dithering
-        // Sum of two uniform random numbers creates triangular distribution
-        // This eliminates quantization distortion and replaces it with
-        // less objectionable white noise
-        // Scale dithering for low bit depths to avoid overwhelming the signal
-        const float ditherScale = bits < 8.0f ? 0.5f : 1.0f;
-        const float dither1 = ditherRandom.nextFloat() - 0.5f;
-        const float dither2 = ditherRandom.nextFloat() - 0.5f;
-        const float dither = (dither1 + dither2) * stepSize * ditherScale;
+        // ===== IMPROVED DITHERING =====
+        // Use shaped noise instead of pure white noise for less harsh hiss
+        // Lower amplitude dithering - we want color, not noise
+        float& ditherState = isLeft ? ditherStateL : ditherStateR;
+
+        // Generate pink-ish noise by filtering white noise
+        // This sounds less harsh than pure white noise
+        const float white = ditherRandom.nextFloat() - 0.5f;
+        ditherState = ditherState * 0.7f + white * 0.3f;  // Simple lowpass
+
+        // Scale dither based on bit depth - less at low depths
+        // At very low bit depths, we want the quantization character, not dither noise
+        const float ditherScale = bits < 6.0f ? 0.15f : (bits < 10.0f ? 0.3f : 0.5f);
+        const float dither = ditherState * stepSize * ditherScale;
 
         // Apply dither before quantization
-        float dithered = input + dither;
+        float dithered = saturated + dither;
 
-        // Quantize
+        // Quantize with rounding
         float quantized = std::round(dithered * levels) / levels;
 
-        // Simple first-order noise shaping (error feedback)
-        // Pushes quantization noise to higher frequencies
-        // Use reduced feedback for low bit depths to prevent instability
+        // ===== SUBTLE NOISE SHAPING =====
+        // Very gentle noise shaping - mostly rely on saturation for character
         float& noiseShapeError = isLeft ? noiseShapeErrorL : noiseShapeErrorR;
-        float error = input - quantized;
-        float noiseShapeFactor = bits < 8.0f ? 0.25f : 0.5f;
-        float shaped = quantized + noiseShapeError * noiseShapeFactor;
-        noiseShapeError = error;
+        float error = saturated - quantized;
 
-        // Soft clamp to avoid overflow from dither
-        return std::clamp(shaped, -1.0f, 1.0f);
+        // Reduced noise shaping factor to minimize high-frequency hiss
+        const float noiseShapeFactor = bits < 8.0f ? 0.1f : 0.2f;
+        float shaped = quantized + noiseShapeError * noiseShapeFactor;
+        noiseShapeError = error * 0.5f;  // Decay the error to prevent buildup
+
+        // ===== DC OFFSET REMOVAL =====
+        // Prevent DC buildup from quantization
+        float& dcBlock = isLeft ? dcBlockL : dcBlockR;
+        const float dcCoeff = 0.995f;
+        float output = shaped - dcBlock;
+        dcBlock = shaped - output * dcCoeff;
+
+        // Soft clamp
+        return std::clamp(output, -1.0f, 1.0f);
     }
 
     void processSampleRateReduction(float& left, float& right, float targetRate)
@@ -720,8 +752,8 @@ private:
 
         // Anti-aliasing: Apply low-pass filter before downsampling
         // This prevents aliasing artifacts that make the effect sound harsh
-        // Use a simple but effective 2-pole butterworth at the target Nyquist
-        const float nyquist = targetRate * 0.45f;  // Slightly below Nyquist for safety
+        // Use a gentler filter cutoff to preserve more highs
+        const float nyquist = targetRate * 0.48f;  // Closer to Nyquist - allow some aliasing for character
         updateSRAntiAliasCoeffs(nyquist);
 
         // Apply anti-alias filter
@@ -748,6 +780,27 @@ private:
         const float t = srCounter / step;  // 0-1 interpolation factor
         left = srPrevHoldL * (1.0f - t) + srHoldL * t;
         right = srPrevHoldR * (1.0f - t) + srHoldR * t;
+
+        // ===== HIGH-FREQUENCY COMPENSATION =====
+        // Add subtle high-frequency emphasis to counteract the darkness
+        // from anti-aliasing and interpolation
+        // Amount of boost scales with how much we're reducing SR
+        const float reductionRatio = targetRate / currentSampleRate;
+        const float hfBoostAmount = (1.0f - reductionRatio) * 0.3f;  // More boost at lower rates
+
+        if (hfBoostAmount > 0.01f)
+        {
+            // Simple first-order high shelf approximation
+            // Uses differentiation + mix for a gentle presence boost
+            float diffL = left - srHfPrevL;
+            float diffR = right - srHfPrevR;
+            srHfPrevL = left;
+            srHfPrevR = right;
+
+            // Mix in the high-frequency content
+            left += diffL * hfBoostAmount;
+            right += diffR * hfBoostAmount;
+        }
     }
 
     void updateSRAntiAliasCoeffs(float freq)

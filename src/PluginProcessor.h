@@ -215,6 +215,7 @@ private:
     // Blooper-style processing buffers (degrade only affects loop playback, not input)
     juce::AudioBuffer<float> loopPlaybackBuffer;    // Loop audio only (for degrade processing)
     juce::AudioBuffer<float> inputPassthroughBuffer; // Clean input (bypasses degrade)
+    juce::AudioBuffer<float> microLooperInputBuffer; // Pre-allocated buffer for micro looper
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(LoopEngineProcessor)
 };

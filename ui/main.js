@@ -850,8 +850,9 @@ class LooperController {
     }
 
     setupLoopLengthSelector() {
-        this.barsSelect = document.getElementById('bars-select');
-        this.beatsSelect = document.getElementById('beats-select');
+        // Use header selects (moved from transport section)
+        this.barsSelect = document.getElementById('bars-select-header');
+        this.beatsSelect = document.getElementById('beats-select-header');
 
         // Restore saved loop length settings from localStorage
         const savedBars = localStorage.getItem('loopEngine.loopLengthBars');
@@ -1923,12 +1924,26 @@ class LooperController {
                 console.log('[LOOPER] DUB from idle - calling overdub to start playback + record');
                 await this.overdubFn();
                 this.updateTransportUI('overdubbing');
+                // Auto-select the layer being recorded to
+                this.autoSelectRecordingLayer();
             } else {
                 await this.recordFn();
                 this.updateTransportUI('recording');
+                // Auto-select the layer being recorded to (layer 1 for fresh recording)
+                this.autoSelectRecordingLayer();
             }
         } catch (e) {
             console.error('Error starting record:', e);
+        }
+    }
+
+    // Auto-select the layer that's currently being recorded to
+    autoSelectRecordingLayer() {
+        // currentLayer is 1-indexed
+        const recordingLayer = this.currentLayer || 1;
+        if (window.layerPanelController) {
+            window.layerPanelController.showPanel(recordingLayer);
+            console.log('[LOOPER] Auto-selected layer', recordingLayer, 'for recording');
         }
     }
 
@@ -1962,6 +1977,8 @@ class LooperController {
         try {
             await this.overdubFn();
             this.updateTransportUI('overdubbing');
+            // Auto-select the layer being recorded to
+            this.autoSelectRecordingLayer();
         } catch (e) {
             console.error('Error starting overdub:', e);
         }
@@ -2127,8 +2144,8 @@ class LooperController {
                 {
                     const displayLayer = this.currentLayer;
                     const colorIdx = Math.max(0, this.currentLayer - 1);
-                    if (this.recLabel) this.recLabel.textContent = `REC ${modePrefix}${displayLayer}`;
-                    const currentLayerColor = this.layerColors[colorIdx];
+                    if (this.recLabel) this.recLabel.textContent = `REC ${modePrefix}${displayLayer + 1}`;
+                    const currentLayerColor = this.layerColors[colorIdx + 1];
                     if (this.recBtn && currentLayerColor) {
                         this.recBtn.style.borderColor = currentLayerColor;
                         this.recBtn.style.boxShadow = `0 0 8px ${currentLayerColor}60`;
@@ -2440,9 +2457,10 @@ let loopFadeKnob = null;
 // Host Transport Sync Controller
 class HostSyncController {
     constructor() {
-        this.btn = document.getElementById('host-sync-btn');
-        this.led = document.getElementById('host-sync-led');
-        this.divisionSelect = document.getElementById('note-value-select');
+        // Use header elements (moved from transport section)
+        this.btn = document.getElementById('host-sync-btn-header');
+        this.led = document.getElementById('host-sync-led-header');
+        this.divisionSelect = document.getElementById('note-value-select-header');
         this.isEnabled = false;
         this.isHostPlaying = false;
         this.setHostSyncFn = getNativeFunction("setHostTransportSync");
@@ -2536,8 +2554,9 @@ class HostSyncController {
 // BPM Display and Note Value Controller
 class BpmDisplayController {
     constructor() {
-        this.bpmEl = document.getElementById('bpm-display');
-        this.noteSelect = document.getElementById('note-value-select');
+        // Use header elements (moved from transport section)
+        this.bpmEl = document.getElementById('bpm-display-header');
+        this.noteSelect = document.getElementById('note-value-select-header');
 
         this.setNoteFn = getNativeFunction("setTempoNote");
 
@@ -5228,8 +5247,8 @@ class MixerViewController {
         this.setLayerLoopEndFn = getNativeFunction('setLayerLoopEnd');
         this.setLayerReverseFn = getNativeFunction('setLayerReverse');
 
-        // Soloed layer tracking
-        this.soloedLayer = null;
+        // Soloed layers tracking (Set for multi-solo support)
+        this.soloedLayers = new Set();
 
         this.setupViewToggle();
         this.setupChannelControls();
@@ -5522,57 +5541,54 @@ class MixerViewController {
 
     async toggleSolo(targetLayer) {
         const channel = this.channels[targetLayer - 1];
-        const wasAlreadySolo = this.soloedLayer === targetLayer;
+        const wasAlreadySolo = this.soloedLayers.has(targetLayer);
 
         if (wasAlreadySolo) {
-            // Unsolo: unmute all layers
-            this.soloedLayer = null;
-            for (let i = 0; i < this.channels.length; i++) {
-                const ch = this.channels[i];
-                ch.muted = false;
-                ch.solo = false;
-                if (ch.muteBtn) ch.muteBtn.classList.remove('active');
-                if (ch.soloBtn) ch.soloBtn.classList.remove('active');
-                if (ch.channelEl) {
-                    ch.channelEl.classList.remove('muted');
-                    ch.channelEl.classList.remove('solo');
-                }
-                try {
-                    await this.setLayerMutedFn(i + 1, false);
-                    this.syncMuteToLayerButton(i + 1, false);
-                    this.syncSoloToLayerButton(i + 1, false);
-                } catch (err) { /* ignore */ }
-            }
+            // Remove from solo set
+            this.soloedLayers.delete(targetLayer);
+            channel.solo = false;
+            if (channel.soloBtn) channel.soloBtn.classList.remove('active');
+            if (channel.channelEl) channel.channelEl.classList.remove('solo');
+            this.syncSoloToLayerButton(targetLayer, false);
         } else {
-            // Solo: mute all except target
-            this.soloedLayer = targetLayer;
-            for (let i = 0; i < this.channels.length; i++) {
-                const ch = this.channels[i];
-                const layerNum = i + 1;
+            // Add to solo set
+            this.soloedLayers.add(targetLayer);
+            channel.solo = true;
+            if (channel.soloBtn) channel.soloBtn.classList.add('active');
+            if (channel.channelEl) channel.channelEl.classList.add('solo');
+            this.syncSoloToLayerButton(targetLayer, true);
+        }
 
-                if (layerNum === targetLayer) {
-                    ch.muted = false;
-                    ch.solo = true;
-                    if (ch.muteBtn) ch.muteBtn.classList.remove('active');
-                    if (ch.soloBtn) ch.soloBtn.classList.add('active');
-                    if (ch.channelEl) {
-                        ch.channelEl.classList.remove('muted');
-                        ch.channelEl.classList.add('solo');
-                    }
-                } else {
-                    ch.muted = true;
-                    ch.solo = false;
-                    if (ch.muteBtn) ch.muteBtn.classList.add('active');
-                    if (ch.soloBtn) ch.soloBtn.classList.remove('active');
-                    if (ch.channelEl) {
-                        ch.channelEl.classList.add('muted');
-                        ch.channelEl.classList.remove('solo');
-                    }
-                }
+        // If any layers are soloed, mute all non-soloed layers
+        // If no layers are soloed, unmute all layers (restore to non-solo state)
+        const hasSoloedLayers = this.soloedLayers.size > 0;
+
+        for (let i = 0; i < this.channels.length; i++) {
+            const ch = this.channels[i];
+            const layerNum = i + 1;
+
+            if (hasSoloedLayers) {
+                // Some layers are soloed - mute non-soloed layers
+                const isSoloed = this.soloedLayers.has(layerNum);
+                const shouldMute = !isSoloed;
+
+                ch.muted = shouldMute;
+                if (ch.muteBtn) ch.muteBtn.classList.toggle('active', shouldMute);
+                if (ch.channelEl) ch.channelEl.classList.toggle('muted', shouldMute);
+
                 try {
-                    await this.setLayerMutedFn(layerNum, ch.muted);
-                    this.syncMuteToLayerButton(layerNum, ch.muted);
-                    this.syncSoloToLayerButton(layerNum, ch.solo);
+                    await this.setLayerMutedFn(layerNum, shouldMute);
+                    this.syncMuteToLayerButton(layerNum, shouldMute);
+                } catch (err) { /* ignore */ }
+            } else {
+                // No layers soloed - unmute all
+                ch.muted = false;
+                if (ch.muteBtn) ch.muteBtn.classList.remove('active');
+                if (ch.channelEl) ch.channelEl.classList.remove('muted');
+
+                try {
+                    await this.setLayerMutedFn(layerNum, false);
+                    this.syncMuteToLayerButton(layerNum, false);
                 } catch (err) { /* ignore */ }
             }
         }
@@ -5600,11 +5616,30 @@ class MixerViewController {
 
         // Poll for layer levels to update VU meters
         this.meterPollingInterval = setInterval(async () => {
-            if (this.currentView !== 'mixer') return;
-
             try {
-                // Check layer content states
-                if (this.getLayerContentFn) {
+                // Always poll for levels - needed for both mixer view and layer panel
+                if (this.getLayerLevelsFn) {
+                    const levels = await this.getLayerLevelsFn();
+                    if (levels && Array.isArray(levels)) {
+                        // Update mixer VU meters if in mixer view
+                        if (this.currentView === 'mixer') {
+                            levels.forEach((level, idx) => {
+                                this.updateVUMeter(idx, level);
+                            });
+                        }
+
+                        // Always update layer panel's level meter if a layer is selected
+                        if (window.layerPanelController && window.layerPanelController.selectedLayer > 0) {
+                            const selectedIdx = window.layerPanelController.selectedLayer - 1;
+                            if (selectedIdx < levels.length) {
+                                window.layerPanelController.updateLevelMeter(levels[selectedIdx]);
+                            }
+                        }
+                    }
+                }
+
+                // Check layer content states (only needed for mixer view)
+                if (this.currentView === 'mixer' && this.getLayerContentFn) {
                     const contentStates = await this.getLayerContentFn();
                     if (contentStates && Array.isArray(contentStates)) {
                         contentStates.forEach((hasContent, idx) => {
@@ -5613,16 +5648,6 @@ class MixerViewController {
                                 channel.hasContent = hasContent;
                                 channel.channelEl.classList.toggle('has-content', hasContent);
                             }
-                        });
-                    }
-                }
-
-                // Get layer audio levels for VU meters
-                if (this.getLayerLevelsFn) {
-                    const levels = await this.getLayerLevelsFn();
-                    if (levels && Array.isArray(levels)) {
-                        levels.forEach((level, idx) => {
-                            this.updateVUMeter(idx, level);
                         });
                     }
                 }
@@ -5764,7 +5789,7 @@ class MixerViewController {
 
     // Reset all mixer state and visuals (called on CLR)
     resetAll() {
-        this.soloedLayer = null;
+        this.soloedLayers.clear();
 
         this.channels.forEach((channel, idx) => {
             // Reset state
@@ -5860,6 +5885,11 @@ class LayerPanelController {
         this.pitchValueEl = document.getElementById('layer-pitch-value');
         this.pitchHQBtn = document.getElementById('layer-pitch-hq-btn');
 
+        // Volume fader
+        this.volumeFader = document.getElementById('layer-volume-fader');
+        this.volumeValueEl = document.getElementById('layer-volume-value');
+        this.volumeMeterEl = document.getElementById('layer-fader-meter');
+
         // Reverse button
         this.reverseBtn = document.getElementById('layer-reverse-btn');
 
@@ -5868,6 +5898,7 @@ class LayerPanelController {
         this.muted = false;
         this.soloed = false;
         this.pan = 0;  // -1 to +1
+        this.volume = 100;  // 0-127 (100 = 0dB)
         this.eqLow = 0;  // dB (-12 to +12)
         this.eqMid = 0;
         this.eqHigh = 0;
@@ -5953,7 +5984,7 @@ class LayerPanelController {
                 await window.mixerController.toggleSolo(this.selectedLayer);
                 // Update our UI to reflect solo state
                 const mixer = window.mixerController;
-                this.soloed = mixer.soloedLayer === this.selectedLayer;
+                this.soloed = mixer.soloedLayers.has(this.selectedLayer);
                 this.muted = mixer.channels[this.selectedLayer - 1]?.muted || false;
                 this.updateSoloUI();
                 this.updateMuteUI();
@@ -6044,6 +6075,23 @@ class LayerPanelController {
             });
         }
 
+        // Volume fader
+        if (this.volumeFader) {
+            this.volumeFader.addEventListener('input', (e) => {
+                this.volume = parseInt(e.target.value);
+                this.updateVolumeUI();
+                this.sendVolume();
+            });
+
+            // Double-click to reset to 0dB (value 100)
+            this.volumeFader.addEventListener('dblclick', () => {
+                this.volume = 100;
+                this.volumeFader.value = 100;
+                this.updateVolumeUI();
+                this.sendVolume();
+            });
+        }
+
         // Global mouse events for dragging
         document.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         document.addEventListener('mouseup', () => this.handleMouseUp());
@@ -6117,14 +6165,17 @@ class LayerPanelController {
     }
 
     async loadLayerState(layer) {
-        // Get mute/solo/pan from mixer controller if available
+        // Get mute/solo/pan/volume from mixer controller if available
         if (window.mixerController) {
             const mixer = window.mixerController;
             const channel = mixer.channels[layer - 1];
             if (channel) {
                 this.muted = channel.muted || false;
-                this.soloed = mixer.soloedLayer === layer;
+                this.soloed = mixer.soloedLayers.has(layer);
                 this.pan = channel.pan || 0;
+                // Convert linear volume (0.0-1.41) to fader position (0-127)
+                const linearVol = channel.volume !== undefined ? channel.volume : 1.0;
+                this.volume = mixer.volumeToFader(linearVol);
             }
         } else {
             // Fallback to native functions
@@ -6183,6 +6234,7 @@ class LayerPanelController {
         this.updateMuteUI();
         this.updateSoloUI();
         this.updatePanUI();
+        this.updateVolumeUI();
         this.updateEQUI();
         this.updatePitchUI();
         this.updatePitchHQUI();
@@ -6219,6 +6271,65 @@ class LayerPanelController {
                 this.panValueEl.textContent = `R${Math.round(this.pan * 100)}`;
             }
         }
+    }
+
+    updateVolumeUI() {
+        // Update fader position
+        if (this.volumeFader) {
+            this.volumeFader.value = this.volume;
+        }
+
+        // Update dB value display
+        if (this.volumeValueEl) {
+            // Convert 0-127 to dB: 100 = 0dB, 127 = +3dB, 0 = -inf
+            if (this.volume === 0) {
+                this.volumeValueEl.textContent = '-∞ dB';
+            } else {
+                // Logarithmic scale: 0-100 = -inf to 0dB, 100-127 = 0 to +3dB
+                let dB;
+                if (this.volume >= 100) {
+                    // 100-127 maps to 0 to +3 dB
+                    dB = ((this.volume - 100) / 27) * 3;
+                } else {
+                    // 0-100 maps logarithmically to -inf to 0 dB
+                    // Using a curve that feels natural
+                    dB = 20 * Math.log10(this.volume / 100);
+                }
+                const sign = dB >= 0 ? '+' : '';
+                this.volumeValueEl.textContent = `${sign}${dB.toFixed(1)} dB`;
+            }
+        }
+    }
+
+    // Update the level meter with actual audio level (called from mixer's polling)
+    updateLevelMeter(level) {
+        if (!this.volumeMeterEl) return;
+
+        // Use same meter height calculation as mixer's updateVUMeter
+        let meterHeight;
+        if (level <= 0.00001) {
+            meterHeight = 0;
+        } else {
+            // Convert linear level to dB
+            const dB = 20 * Math.log10(level);
+
+            // Map dB to meter height:
+            // -48dB = 0%, 0dB = ~79% (fader pos 100), +3dB = 100%
+            if (dB >= 0) {
+                // 0dB to +3dB maps to 79% to 100%
+                meterHeight = 79 + (dB / 3) * 21;
+            } else if (dB >= -48) {
+                // -48dB to 0dB maps to 0% to 79%
+                meterHeight = ((dB + 48) / 48) * 79;
+            } else {
+                meterHeight = 0;
+            }
+        }
+
+        this.volumeMeterEl.style.height = `${meterHeight}%`;
+
+        // Add clipping class if in red zone (above 0dB)
+        this.volumeMeterEl.classList.toggle('clipping', level > 1.0);
     }
 
     updateEQUI() {
@@ -6285,6 +6396,35 @@ class LayerPanelController {
                 await this.setLayerPanFn(this.selectedLayer, this.pan);
             } catch (e) {
                 console.error('[LayerPanel] Error setting pan:', e);
+            }
+        }
+    }
+
+    async sendVolume() {
+        if (!this.selectedLayer) return;
+        // Sync with mixer controller
+        if (window.mixerController) {
+            const mixer = window.mixerController;
+            const channel = mixer.channels[this.selectedLayer - 1];
+
+            // Convert fader position (0-127) to linear volume using mixer's conversion
+            const linearVolume = mixer.faderToVolume(this.volume);
+
+            if (channel) {
+                channel.volume = linearVolume;
+                // Update mixer fader UI if visible
+                if (channel.fader) {
+                    channel.fader.value = this.volume;
+                }
+                // Note: faderMeter shows audio levels from polling, not fader position
+            }
+            // Send the converted linear volume to backend
+            if (mixer.setLayerVolumeFn) {
+                try {
+                    await mixer.setLayerVolumeFn(this.selectedLayer, linearVolume);
+                } catch (e) {
+                    console.error('[LayerPanel] Error setting volume:', e);
+                }
             }
         }
     }
@@ -6366,7 +6506,8 @@ class LayerPanelController {
 
 // Global BPM update function called from C++ timer
 window.updateBpmDisplay = function(bpm) {
-    const bpmEl = document.getElementById('bpm-display');
+    // Use header element (moved from transport section)
+    const bpmEl = document.getElementById('bpm-display-header');
     if (bpmEl) {
         bpmEl.textContent = bpm.toFixed(1);
     }

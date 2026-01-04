@@ -607,6 +607,115 @@ html, body {
     text-shadow: 0 0 12px var(--looper-accent-glow), 0 0 20px var(--looper-accent-glow);
 }
 
+/* Transport bar loop control knobs (20% bigger from 44px) */
+.knob-loop-small {
+    width: 54px;
+    height: 54px;
+    background:
+        radial-gradient(ellipse at 30% 20%, rgba(60, 60, 60, 0.6) 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 80%, rgba(20, 20, 20, 0.8) 0%, transparent 50%),
+        linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 50%, #0f0f0f 100%);
+    border: 2px solid #444;
+    border-radius: 50%;
+    box-shadow:
+        inset 0 3px 6px rgba(0, 0, 0, 0.6),
+        inset 0 -1px 2px rgba(255, 255, 255, 0.03),
+        0 2px 10px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    position: relative;
+}
+
+.knob-loop-small:hover {
+    border-color: var(--looper-accent);
+    box-shadow:
+        inset 0 3px 6px rgba(0, 0, 0, 0.6),
+        inset 0 -1px 2px rgba(255, 255, 255, 0.03),
+        0 0 10px var(--looper-accent-glow);
+}
+
+.knob-loop-small .knob-dot {
+    position: absolute;
+    top: 7px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 8px;
+    height: 8px;
+    background: radial-gradient(circle at 30% 30%, #555 0%, #2a2a2a 100%);
+    border-radius: 50%;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.knob-loop-small:hover .knob-dot {
+    background: radial-gradient(circle at 30% 30%, var(--looper-accent) 0%, #1a3a1a 100%);
+}
+
+.knob-loop-small::before,
+.knob-loop-small::after {
+    display: none;
+}
+
+/* Transport bar loop control button (REVERSE - same size as knobs) */
+.loop-control-btn-small {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 2px solid #444;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    transition: all 0.15s ease;
+}
+
+.loop-control-icon-small {
+    color: #666;
+    font-size: 20px;
+    font-weight: bold;
+}
+
+.loop-control-btn-small:hover {
+    border-color: var(--looper-accent);
+    background: linear-gradient(180deg, #2a2a2a 0%, #1a1a1a 100%);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 14px rgba(var(--looper-accent-rgb, 74, 222, 128), 0.1);
+}
+
+.loop-control-btn-small:hover .loop-control-icon-small {
+    color: var(--looper-accent);
+}
+
+.loop-control-btn-small.active {
+    background: linear-gradient(180deg, #1a3a1a 0%, #0f2a0f 100%);
+    border-color: var(--looper-accent);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5), 0 0 18px rgba(var(--looper-accent-rgb, 74, 222, 128), 0.3);
+}
+
+.loop-control-btn-small.active .loop-control-icon-small {
+    color: var(--looper-accent);
+    text-shadow: 0 0 10px var(--looper-accent-glow);
+}
+
+/* Fixed-width value displays for transport knobs (prevent wiggle) */
+.transport-knob-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: #999;
+    text-align: center;
+    min-width: 44px;
+    display: inline-block;
+}
+
+/* Transport knob labels - larger for legibility */
+.transport-knob-label {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #666;
+    text-transform: uppercase;
+}
+
 /* Diagnostics toggle button */
 .diag-toggle-btn {
     display: flex;
@@ -1318,13 +1427,14 @@ html, body {
     line-height: 1;
 }
 
-/* Solo indicator - the soloed layer glows yellow/gold */
+/* Solo indicator - the soloed layer glows bright yellow/gold (playing state) */
 .layer-btn.soloed {
-    background: linear-gradient(180deg, #4a4010 0%, #2a2508 100%) !important;
-    border-color: #ffeb3b !important;
-    color: #ffeb3b !important;
-    box-shadow: 0 0 8px rgba(255, 235, 59, 0.4) !important;
+    background: linear-gradient(180deg, #ffcc00 0%, #cc9900 100%) !important;
+    border-color: #ffee55 !important;
+    color: #1a1a0a !important;
+    box-shadow: 0 0 12px rgba(255, 204, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
     text-decoration: none !important;
+    text-shadow: none !important;
 }
 
 .layer-btn.soloed::before {
@@ -1334,13 +1444,14 @@ html, body {
     left: -4px;
     font-size: 7px;
     font-weight: bold;
-    color: #ffeb3b;
-    background: #1a1a1a;
-    border: 1px solid #ffeb3b;
+    color: #1a1a0a;
+    background: #ffcc00;
+    border: 1px solid #ffee55;
     border-radius: 2px;
     padding: 0 2px;
     line-height: 1;
     z-index: 10;
+    box-shadow: 0 0 6px rgba(255, 204, 0, 0.5);
 }
 
 /* ============================================
@@ -1379,75 +1490,123 @@ html, body {
 }
 
 /* ============================================
-   MODE TOGGLE SWITCH (TRACK/LAYER)
+   MODE TOGGLE SWITCH (TRACK/LAYER) - Premium Design
    ============================================ */
 
 .mode-toggle-switch {
     display: flex;
     align-items: center;
-    gap: 0;
-    background: linear-gradient(180deg, #0a0a0a 0%, #151515 100%);
-    border: 1px solid #333;
-    border-radius: 12px;
-    padding: 2px;
+    background: linear-gradient(180deg, #0d0d0d 0%, #1a1a1a 50%, #0d0d0d 100%);
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    padding: 3px;
     cursor: pointer;
     position: relative;
-    height: 22px;
+    height: 28px;
     transition: all 0.2s ease;
+    box-shadow:
+        inset 0 1px 3px rgba(0, 0, 0, 0.5),
+        0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .mode-toggle-switch:hover {
-    border-color: #555;
+    border-color: #444;
+    box-shadow:
+        inset 0 1px 3px rgba(0, 0, 0, 0.5),
+        0 1px 0 rgba(255, 255, 255, 0.05),
+        0 0 10px rgba(79, 195, 247, 0.1);
 }
 
-.mode-option {
+.mode-labels {
+    display: flex;
+    position: relative;
+    z-index: 2;
+}
+
+.mode-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
     font-family: 'Orbitron', sans-serif;
     font-size: 8px;
     font-weight: 700;
-    letter-spacing: 0.5px;
-    padding: 3px 8px;
-    color: #444;
-    z-index: 1;
-    transition: color 0.2s ease;
+    letter-spacing: 1px;
+    color: #3a3a3a;
+    transition: all 0.25s ease;
     user-select: none;
 }
 
-.mode-option.active {
-    color: #fff;
+.mode-label svg {
+    opacity: 0.4;
+    transition: opacity 0.25s ease;
 }
 
-.mode-slider {
+.mode-track-indicator {
     position: absolute;
-    height: 16px;
-    width: 42px;
-    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 100%);
-    border-radius: 10px;
-    left: 2px;
-    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 8px rgba(79, 195, 247, 0.4);
+    height: calc(100% - 6px);
+    width: 50%;
+    top: 3px;
+    left: 3px;
+    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 50%, #0288d1 100%);
+    border-radius: 4px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow:
+        0 0 12px rgba(79, 195, 247, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 }
 
-/* Layer mode active - slide to right */
-.mode-toggle-switch.layer-mode .mode-slider {
-    left: calc(100% - 44px);
-    background: linear-gradient(180deg, #ff7043 0%, #f4511e 100%);
-    box-shadow: 0 0 8px rgba(255, 112, 67, 0.4);
+/* Track mode active (default) */
+.mode-toggle-switch:not(.layer-mode) #mode-track {
+    color: #fff;
+    text-shadow: 0 0 8px rgba(79, 195, 247, 0.8);
+}
+
+.mode-toggle-switch:not(.layer-mode) #mode-track svg {
+    opacity: 1;
+}
+
+.mode-toggle-switch:not(.layer-mode) #mode-layer {
+    color: #3a3a3a;
+}
+
+/* Layer mode active */
+.mode-toggle-switch.layer-mode .mode-track-indicator {
+    left: calc(50% - 0px);
+    background: linear-gradient(180deg, #ff7043 0%, #f4511e 50%, #d84315 100%);
+    box-shadow:
+        0 0 12px rgba(255, 112, 67, 0.5),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
 }
 
 .mode-toggle-switch.layer-mode #mode-track {
-    color: #444;
+    color: #3a3a3a;
+}
+
+.mode-toggle-switch.layer-mode #mode-track svg {
+    opacity: 0.4;
 }
 
 .mode-toggle-switch.layer-mode #mode-layer {
     color: #fff;
+    text-shadow: 0 0 8px rgba(255, 112, 67, 0.8);
 }
 
-.mode-toggle-switch:not(.layer-mode) #mode-track {
-    color: #fff;
+.mode-toggle-switch.layer-mode #mode-layer svg {
+    opacity: 1;
 }
 
-.mode-toggle-switch:not(.layer-mode) #mode-layer {
-    color: #444;
+/* Flatten button icon update */
+.flatten-icon {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.2s ease;
+}
+
+.flatten-btn:hover .flatten-icon {
+    transform: scale(1.1);
 }
 
 /* ============================================
@@ -4719,10 +4878,11 @@ html, body {
 }
 
 .channel-solo.active {
-    background: linear-gradient(180deg, #665500 0%, #443300 100%);
-    border-color: #ffcc00;
-    color: #ffcc00;
-    box-shadow: 0 0 6px rgba(255, 204, 0, 0.3);
+    background: linear-gradient(180deg, #ffcc00 0%, #cc9900 100%);
+    border-color: #ffee55;
+    color: #1a1a0a;
+    box-shadow: 0 0 10px rgba(255, 204, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    text-shadow: 0 0 1px rgba(255, 255, 200, 0.5);
 }
 
 /* ============================================
@@ -5127,10 +5287,11 @@ html, body {
 }
 
 .layer-solo-btn.active {
-    background: linear-gradient(180deg, #5c4a1a 0%, #3c2a0a 100%);
-    border-color: #ffab40;
-    color: #ffd180;
-    box-shadow: 0 0 6px rgba(255, 171, 64, 0.4);
+    background: linear-gradient(180deg, #ffcc00 0%, #cc9900 100%);
+    border-color: #ffee55;
+    color: #1a1a0a;
+    box-shadow: 0 0 12px rgba(255, 204, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    text-shadow: 0 0 1px rgba(255, 255, 200, 0.5);
 }
 
 .layer-pan-group {
@@ -5227,31 +5388,36 @@ html, body {
 }
 
 .layer-pitch-knob {
-    width: 32px;
-    height: 32px;
+    width: 80px;
+    height: 80px;
     background: linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%);
-    border: 2px solid #333;
+    border: 3px solid #333;
     border-radius: 50%;
     position: relative;
     cursor: pointer;
     transition: all 0.15s ease;
+    box-shadow:
+        inset 0 2px 4px rgba(0, 0, 0, 0.5),
+        0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .layer-pitch-knob:hover {
     border-color: #00bcd4;
-    box-shadow: 0 0 8px rgba(0, 188, 212, 0.3);
+    box-shadow:
+        inset 0 2px 4px rgba(0, 0, 0, 0.5),
+        0 0 12px rgba(0, 188, 212, 0.4);
 }
 
 .layer-pitch-knob .layer-knob-indicator {
     position: absolute;
-    width: 2px;
-    height: 10px;
+    width: 4px;
+    height: 24px;
     background: #00bcd4;
-    top: 4px;
+    top: 8px;
     left: 50%;
     transform: translateX(-50%);
-    border-radius: 1px;
-    transform-origin: bottom center;
+    border-radius: 2px;
+    transform-origin: center 32px;
 }
 
 .layer-pitch-hq-btn {
@@ -5342,5 +5508,265 @@ html, body {
     font-size: 11px;
     font-weight: 700;
     color: #4fc3f7;
+    min-width: 40px;
+}
+
+/* ============================================
+   LAYER PANEL VOLUME FADER
+   ============================================ */
+
+.layer-volume-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.layer-fader-container {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    height: 120px;
+    position: relative;
+}
+
+/* dB Scale marks on left side */
+.layer-fader-scale {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    padding: 4px 0;
+}
+
+.layer-fader-mark {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 7px;
+    font-weight: 600;
+    color: #555;
+    text-align: right;
+    line-height: 1;
+}
+
+.layer-fader-mark-red {
+    color: #ff4444;
+}
+
+.layer-fader-mark-yellow {
+    color: #ffcc00;
+}
+
+.layer-fader-mark-green {
+    color: #66bb6a;
+}
+
+.layer-fader-mark-dim {
+    color: #444;
+}
+
+/* Fader track background with zones */
+.layer-fader-track {
+    position: relative;
+    width: 10px;
+    height: 100%;
+    background: linear-gradient(180deg,
+        #0a0a0a 0%,
+        #151515 30%,
+        #151515 70%,
+        #0a0a0a 100%);
+    border: 1px solid #444;
+    border-radius: 5px;
+    box-shadow:
+        inset 0 3px 6px rgba(0, 0, 0, 0.6),
+        inset 0 -1px 2px rgba(255, 255, 255, 0.03),
+        0 1px 0 rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+}
+
+/* Color zones inside track */
+.layer-fader-zone {
+    position: absolute;
+    left: 0;
+    right: 0;
+    opacity: 0.2;
+}
+
+/* Red zone: +3dB to 0dB (top ~21%) */
+.layer-fader-zone-red {
+    top: 0;
+    height: 21%;
+    background: linear-gradient(180deg, #ff4444 0%, transparent 100%);
+}
+
+/* Yellow zone: 0dB to -6dB (~21% to ~40%) */
+.layer-fader-zone-yellow {
+    top: 21%;
+    height: 19%;
+    background: linear-gradient(180deg, #ffcc00 0%, transparent 100%);
+}
+
+/* Green zone: -6dB and below (40% to bottom) */
+.layer-fader-zone-green {
+    top: 40%;
+    height: 60%;
+    background: linear-gradient(180deg, #66bb6a 0%, transparent 60%);
+}
+
+/* Animated level meter bar inside fader track (shows actual audio level) */
+.layer-fader-meter {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 0%;
+    background: linear-gradient(0deg,
+        #4caf50 0%,
+        #8bc34a 40%,
+        #cddc39 60%,
+        #ffeb3b 75%,
+        #ff9800 85%,
+        #f44336 95%);
+    border-radius: 2px;
+    opacity: 0.85;
+    transition: height 0.05s linear;
+    z-index: 1;
+    pointer-events: none;
+    box-shadow:
+        0 0 4px rgba(76, 175, 80, 0.4),
+        inset 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+/* Brighter meter when in red zone (clipping) */
+.layer-fader-meter.clipping {
+    box-shadow:
+        0 0 8px rgba(244, 67, 54, 0.6),
+        inset 0 0 2px rgba(255, 255, 255, 0.2);
+}
+
+/* Unity point marker (0dB line) */
+.layer-fader-unity {
+    position: absolute;
+    top: 21%; /* 0dB position */
+    left: -2px;
+    right: -2px;
+    height: 2px;
+    background: #ffcc00;
+    box-shadow: 0 0 4px rgba(255, 204, 0, 0.5);
+    z-index: 2;
+}
+
+/* Vertical fader input - rotated for vertical operation */
+.layer-fader {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 108px; /* Becomes vertical height after rotation */
+    height: 20px;
+    background: transparent;
+    cursor: pointer;
+    transform: rotate(-90deg);
+    transform-origin: center center;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    margin-left: -54px;
+    margin-top: -10px;
+    z-index: 3;
+}
+
+.layer-fader::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 8px;
+    background: transparent;
+    border-radius: 4px;
+}
+
+.layer-fader::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 12px;
+    margin-top: -2px;
+    background: linear-gradient(90deg,
+        #2a2a2a 0%,
+        #4a4a4a 15%,
+        #5a5a5a 25%,
+        #4a4a4a 35%,
+        #3a3a3a 50%,
+        #4a4a4a 65%,
+        #5a5a5a 75%,
+        #4a4a4a 85%,
+        #2a2a2a 100%);
+    border: 1px solid #666;
+    border-top-color: #777;
+    border-bottom-color: #444;
+    border-radius: 3px;
+    cursor: grab;
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.15),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.layer-fader::-webkit-slider-thumb:hover {
+    background: linear-gradient(90deg,
+        #333 0%,
+        #555 15%,
+        #666 25%,
+        #555 35%,
+        #444 50%,
+        #555 65%,
+        #666 75%,
+        #555 85%,
+        #333 100%);
+    border-color: var(--looper-accent);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 0 8px var(--looper-accent-glow);
+}
+
+.layer-fader::-webkit-slider-thumb:active {
+    cursor: grabbing;
+    border-color: var(--looper-accent);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+        0 0 12px var(--looper-accent-glow);
+}
+
+/* Firefox styling */
+.layer-fader::-moz-range-track {
+    width: 100%;
+    height: 8px;
+    background: transparent;
+    border-radius: 4px;
+}
+
+.layer-fader::-moz-range-thumb {
+    width: 24px;
+    height: 12px;
+    background: linear-gradient(90deg,
+        #2a2a2a 0%,
+        #4a4a4a 15%,
+        #5a5a5a 25%,
+        #4a4a4a 35%,
+        #3a3a3a 50%,
+        #4a4a4a 65%,
+        #5a5a5a 75%,
+        #4a4a4a 85%,
+        #2a2a2a 100%);
+    border: 1px solid #666;
+    border-radius: 3px;
+    cursor: grab;
+}
+
+/* Value display below fader */
+.layer-fader-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    font-weight: 700;
+    color: #888;
+    text-align: center;
     min-width: 40px;
 }
