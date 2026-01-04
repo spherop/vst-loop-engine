@@ -693,8 +693,6 @@ class LooperController {
     // Setup Track/Layer mode toggle
     setupModeToggle() {
         this.modeToggleBtn = document.getElementById('mode-toggle-btn');
-        this.modeIcon = document.getElementById('mode-icon');
-        this.modeLabel = document.getElementById('mode-label');
 
         if (this.modeToggleBtn) {
             this.modeToggleBtn.addEventListener('click', async () => {
@@ -715,12 +713,7 @@ class LooperController {
     }
 
     updateModeToggleUI() {
-        if (this.modeIcon) {
-            this.modeIcon.textContent = this.layerModeEnabled ? 'L' : 'T';
-        }
-        if (this.modeLabel) {
-            this.modeLabel.textContent = this.layerModeEnabled ? 'LAYER' : 'TRACK';
-        }
+        // Toggle the slider-style mode switch
         if (this.modeToggleBtn) {
             this.modeToggleBtn.classList.toggle('layer-mode', this.layerModeEnabled);
         }
@@ -2023,20 +2016,56 @@ class LooperController {
         }
 
         // Update REC button label and state based on current state
-        // Blooper-style: REC button shows "REC" normally, "DUB" when overdubbing
-        // Shows "DUB+" when clicking will add a new layer, colored with next layer's color
+        // Shows target track/layer: "REC T1", "ADD T2", etc.
+        // T = Track mode, L = Layer mode
+        const modePrefix = this.layerModeEnabled ? 'L' : 'T';
+
         switch (state) {
             case 'recording':
-                if (this.recBtn) this.recBtn.classList.add('active');
-                if (this.recLabel) this.recLabel.textContent = 'REC';
+                if (this.recBtn) {
+                    this.recBtn.classList.add('active');
+                    this.recBtn.classList.add('recording');  // Add recording animation class
+                }
+                // Show which layer we're recording to
+                // currentLayer is 1-indexed from backend, display as-is
+                // layerColors is 0-indexed, so use currentLayer - 1 for color
+                {
+                    const displayLayer = this.currentLayer;
+                    const colorIdx = Math.max(0, this.currentLayer - 1);
+                    if (this.recLabel) this.recLabel.textContent = `REC ${modePrefix}${displayLayer}`;
+                    const layerColor = this.layerColors[colorIdx];
+                    if (this.recBtn && layerColor) {
+                        this.recBtn.style.borderColor = layerColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${layerColor}60`;
+                    }
+                    if (this.recLabel && layerColor) {
+                        this.recLabel.style.color = layerColor;
+                    }
+                }
                 break;
             case 'playing':
                 if (this.playBtn) this.playBtn.classList.add('active');
-                // Mark REC button as "ready to dub" (not actively recording) - gray styling via CSS
-                if (this.recBtn) this.recBtn.classList.add('dub-ready');
-                if (this.recLabel) this.recLabel.textContent = 'DUB';
-                // Check if clicking DUB will add a new layer (current layer has content)
-                // The + is shown via CSS pseudo-element on the icon, not in the label
+                if (this.recBtn) {
+                    this.recBtn.classList.add('dub-ready');
+                    this.recBtn.classList.remove('recording');
+                }
+                // Show target: next layer to record to
+                // highestLayer is 1-indexed, so next layer is highestLayer + 1
+                {
+                    const nextLayer = Math.min(this.highestLayer + 1, 8);
+                    const colorIdx = Math.min(this.highestLayer, 7);  // 0-indexed for color array
+                    // Use "ADD" for adding new tracks/layers
+                    if (this.recLabel) this.recLabel.textContent = `ADD ${modePrefix}${nextLayer}`;
+                    const nextLayerColor = this.layerColors[colorIdx];
+                    if (this.recBtn && nextLayerColor) {
+                        this.recBtn.style.borderColor = nextLayerColor;
+                        this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
+                    }
+                    if (this.recLabel && nextLayerColor) {
+                        this.recLabel.style.color = nextLayerColor;
+                    }
+                }
+                // Check if clicking will add a new layer
                 const willAddLayer = this.layerContentStates[this.currentLayer - 1];
                 if (willAddLayer && this.highestLayer > 0) {
                     if (this.recBtn) this.recBtn.classList.add('dub-plus-mode');
@@ -2045,47 +2074,55 @@ class LooperController {
                 }
                 break;
             case 'overdubbing':
-                if (this.recBtn) this.recBtn.classList.add('active');
-                if (this.recLabel) this.recLabel.textContent = 'DUB';
-                // During overdubbing, show + in icon if we can add more layers
-                const willAddLayerAfterOverdub = this.highestLayer < 7;
-                // Color matches the layer currently being recorded to (currentLayer)
+                if (this.recBtn) {
+                    this.recBtn.classList.add('active');
+                    this.recBtn.classList.add('recording');  // Add recording animation class
+                }
+                // Show which layer we're actively recording to
+                // currentLayer is 1-indexed, layerColors is 0-indexed
                 {
-                    const currentLayerColor = this.layerColors[this.currentLayer];  // currentLayer is 1-indexed
-                    if (this.recBtn) {
+                    const displayLayer = this.currentLayer;
+                    const colorIdx = Math.max(0, this.currentLayer - 1);
+                    if (this.recLabel) this.recLabel.textContent = `REC ${modePrefix}${displayLayer}`;
+                    const currentLayerColor = this.layerColors[colorIdx];
+                    if (this.recBtn && currentLayerColor) {
                         this.recBtn.style.borderColor = currentLayerColor;
                         this.recBtn.style.boxShadow = `0 0 8px ${currentLayerColor}60`;
+                        // During overdubbing, show + in icon if we can add more layers
+                        const willAddLayerAfterOverdub = this.highestLayer < 7;
                         if (willAddLayerAfterOverdub) {
                             this.recBtn.classList.add('dub-plus-mode');
                         } else {
                             this.recBtn.classList.remove('dub-plus-mode');
                         }
                     }
-                    if (this.recLabel) {
+                    if (this.recLabel && currentLayerColor) {
                         this.recLabel.style.color = currentLayerColor;
                     }
                 }
                 break;
             case 'idle':
             default:
-                // When idle with recorded content, show DUB (clicking will start playback + overdub)
-                // When idle with no content, show REC (clicking will start fresh recording)
+                if (this.recBtn) this.recBtn.classList.remove('recording');
+                // When idle with recorded content, show ADD with target layer
+                // When idle with no content, show REC T1/L1 (first layer)
                 const hasContentIdle = this.layerContentStates && this.layerContentStates[0] === true;
                 if (hasContentIdle) {
-                    if (this.recLabel) this.recLabel.textContent = 'DUB';
-                    // Color to match the next layer that will be recorded to
-                    // highestLayer is 1-indexed, so highestLayer=1 means layer 0 has content, next is layer 1 (index 1)
-                    const nextLayerIdx = Math.min(this.highestLayer, 7);
-                    const nextLayerColor = this.layerColors[nextLayerIdx];
-                    if (this.recBtn) {
+                    // Show next layer to record to
+                    // highestLayer is 1-indexed, next layer display is highestLayer + 1
+                    const nextLayerDisplay = Math.min(this.highestLayer + 1, 8);
+                    const colorIdx = Math.min(this.highestLayer, 7);  // 0-indexed for color
+                    if (this.recLabel) this.recLabel.textContent = `ADD ${modePrefix}${nextLayerDisplay}`;
+                    const nextLayerColor = this.layerColors[colorIdx];
+                    if (this.recBtn && nextLayerColor) {
                         this.recBtn.style.borderColor = nextLayerColor;
                         this.recBtn.style.boxShadow = `0 0 8px ${nextLayerColor}60`;
                     }
-                    if (this.recLabel) {
+                    if (this.recLabel && nextLayerColor) {
                         this.recLabel.style.color = nextLayerColor;
                     }
                 } else {
-                    if (this.recLabel) this.recLabel.textContent = 'REC';
+                    if (this.recLabel) this.recLabel.textContent = `REC ${modePrefix}1`;
                 }
                 break;
         }

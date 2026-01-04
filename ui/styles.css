@@ -630,7 +630,17 @@ html, body {
     color: var(--looper-accent);
 }
 
-/* Record Button */
+/* Record Button - wider for track/layer indicator */
+.transport-btn.rec-wide {
+    min-width: 85px;
+    width: 85px;
+}
+
+.transport-btn.rec-wide .transport-label {
+    font-size: 9px;
+    letter-spacing: 0.5px;
+}
+
 .transport-btn.rec:hover {
     border-color: #ef5350;
 }
@@ -657,6 +667,20 @@ html, body {
 @keyframes pulse-rec {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }
+}
+
+/* Recording animation - pulsing glow effect */
+.transport-btn.rec.recording {
+    animation: recording-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes recording-pulse {
+    0%, 100% {
+        box-shadow: 0 0 8px rgba(239, 83, 80, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(239, 83, 80, 0.8), 0 0 30px rgba(239, 83, 80, 0.4);
+    }
 }
 
 /* DUB+ Mode - Replace circle with circled plus symbol */
@@ -1352,6 +1376,78 @@ html, body {
 .flatten-icon {
     font-size: 16px;
     font-weight: bold;
+}
+
+/* ============================================
+   MODE TOGGLE SWITCH (TRACK/LAYER)
+   ============================================ */
+
+.mode-toggle-switch {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: linear-gradient(180deg, #0a0a0a 0%, #151515 100%);
+    border: 1px solid #333;
+    border-radius: 12px;
+    padding: 2px;
+    cursor: pointer;
+    position: relative;
+    height: 22px;
+    transition: all 0.2s ease;
+}
+
+.mode-toggle-switch:hover {
+    border-color: #555;
+}
+
+.mode-option {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 3px 8px;
+    color: #444;
+    z-index: 1;
+    transition: color 0.2s ease;
+    user-select: none;
+}
+
+.mode-option.active {
+    color: #fff;
+}
+
+.mode-slider {
+    position: absolute;
+    height: 16px;
+    width: 42px;
+    background: linear-gradient(180deg, #4fc3f7 0%, #29b6f6 100%);
+    border-radius: 10px;
+    left: 2px;
+    transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 0 8px rgba(79, 195, 247, 0.4);
+}
+
+/* Layer mode active - slide to right */
+.mode-toggle-switch.layer-mode .mode-slider {
+    left: calc(100% - 44px);
+    background: linear-gradient(180deg, #ff7043 0%, #f4511e 100%);
+    box-shadow: 0 0 8px rgba(255, 112, 67, 0.4);
+}
+
+.mode-toggle-switch.layer-mode #mode-track {
+    color: #444;
+}
+
+.mode-toggle-switch.layer-mode #mode-layer {
+    color: #fff;
+}
+
+.mode-toggle-switch:not(.layer-mode) #mode-track {
+    color: #fff;
+}
+
+.mode-toggle-switch:not(.layer-mode) #mode-layer {
+    color: #444;
 }
 
 /* ============================================

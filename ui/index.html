@@ -152,13 +152,9 @@
                                         <span class="mute-label">IN</span>
                                     </button>
                                 </div>
-                                <button id="rec-btn" class="transport-btn rec">
+                                <button id="rec-btn" class="transport-btn rec rec-wide">
                                     <span class="transport-icon">&#9679;</span>
-                                    <span class="transport-label">REC</span>
-                                </button>
-                                <button id="mode-toggle-btn" class="transport-btn mode-btn" title="Toggle Track/Layer Mode - Track: layers sum together | Layer: higher layers override">
-                                    <span class="transport-icon" id="mode-icon">T</span>
-                                    <span class="transport-label" id="mode-label">TRACK</span>
+                                    <span class="transport-label">REC T1</span>
                                 </button>
                                 <button id="loop-play-btn" class="transport-btn play">
                                     <span class="transport-icon">&#9658;</span>
@@ -676,6 +672,12 @@
                                 <button class="flatten-btn" id="flatten-btn" title="Flatten all unmuted layers into layer 1">
                                     <span class="flatten-icon">⊞</span>
                                 </button>
+                                <!-- Track/Layer Mode Toggle -->
+                                <div class="mode-toggle-switch" id="mode-toggle-btn" title="Toggle Track/Layer Mode - Track: layers sum together | Layer: higher layers override">
+                                    <span class="mode-option" id="mode-track">TRACK</span>
+                                    <span class="mode-slider"></span>
+                                    <span class="mode-option" id="mode-layer">LAYER</span>
+                                </div>
                             </div>
                             <!-- Loop time + Crossfade (right) -->
                             <div class="flex items-center gap-2">
@@ -769,7 +771,7 @@
                                         <path d="M7 16l4-8 4 6 4-10"/>
                                     </svg>
                                 </button>
-                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v11.5.0</span>
+                                <span class="font-mono text-[9px] text-fd-text-dim" id="version-ticker">v11.7.1</span>
                             </div>
 
                             <!-- Controls (center) -->
