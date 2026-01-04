@@ -166,6 +166,7 @@ public:
     }
 
     // Add this layer's buffer content to an external buffer (for flattening)
+    // NOTE: This is the simple version - use addToBufferWithEffects for full processing
     void addToBuffer(juce::AudioBuffer<float>& destBuffer) const
     {
         if (loopLength <= 0)
@@ -194,6 +195,247 @@ public:
                 destR[i] += bufferR[i] * fadeMultiplier;
             }
         }
+    }
+
+    // Add this layer's buffer content WITH all per-layer effects applied
+    // This renders the layer as it would sound during playback, including:
+    // - Volume & Pan
+    // - EQ (3-band)
+    // - Pitch shift (per-layer)
+    // - Reverse
+    // - Loop bounds (start/end)
+    // - Fade multiplier
+    void addToBufferWithEffects(juce::AudioBuffer<float>& destBuffer, double sampleRate) const
+    {
+        if (loopLength <= 0)
+            return;
+
+        const int destLength = destBuffer.getNumSamples();
+        const int numChannels = destBuffer.getNumChannels();
+        if (numChannels < 2)
+            return;
+
+        // Get all per-layer parameters
+        const float vol = volume.load();
+        const float panVal = pan.load();
+        const float fadeMultiplier = currentFadeMultiplier.load();
+        const bool reversed = isReversed.load();
+        const float layerPitchSemi = layerPitchSemitones.load();
+        const float layerPitchRatio = std::pow(2.0f, layerPitchSemi / 12.0f);
+
+        // Calculate effective loop bounds
+        const int effectiveStart = loopStart;
+        const int effectiveEnd = loopEnd > 0 ? loopEnd : loopLength;
+        const int effectiveLength = effectiveEnd - effectiveStart;
+
+        if (effectiveLength <= 0)
+            return;
+
+        // Pan law: constant power panning
+        const float panAngle = (panVal + 1.0f) * 0.5f * juce::MathConstants<float>::halfPi;
+        const float panL = std::cos(panAngle);
+        const float panR = std::sin(panAngle);
+
+        // Get EQ gains
+        const float eqLow = eqLowGain.load();
+        const float eqMid = eqMidGain.load();
+        const float eqHigh = eqHighGain.load();
+        const bool needsEQ = std::abs(eqLow - 1.0f) > 0.01f ||
+                             std::abs(eqMid - 1.0f) > 0.01f ||
+                             std::abs(eqHigh - 1.0f) > 0.01f;
+
+        // Simple EQ state for offline processing (separate from realtime state)
+        float eqLowX1L = 0.0f, eqLowX2L = 0.0f, eqLowY1L = 0.0f, eqLowY2L = 0.0f;
+        float eqLowX1R = 0.0f, eqLowX2R = 0.0f, eqLowY1R = 0.0f, eqLowY2R = 0.0f;
+        float eqMidX1L = 0.0f, eqMidX2L = 0.0f, eqMidY1L = 0.0f, eqMidY2L = 0.0f;
+        float eqMidX1R = 0.0f, eqMidX2R = 0.0f, eqMidY1R = 0.0f, eqMidY2R = 0.0f;
+        float eqHighX1L = 0.0f, eqHighX2L = 0.0f, eqHighY1L = 0.0f, eqHighY2L = 0.0f;
+        float eqHighX1R = 0.0f, eqHighX2R = 0.0f, eqHighY1R = 0.0f, eqHighY2R = 0.0f;
+
+        // Calculate EQ coefficients for offline processing
+        float lowB0 = 1.0f, lowB1 = 0.0f, lowB2 = 0.0f, lowA1 = 0.0f, lowA2 = 0.0f;
+        float midB0 = 1.0f, midB1 = 0.0f, midB2 = 0.0f, midA1 = 0.0f, midA2 = 0.0f;
+        float highB0 = 1.0f, highB1 = 0.0f, highB2 = 0.0f, highA1 = 0.0f, highA2 = 0.0f;
+
+        if (needsEQ && sampleRate > 0)
+        {
+            // Low shelf at 200Hz
+            {
+                float freq = 200.0f;
+                float w0 = 2.0f * juce::MathConstants<float>::pi * freq / static_cast<float>(sampleRate);
+                float cosw0 = std::cos(w0);
+                float sinw0 = std::sin(w0);
+                float S = 1.0f;  // Shelf slope
+                float A = std::sqrt(eqLow);
+                float alpha = sinw0 / 2.0f * std::sqrt((A + 1.0f/A) * (1.0f/S - 1.0f) + 2.0f);
+                float a0 = (A + 1.0f) + (A - 1.0f) * cosw0 + 2.0f * std::sqrt(A) * alpha;
+                lowB0 = (A * ((A + 1.0f) - (A - 1.0f) * cosw0 + 2.0f * std::sqrt(A) * alpha)) / a0;
+                lowB1 = (2.0f * A * ((A - 1.0f) - (A + 1.0f) * cosw0)) / a0;
+                lowB2 = (A * ((A + 1.0f) - (A - 1.0f) * cosw0 - 2.0f * std::sqrt(A) * alpha)) / a0;
+                lowA1 = (-2.0f * ((A - 1.0f) + (A + 1.0f) * cosw0)) / a0;
+                lowA2 = ((A + 1.0f) + (A - 1.0f) * cosw0 - 2.0f * std::sqrt(A) * alpha) / a0;
+            }
+
+            // Mid peak at 1kHz
+            {
+                float freq = 1000.0f;
+                float w0 = 2.0f * juce::MathConstants<float>::pi * freq / static_cast<float>(sampleRate);
+                float cosw0 = std::cos(w0);
+                float sinw0 = std::sin(w0);
+                float Q = 1.0f;
+                float A = std::sqrt(eqMid);
+                float alpha = sinw0 / (2.0f * Q);
+                float a0 = 1.0f + alpha / A;
+                midB0 = (1.0f + alpha * A) / a0;
+                midB1 = (-2.0f * cosw0) / a0;
+                midB2 = (1.0f - alpha * A) / a0;
+                midA1 = (-2.0f * cosw0) / a0;
+                midA2 = (1.0f - alpha / A) / a0;
+            }
+
+            // High shelf at 4kHz
+            {
+                float freq = 4000.0f;
+                float w0 = 2.0f * juce::MathConstants<float>::pi * freq / static_cast<float>(sampleRate);
+                float cosw0 = std::cos(w0);
+                float sinw0 = std::sin(w0);
+                float S = 1.0f;
+                float A = std::sqrt(eqHigh);
+                float alpha = sinw0 / 2.0f * std::sqrt((A + 1.0f/A) * (1.0f/S - 1.0f) + 2.0f);
+                float a0 = (A + 1.0f) - (A - 1.0f) * cosw0 + 2.0f * std::sqrt(A) * alpha;
+                highB0 = (A * ((A + 1.0f) + (A - 1.0f) * cosw0 + 2.0f * std::sqrt(A) * alpha)) / a0;
+                highB1 = (-2.0f * A * ((A - 1.0f) + (A + 1.0f) * cosw0)) / a0;
+                highB2 = (A * ((A + 1.0f) + (A - 1.0f) * cosw0 - 2.0f * std::sqrt(A) * alpha)) / a0;
+                highA1 = (2.0f * ((A - 1.0f) - (A + 1.0f) * cosw0)) / a0;
+                highA2 = ((A + 1.0f) - (A - 1.0f) * cosw0 - 2.0f * std::sqrt(A) * alpha) / a0;
+            }
+        }
+
+        // Lambda for applying EQ to a sample
+        auto applyEQ = [&](float& sampleL, float& sampleR) {
+            if (!needsEQ) return;
+
+            // Low shelf L
+            float outL = lowB0 * sampleL + lowB1 * eqLowX1L + lowB2 * eqLowX2L - lowA1 * eqLowY1L - lowA2 * eqLowY2L;
+            eqLowX2L = eqLowX1L; eqLowX1L = sampleL; eqLowY2L = eqLowY1L; eqLowY1L = outL;
+            // Low shelf R
+            float outR = lowB0 * sampleR + lowB1 * eqLowX1R + lowB2 * eqLowX2R - lowA1 * eqLowY1R - lowA2 * eqLowY2R;
+            eqLowX2R = eqLowX1R; eqLowX1R = sampleR; eqLowY2R = eqLowY1R; eqLowY1R = outR;
+            sampleL = outL; sampleR = outR;
+
+            // Mid peak L
+            outL = midB0 * sampleL + midB1 * eqMidX1L + midB2 * eqMidX2L - midA1 * eqMidY1L - midA2 * eqMidY2L;
+            eqMidX2L = eqMidX1L; eqMidX1L = sampleL; eqMidY2L = eqMidY1L; eqMidY1L = outL;
+            // Mid peak R
+            outR = midB0 * sampleR + midB1 * eqMidX1R + midB2 * eqMidX2R - midA1 * eqMidY1R - midA2 * eqMidY2R;
+            eqMidX2R = eqMidX1R; eqMidX1R = sampleR; eqMidY2R = eqMidY1R; eqMidY1R = outR;
+            sampleL = outL; sampleR = outR;
+
+            // High shelf L
+            outL = highB0 * sampleL + highB1 * eqHighX1L + highB2 * eqHighX2L - highA1 * eqHighY1L - highA2 * eqHighY2L;
+            eqHighX2L = eqHighX1L; eqHighX1L = sampleL; eqHighY2L = eqHighY1L; eqHighY1L = outL;
+            // High shelf R
+            outR = highB0 * sampleR + highB1 * eqHighX1R + highB2 * eqHighX2R - highA1 * eqHighY1R - highA2 * eqHighY2R;
+            eqHighX2R = eqHighX1R; eqHighX1R = sampleR; eqHighY2R = eqHighY1R; eqHighY1R = outR;
+            sampleL = outL; sampleR = outR;
+        };
+
+        float* destL = destBuffer.getWritePointer(0);
+        float* destR = destBuffer.getWritePointer(1);
+
+        // For pitch shifting, we need to resample
+        // If pitch ratio is 1.0, we can do simple copy with effects
+        // Otherwise we need to interpolate
+
+        const bool needsPitchShift = std::abs(layerPitchRatio - 1.0f) > 0.001f;
+
+        if (!needsPitchShift)
+        {
+            // No pitch shift - simple sample-by-sample processing
+            for (int i = 0; i < destLength && i < effectiveLength; ++i)
+            {
+                int srcIdx;
+                if (reversed)
+                {
+                    srcIdx = effectiveEnd - 1 - i;
+                    if (srcIdx < effectiveStart) srcIdx = effectiveStart;
+                }
+                else
+                {
+                    srcIdx = effectiveStart + i;
+                    if (srcIdx >= effectiveEnd) srcIdx = effectiveEnd - 1;
+                }
+
+                float sampleL = bufferL[srcIdx] * fadeMultiplier;
+                float sampleR = bufferR[srcIdx] * fadeMultiplier;
+
+                // Apply EQ
+                applyEQ(sampleL, sampleR);
+
+                // Apply volume and pan
+                sampleL *= vol * panL;
+                sampleR *= vol * panR;
+
+                // Add to destination
+                destL[i] += sampleL;
+                destR[i] += sampleR;
+            }
+        }
+        else
+        {
+            // With pitch shift - use linear interpolation for resampling
+            // When pitch ratio > 1, we read faster (higher pitch)
+            // When pitch ratio < 1, we read slower (lower pitch)
+            float readPos = reversed ? static_cast<float>(effectiveEnd - 1) : static_cast<float>(effectiveStart);
+            const float readIncrement = reversed ? -layerPitchRatio : layerPitchRatio;
+
+            for (int i = 0; i < destLength; ++i)
+            {
+                // Check bounds
+                if (reversed)
+                {
+                    if (readPos < effectiveStart) break;
+                }
+                else
+                {
+                    if (readPos >= effectiveEnd - 1) break;
+                }
+
+                // Linear interpolation
+                int idx0 = static_cast<int>(std::floor(readPos));
+                int idx1 = idx0 + (reversed ? -1 : 1);
+                float frac = readPos - std::floor(readPos);
+
+                // Clamp indices
+                idx0 = std::clamp(idx0, effectiveStart, effectiveEnd - 1);
+                idx1 = std::clamp(idx1, effectiveStart, effectiveEnd - 1);
+
+                float sampleL = bufferL[idx0] * (1.0f - frac) + bufferL[idx1] * frac;
+                float sampleR = bufferR[idx0] * (1.0f - frac) + bufferR[idx1] * frac;
+                sampleL *= fadeMultiplier;
+                sampleR *= fadeMultiplier;
+
+                // Apply EQ
+                applyEQ(sampleL, sampleR);
+
+                // Apply volume and pan
+                sampleL *= vol * panL;
+                sampleR *= vol * panR;
+
+                // Add to destination
+                destL[i] += sampleL;
+                destR[i] += sampleR;
+
+                // Advance read position
+                readPos += readIncrement;
+            }
+        }
+
+        DBG("addToBufferWithEffects: vol=" + juce::String(vol, 2) +
+            " pan=" + juce::String(panVal, 2) +
+            " pitch=" + juce::String(layerPitchSemi, 1) + "st" +
+            " reversed=" + juce::String(reversed ? "yes" : "no") +
+            " eqActive=" + juce::String(needsEQ ? "yes" : "no"));
     }
 
     // Set this layer's buffer from an external buffer (for flattening)

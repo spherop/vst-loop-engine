@@ -2255,6 +2255,7 @@ public:
     // Flatten all non-muted layers into layer 0
     // Sums all active layer buffers into layer 0 and clears the others
     // SEAMLESS: preserves playhead position and continues playback without interruption
+    // NOW APPLIES ALL PER-LAYER EFFECTS: volume, pan, EQ, pitch shift, reverse, loop bounds
     void flattenLayers()
     {
         // Check if we have anything to flatten
@@ -2272,7 +2273,7 @@ public:
             return;
         }
 
-        DBG("flattenLayers() - Flattening " + juce::String(highestLayer + 1) + " layers into layer 0 (seamless)");
+        DBG("flattenLayers() - Flattening " + juce::String(highestLayer + 1) + " layers into layer 0 (seamless, with effects)");
 
         // Capture current playback state BEFORE modifying anything
         const float savedPlayhead = layers[0].getRawPlayhead();
@@ -2285,14 +2286,14 @@ public:
         juce::AudioBuffer<float> flattenedBuffer(numChannels, masterLoopLength);
         flattenedBuffer.clear();
 
-        // Sum all non-muted layers
+        // Sum all non-muted layers WITH EFFECTS APPLIED
         for (int i = 0; i <= highestLayer; ++i)
         {
             if (!layers[i].getMuted() && layers[i].hasContent())
             {
-                // Get this layer's buffer and add to flattened
-                layers[i].addToBuffer(flattenedBuffer);
-                DBG("  Added layer " + juce::String(i + 1));
+                // Get this layer's buffer with all effects applied and add to flattened
+                layers[i].addToBufferWithEffects(flattenedBuffer, currentSampleRate);
+                DBG("  Added layer " + juce::String(i + 1) + " with effects");
             }
         }
 
@@ -2315,19 +2316,26 @@ public:
         // Replace layer 0's buffer content in-place while preserving playback state
         layers[0].setFromBufferSeamless(flattenedBuffer, masterLoopLength, savedPlayhead, savedState);
 
-        // Reset all layer volumes and pans to default
+        // Reset all layer settings to default (effects are now baked into the audio)
         for (int i = 0; i < NUM_LAYERS; ++i)
         {
-            layers[i].setVolume(1.0f);  // Default volume
-            layers[i].setPan(0.0f);     // Center pan
-            layers[i].setMuted(false);  // Unmute
+            layers[i].setVolume(1.0f);      // Default volume
+            layers[i].setPan(0.0f);         // Center pan
+            layers[i].setMuted(false);      // Unmute
+            layers[i].setReverse(false);    // Forward playback
+            layers[i].setLayerPitch(0.0f);  // No pitch shift
+            layers[i].setEQLow(0.0f);       // Flat EQ
+            layers[i].setEQMid(0.0f);
+            layers[i].setEQHigh(0.0f);
+            layers[i].setLoopStart(0.0f);   // Full loop
+            layers[i].setLoopEnd(1.0f);
         }
 
         // Reset state
         currentLayer = 0;
         highestLayer = 0;
 
-        DBG("flattenLayers() - Complete, layer 0 now contains flattened audio" +
+        DBG("flattenLayers() - Complete, layer 0 now contains flattened audio with all effects baked in" +
             juce::String(", playback continues at ") + juce::String(savedPlayhead));
     }
 
