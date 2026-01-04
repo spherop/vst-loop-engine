@@ -14,20 +14,32 @@
  *
  * Optimized for processing audio in blocks rather than sample-by-sample.
  * This dramatically reduces CPU overhead when multiple instances are running.
+ *
+ * Supports two quality modes:
+ * - Cheaper (default): Lower CPU, good quality for most uses
+ * - Default/HQ: Higher CPU, better quality for critical pitch shifts
  */
 class BlockPitchShifter
 {
 public:
     BlockPitchShifter() = default;
 
-    void prepare(double newSampleRate, int maxBlockSize)
+    void prepare(double newSampleRate, int maxBlockSize, bool highQuality = false)
     {
         sampleRate = newSampleRate;
+        currentMaxBlockSize = maxBlockSize;
+        isHighQuality = highQuality;
         prepared = true;
 
-        // Configure for mono - use cheaper preset for better performance
-        // presetCheaper trades some quality for lower CPU usage
-        stretch.presetCheaper(1, static_cast<float>(sampleRate));
+        // Configure for mono with selected quality preset
+        if (highQuality)
+        {
+            stretch.presetDefault(1, static_cast<float>(sampleRate));
+        }
+        else
+        {
+            stretch.presetCheaper(1, static_cast<float>(sampleRate));
+        }
 
         // Get latency info
         inputLatencySamples = stretch.inputLatency();
@@ -46,6 +58,18 @@ public:
 
         reset();
     }
+
+    // Reconfigure quality without full re-prepare (uses cached sampleRate/blockSize)
+    void setHighQuality(bool highQuality)
+    {
+        if (!prepared || isHighQuality == highQuality)
+            return;
+
+        // Re-prepare with new quality setting
+        prepare(sampleRate, currentMaxBlockSize, highQuality);
+    }
+
+    bool getHighQuality() const { return isHighQuality; }
 
     void reset()
     {
@@ -119,9 +143,11 @@ public:
 
 private:
     double sampleRate = 44100.0;
+    int currentMaxBlockSize = 512;
     float pitchRatio = 1.0f;
     float targetPitchRatio = 1.0f;
     bool prepared = false;
+    bool isHighQuality = false;
 
     signalsmith::stretch::SignalsmithStretch<float> stretch;
 
@@ -281,16 +307,18 @@ private:
  *
  * Processes both channels in blocks for maximum efficiency.
  * Use this for layer playback where entire blocks are available.
+ *
+ * Supports quality switching via setHighQuality() for per-layer HQ mode.
  */
 class StereoBlockPitchShifter
 {
 public:
     StereoBlockPitchShifter() = default;
 
-    void prepare(double sampleRate, int maxBlockSize)
+    void prepare(double sampleRate, int maxBlockSize, bool highQuality = false)
     {
-        shifterL.prepare(sampleRate, maxBlockSize);
-        shifterR.prepare(sampleRate, maxBlockSize);
+        shifterL.prepare(sampleRate, maxBlockSize, highQuality);
+        shifterR.prepare(sampleRate, maxBlockSize, highQuality);
     }
 
     void reset()
@@ -303,6 +331,18 @@ public:
     {
         shifterL.setPitchRatio(ratio);
         shifterR.setPitchRatio(ratio);
+    }
+
+    // Set quality mode (triggers re-prepare internally if changed)
+    void setHighQuality(bool highQuality)
+    {
+        shifterL.setHighQuality(highQuality);
+        shifterR.setHighQuality(highQuality);
+    }
+
+    bool getHighQuality() const
+    {
+        return shifterL.getHighQuality();
     }
 
     // Process stereo block - much more efficient than sample-by-sample

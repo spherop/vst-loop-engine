@@ -348,6 +348,51 @@ LoopEngineEditor::LoopEngineEditor(LoopEngineProcessor& p)
                           complete(false);
                       }
                   })
+                  // Per-layer pitch shift (independent of global pitch)
+                  .withNativeFunction("setLayerPitch", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          float semitones = static_cast<float>(args[1]);
+                          processorRef.getLoopEngine().setLayerPitch(layer, semitones);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerPitch", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          complete(processorRef.getLoopEngine().getLayerPitch(layer));
+                      }
+                      else
+                      {
+                          complete(0.0f);
+                      }
+                  })
+                  .withNativeFunction("setLayerPitchHQ", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() >= 2)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          bool hq = static_cast<bool>(args[1]);
+                          processorRef.getLoopEngine().setLayerPitchHQ(layer, hq);
+                      }
+                      complete({});
+                  })
+                  .withNativeFunction("getLayerPitchHQ", [this](const juce::Array<juce::var>& args, auto complete)
+                  {
+                      if (args.size() > 0)
+                      {
+                          int layer = static_cast<int>(args[0]);
+                          complete(processorRef.getLoopEngine().getLayerPitchHQ(layer));
+                      }
+                      else
+                      {
+                          complete(false);
+                      }
+                  })
                   .withNativeFunction("getLayerLevels", [this](const juce::Array<juce::var>&, auto complete)
                   {
                       auto levels = processorRef.getLoopEngine().getLayerLevels();

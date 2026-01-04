@@ -5758,6 +5758,11 @@ class LayerPanelController {
         this.eqMidValue = document.getElementById('layer-eq-mid-value');
         this.eqHighValue = document.getElementById('layer-eq-high-value');
 
+        // Pitch controls
+        this.pitchKnob = document.getElementById('layer-pitch-knob');
+        this.pitchValueEl = document.getElementById('layer-pitch-value');
+        this.pitchHQBtn = document.getElementById('layer-pitch-hq-btn');
+
         // Reverse button
         this.reverseBtn = document.getElementById('layer-reverse-btn');
 
@@ -5769,6 +5774,8 @@ class LayerPanelController {
         this.eqLow = 0;  // dB (-12 to +12)
         this.eqMid = 0;
         this.eqHigh = 0;
+        this.pitch = 0;  // semitones (-24 to +24)
+        this.pitchHQ = false;  // high quality pitch shifting
         this.reversed = false;
 
         // Drag state
@@ -5788,6 +5795,10 @@ class LayerPanelController {
         this.setLayerEQMidFn = getNativeFunction('setLayerEQMid');
         this.setLayerEQHighFn = getNativeFunction('setLayerEQHigh');
         this.getLayerEQFn = getNativeFunction('getLayerEQ');
+        this.setLayerPitchFn = getNativeFunction('setLayerPitch');
+        this.getLayerPitchFn = getNativeFunction('getLayerPitch');
+        this.setLayerPitchHQFn = getNativeFunction('setLayerPitchHQ');
+        this.getLayerPitchHQFn = getNativeFunction('getLayerPitchHQ');
         this.setLayerReverseFn = getNativeFunction('setLayerReverse');
         this.getLayerReverseFn = getNativeFunction('getLayerReverse');
 
@@ -5899,6 +5910,33 @@ class LayerPanelController {
             }
         });
 
+        // Pitch knob dragging
+        if (this.pitchKnob) {
+            this.pitchKnob.addEventListener('mousedown', (e) => {
+                this.draggingKnob = 'pitch';
+                this.dragStartY = e.clientY;
+                this.dragStartValue = this.pitch;
+                e.preventDefault();
+            });
+
+            // Double-click to reset
+            this.pitchKnob.addEventListener('dblclick', () => {
+                this.pitch = 0;
+                this.updatePitchUI();
+                this.sendPitch();
+            });
+        }
+
+        // Pitch HQ button
+        if (this.pitchHQBtn) {
+            this.pitchHQBtn.addEventListener('click', () => {
+                this.pitchHQ = !this.pitchHQ;
+                this.updatePitchHQUI();
+                this.sendPitchHQ();
+                console.log('[LayerPanel] Pitch HQ toggled:', this.pitchHQ);
+            });
+        }
+
         // Reverse button
         if (this.reverseBtn) {
             this.reverseBtn.addEventListener('click', () => {
@@ -5925,6 +5963,12 @@ class LayerPanelController {
             this.pan = Math.max(-1, Math.min(1, this.dragStartValue + deltaY * sensitivity));
             this.updatePanUI();
             this.sendPan();
+        } else if (this.draggingKnob === 'pitch') {
+            // Pitch: -24 to +24 semitones
+            const sensitivity = 0.2;  // semitones per pixel
+            this.pitch = Math.max(-24, Math.min(24, this.dragStartValue + deltaY * sensitivity));
+            this.updatePitchUI();
+            this.sendPitch();
         } else {
             // EQ bands
             const sensitivity = 0.2;  // dB per pixel
@@ -6019,10 +6063,32 @@ class LayerPanelController {
             }
         }
 
+        // Get pitch state
+        if (this.getLayerPitchFn) {
+            try {
+                const pitch = await this.getLayerPitchFn(layer);
+                this.pitch = pitch || 0;
+            } catch (e) {
+                console.error('[LayerPanel] Error loading pitch:', e);
+            }
+        }
+
+        // Get pitch HQ state
+        if (this.getLayerPitchHQFn) {
+            try {
+                const hq = await this.getLayerPitchHQFn(layer);
+                this.pitchHQ = hq || false;
+            } catch (e) {
+                console.error('[LayerPanel] Error loading pitch HQ:', e);
+            }
+        }
+
         this.updateMuteUI();
         this.updateSoloUI();
         this.updatePanUI();
         this.updateEQUI();
+        this.updatePitchUI();
+        this.updatePitchHQUI();
         this.updateReverseUI();
     }
 
@@ -6158,6 +6224,45 @@ class LayerPanelController {
             console.log('[LayerPanel] Sent reverse:', this.reversed, 'to layer', this.selectedLayer);
         } catch (e) {
             console.error('[LayerPanel] Error setting reverse:', e);
+        }
+    }
+
+    updatePitchUI() {
+        if (this.pitchKnob) {
+            const indicator = this.pitchKnob.querySelector('.layer-knob-indicator');
+            if (indicator) {
+                // Map -24 to +24 semitones to -135 to +135 degrees
+                const angle = (this.pitch / 24) * 135;
+                indicator.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+            }
+        }
+        if (this.pitchValueEl) {
+            const sign = this.pitch >= 0 ? '+' : '';
+            this.pitchValueEl.textContent = `${sign}${Math.round(this.pitch)} st`;
+        }
+    }
+
+    updatePitchHQUI() {
+        if (this.pitchHQBtn) {
+            this.pitchHQBtn.classList.toggle('active', this.pitchHQ);
+        }
+    }
+
+    async sendPitch() {
+        if (!this.selectedLayer || !this.setLayerPitchFn) return;
+        try {
+            await this.setLayerPitchFn(this.selectedLayer, this.pitch);
+        } catch (e) {
+            console.error('[LayerPanel] Error setting pitch:', e);
+        }
+    }
+
+    async sendPitchHQ() {
+        if (!this.selectedLayer || !this.setLayerPitchHQFn) return;
+        try {
+            await this.setLayerPitchHQFn(this.selectedLayer, this.pitchHQ);
+        } catch (e) {
+            console.error('[LayerPanel] Error setting pitch HQ:', e);
         }
     }
 }

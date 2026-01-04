@@ -5212,6 +5212,73 @@ html, body {
     font-size: 16px;
 }
 
+/* Pitch Section */
+.layer-pitch-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.layer-pitch-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.layer-pitch-knob {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(145deg, #1a1a1a 0%, #0a0a0a 100%);
+    border: 2px solid #333;
+    border-radius: 50%;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.layer-pitch-knob:hover {
+    border-color: #00bcd4;
+    box-shadow: 0 0 8px rgba(0, 188, 212, 0.3);
+}
+
+.layer-pitch-knob .layer-knob-indicator {
+    position: absolute;
+    width: 2px;
+    height: 10px;
+    background: #00bcd4;
+    top: 4px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 1px;
+    transform-origin: bottom center;
+}
+
+.layer-pitch-hq-btn {
+    padding: 4px 8px;
+    background: linear-gradient(180deg, #1a1a1a 0%, #0f0f0f 100%);
+    border: 2px solid #333;
+    border-radius: 4px;
+    color: #555;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.layer-pitch-hq-btn:hover {
+    border-color: #00bcd4;
+    color: #00bcd4;
+}
+
+.layer-pitch-hq-btn.active {
+    background: linear-gradient(180deg, #0a3a4a 0%, #052a3a 100%);
+    border-color: #00bcd4;
+    color: #4dd0e1;
+    box-shadow: 0 0 8px rgba(0, 188, 212, 0.4);
+}
+
 /* Reverse Section */
 .layer-reverse-section {
     display: flex;

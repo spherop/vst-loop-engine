@@ -636,9 +636,21 @@ public:
         }
 
         // Get pitch ratio for this block (read once, not per-sample)
-        float pitchRatio = pitchRatioSmoothed.getTargetValue();
+        // Combine global pitch with per-layer pitch
+        float globalPitchRatio = pitchRatioSmoothed.getTargetValue();
+        float layerPitchSemi = layerPitchSemitones.load();
+        float layerPitchRatio = std::pow(2.0f, layerPitchSemi / 12.0f);
+        float pitchRatio = globalPitchRatio * layerPitchRatio;
+
         const float pitchDistance = std::abs(pitchRatio - 1.0f);
         const bool isPitchShifting = pitchDistance >= 0.002f;
+
+        // Check if pitch shifter quality needs to be reconfigured
+        if (needsPitchShifterReconfigure.load())
+        {
+            blockPitchShifter.setHighQuality(layerPitchHQ.load());
+            needsPitchShifterReconfigure.store(false);
+        }
 
         // Fade handling (simplified for block processing)
         const float fadeTarget = fadeSmoothed.getTargetValue();
@@ -1044,6 +1056,46 @@ public:
                std::abs(high - 1.0f) > 0.01f;
     }
 
+    // ============================================
+    // PER-LAYER PITCH SHIFT
+    // Independent of global pitch - allows per-layer tuning
+    // Range: -24 to +24 semitones
+    // ============================================
+
+    void setLayerPitch(float semitones)
+    {
+        float clamped = std::clamp(semitones, -24.0f, 24.0f);
+        layerPitchSemitones.store(clamped);
+    }
+
+    float getLayerPitch() const
+    {
+        return layerPitchSemitones.load();
+    }
+
+    void setLayerPitchHQ(bool hq)
+    {
+        bool wasHQ = layerPitchHQ.load();
+        layerPitchHQ.store(hq);
+
+        // If quality changed, we need to re-prepare the pitch shifter
+        if (wasHQ != hq)
+        {
+            needsPitchShifterReconfigure = true;
+        }
+    }
+
+    bool getLayerPitchHQ() const
+    {
+        return layerPitchHQ.load();
+    }
+
+    // Check if per-layer pitch shift is active
+    bool isLayerPitchActive() const
+    {
+        return std::abs(layerPitchSemitones.load()) > 0.01f;
+    }
+
     // Apply soft clipping to entire buffer (for additive recording runaway prevention)
     void applyBufferSoftClip()
     {
@@ -1244,6 +1296,11 @@ private:
     std::atomic<float> volume { 1.0f };      // Per-layer volume (0.0 to 1.0)
     std::atomic<float> pan { 0.0f };         // Per-layer pan (-1.0 to 1.0)
     std::atomic<bool> fadeActive { false };  // True when fade should apply during playback (any layer is recording)
+
+    // Per-layer pitch shift (independent of global/playback pitch)
+    std::atomic<float> layerPitchSemitones { 0.0f };  // Per-layer pitch shift in semitones (-24 to +24)
+    std::atomic<bool> layerPitchHQ { false };         // Use high-quality pitch shifting for this layer
+    std::atomic<bool> needsPitchShifterReconfigure { false };  // Flag to reconfigure pitch shifter quality
 
     // Per-layer 3-band EQ parameters (linear gain, 1.0 = unity)
     std::atomic<float> eqLowGain { 1.0f };   // Low shelf at 200Hz

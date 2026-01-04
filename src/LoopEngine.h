@@ -836,6 +836,49 @@ public:
         return false;
     }
 
+    // ============================================
+    // PER-LAYER PITCH SHIFT (1-indexed for UI)
+    // Independent of global pitch - allows per-layer tuning
+    // ============================================
+
+    void setLayerPitch(int layer, float semitones)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setLayerPitch(semitones);
+        }
+    }
+
+    float getLayerPitch(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getLayerPitch();
+        }
+        return 0.0f;
+    }
+
+    void setLayerPitchHQ(int layer, bool hq)
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            layers[idx].setLayerPitchHQ(hq);
+        }
+    }
+
+    bool getLayerPitchHQ(int layer) const
+    {
+        int idx = layer - 1;
+        if (idx >= 0 && idx < NUM_LAYERS)
+        {
+            return layers[idx].getLayerPitchHQ();
+        }
+        return false;
+    }
+
     // Parameters (apply to all layers when global value changes)
     // These are called every processBlock from APVTS parameters, so we must
     // guard against overwriting per-layer settings by only applying when changed
