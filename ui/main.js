@@ -8,24 +8,65 @@ class PromiseHandler {
     constructor() {
         this.lastPromiseId = 0;
         this.promises = new Map();
+        this.PROMISE_TIMEOUT_MS = 5000; // 5 second timeout for orphaned promises
 
         // Listen for completion events from C++
         if (typeof window.__JUCE__ !== 'undefined' && window.__JUCE__.backend) {
             window.__JUCE__.backend.addEventListener("__juce__complete", ({ promiseId, result }) => {
                 if (this.promises.has(promiseId)) {
-                    this.promises.get(promiseId).resolve(result);
+                    const entry = this.promises.get(promiseId);
+                    if (entry.timeoutId) {
+                        clearTimeout(entry.timeoutId);
+                    }
+                    entry.resolve(result);
                     this.promises.delete(promiseId);
                 }
             });
         }
+
+        // Periodically clean up very old orphaned promises (safety net)
+        setInterval(() => this.cleanupOrphanedPromises(), 30000);
     }
 
     createPromise() {
         const promiseId = this.lastPromiseId++;
+        const createdAt = Date.now();
+
         const result = new Promise((resolve, reject) => {
-            this.promises.set(promiseId, { resolve, reject });
+            // Set a timeout to auto-reject orphaned promises
+            const timeoutId = setTimeout(() => {
+                if (this.promises.has(promiseId)) {
+                    console.warn(`[PromiseHandler] Promise ${promiseId} timed out after ${this.PROMISE_TIMEOUT_MS}ms`);
+                    this.promises.delete(promiseId);
+                    // Resolve with null instead of rejecting to avoid unhandled rejection errors
+                    resolve(null);
+                }
+            }, this.PROMISE_TIMEOUT_MS);
+
+            this.promises.set(promiseId, { resolve, reject, timeoutId, createdAt });
         });
         return [promiseId, result];
+    }
+
+    cleanupOrphanedPromises() {
+        const now = Date.now();
+        const maxAge = 60000; // 1 minute max age
+        let cleaned = 0;
+
+        for (const [id, entry] of this.promises) {
+            if (now - entry.createdAt > maxAge) {
+                if (entry.timeoutId) {
+                    clearTimeout(entry.timeoutId);
+                }
+                entry.resolve(null);
+                this.promises.delete(id);
+                cleaned++;
+            }
+        }
+
+        if (cleaned > 0) {
+            console.warn(`[PromiseHandler] Cleaned up ${cleaned} orphaned promises`);
+        }
     }
 }
 
@@ -459,6 +500,9 @@ class TabController {
 // Looper Controller
 class LooperController {
     constructor() {
+        // Interval tracking for cleanup
+        this.statePollingInterval = null;
+
         // Transport state
         this.state = 'idle'; // idle, recording, playing, overdubbing
         this.currentLayer = 1;
@@ -2265,8 +2309,13 @@ class LooperController {
     }
 
     startStatePolling() {
+        // Clear any existing interval to prevent duplicates
+        if (this.statePollingInterval) {
+            clearInterval(this.statePollingInterval);
+        }
+
         // Poll loop state every 50ms for smooth playhead updates
-        setInterval(async () => {
+        this.statePollingInterval = setInterval(async () => {
             try {
                 const state = await this.getStateFn();
                 if (state) {
@@ -2457,7 +2506,10 @@ class HostSyncController {
 
     // Poll for host playing state
     startPolling() {
-        setInterval(async () => {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+        }
+        this.pollingInterval = setInterval(async () => {
             try {
                 const getStateFn = getNativeFunction("getTempoState");
                 const state = await getStateFn();
@@ -2471,6 +2523,13 @@ class HostSyncController {
                 // Silently ignore
             }
         }, 200);
+    }
+
+    stopPolling() {
+        if (this.pollingInterval) {
+            clearInterval(this.pollingInterval);
+            this.pollingInterval = null;
+        }
     }
 }
 
@@ -2686,8 +2745,11 @@ class MicroLooperController {
     }
 
     startPolling() {
+        // Clear any existing intervals
+        this.stopPolling();
+
         // Poll for state updates every 100ms
-        setInterval(async () => {
+        this.statePollingInterval = setInterval(async () => {
             try {
                 const state = await this.getStateFn();
                 if (state) {
@@ -2711,7 +2773,18 @@ class MicroLooperController {
         }, 100);
 
         // Poll for waveform updates every 200ms (less frequent)
-        setInterval(() => this.fetchWaveform(), 200);
+        this.waveformPollingInterval = setInterval(() => this.fetchWaveform(), 200);
+    }
+
+    stopPolling() {
+        if (this.statePollingInterval) {
+            clearInterval(this.statePollingInterval);
+            this.statePollingInterval = null;
+        }
+        if (this.waveformPollingInterval) {
+            clearInterval(this.waveformPollingInterval);
+            this.waveformPollingInterval = null;
+        }
     }
 
     async togglePlay() {
@@ -3227,8 +3300,13 @@ class LofiController {
     }
 
     startPolling() {
+        // Clear any existing interval
+        if (this.filterPollingInterval) {
+            clearInterval(this.filterPollingInterval);
+        }
+
         // Poll for filter visualization updates
-        setInterval(async () => {
+        this.filterPollingInterval = setInterval(async () => {
             try {
                 const state = await this.getDegradeStateFn();
                 if (state) {
@@ -3245,6 +3323,13 @@ class LofiController {
                 // Silently ignore polling errors
             }
         }, 100);
+    }
+
+    stopPolling() {
+        if (this.filterPollingInterval) {
+            clearInterval(this.filterPollingInterval);
+            this.filterPollingInterval = null;
+        }
     }
 
     drawFilterVisualization() {
@@ -5508,8 +5593,13 @@ class MixerViewController {
     }
 
     startMeterPolling() {
+        // Clear any existing interval
+        if (this.meterPollingInterval) {
+            clearInterval(this.meterPollingInterval);
+        }
+
         // Poll for layer levels to update VU meters
-        setInterval(async () => {
+        this.meterPollingInterval = setInterval(async () => {
             if (this.currentView !== 'mixer') return;
 
             try {
@@ -5541,6 +5631,13 @@ class MixerViewController {
                 // Silently ignore polling errors
             }
         }, 50);  // 50ms for smooth VU meter animation
+    }
+
+    stopMeterPolling() {
+        if (this.meterPollingInterval) {
+            clearInterval(this.meterPollingInterval);
+            this.meterPollingInterval = null;
+        }
     }
 
     updateVUMeter(channelIdx, level) {
